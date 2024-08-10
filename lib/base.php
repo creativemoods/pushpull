@@ -9,9 +9,9 @@
  */
 class PushPull_Base_Client {
 
-	const TOKEN_OPTION_KEY = 'wpghs_oauth_token';
-	const REPO_OPTION_KEY = 'wpghs_repository';
-	const HOST_OPTION_KEY = 'wpghs_host';
+	const TOKEN_OPTION_KEY = 'pushpull_oauth_token';
+	const REPO_OPTION_KEY = 'pushpull_repository';
+	const HOST_OPTION_KEY = 'pushpull_host';
 
 	/**
 	 * Application container.
