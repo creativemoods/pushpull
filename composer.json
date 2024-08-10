@@ -1,0 +1,16 @@
+{
+  "name": "creativemoods/pushpull",
+  "description": "Push Pull DevOps plugin for Wordpress",
+  "keywords": ["wordpress", "plugin"],
+  "homepage": "https://creativemoods.pt",
+  "authors": [
+    {
+      "name": "Creative Moods",
+      "homepage": "https://creativemoods.pt"
+    }
+  ],
+  "type": "wordpress-plugin",
+  "require": {
+    "php": ">=8.0"
+  }
+}
