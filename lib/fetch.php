@@ -14,7 +14,7 @@ class PushPull_Fetch_Client extends PushPull_Base_Client {
 	 *
 	 * @return string|WP_Error
 	 */
-	public function getPostByName($type, $name) {
+	public function getPostByName(string $type, string $name) {
 		$data = $this->call( 'GET', $this->rawfile_endpoint("_".$type."%2F".$name) );
 
 		if ( is_wp_error( $data ) ) {

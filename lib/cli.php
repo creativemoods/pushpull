@@ -97,39 +97,7 @@ class PushPull_CLI extends WP_CLI_Command {
 	public function import( $args ) {
 		list( $user_id, $type, $name ) = $args;
 
-		if ( ! is_numeric( $user_id ) ) {
-			WP_CLI::error( __( 'Invalid user ID', 'pushpull' ) );
-		}
-
-//		update_option( '_pushpull_export_user_id', (int) $user_id );
-
-		WP_CLI::line( __( 'Starting import from Git.', 'pushpull' ) );
-
-		$post = $this->app->api()->fetch()->getPostByName($type, $name);
-		// Post
-		$id = wp_insert_post($post, true);
-		// Post meta
-		foreach ($post->meta as $key => $value) {
-			add_post_meta($id, $key, $value);
-		}
-		// Post images
-		foreach ($post->images as $image) {
-			$imagepost = $this->app->api()->fetch()->getPostByName('attachment', $image);
-			// Post
-			$id = wp_insert_post($imagepost, true);
-			// Post meta
-			foreach ($imagepost->meta as $key => $value) {
-				add_post_meta($id, $key, $value);
-				if ($key === '_wp_attached_file') {
-					$media = $this->app->api()->fetch()->getPostByName('media', $value);
-					// Write file
-					$fn = wp_upload_dir()['path']."/".$value;
-					$fh = fopen($fn, 'w');
-					fwrite($fh, $media);
-					fclose($fh);
-				}
-			}
-		}
+		$this->app->import()->import_post($user_id, $type, $name);
 	}
 
 	/**

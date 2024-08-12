@@ -24,6 +24,7 @@ if (is_admin()) {
 }
 
 require_once __DIR__ . '/lib/api.php';
+require_once __DIR__ . '/lib/import.php';
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once __DIR__ . '/lib/cli.php';
 }
@@ -263,7 +264,7 @@ class PushPull {
 	 * Sets and kicks off the import cronjob
 	 */
 	public function start_import() {
-		$this->start_cron( 'import' );
+		//$this->start_cron( 'import' );
 	}
 
 	/**
@@ -365,7 +366,7 @@ class PushPull {
 	 */
 	public function import() {
 		if ( ! $this->import ) {
-			$this->import = new WordPress_GitHub_Sync_Import( $this );
+			$this->import = new PushPull_Import( $this );
 		}
 
 		return $this->import;
@@ -454,8 +455,8 @@ class PushPull {
 	 * @param string $type Cron to kick off.
 	 */
 	protected function start_cron( $type ) {
-		update_option( '_wpghs_' . $type . '_started', 'yes' );
-		wp_schedule_single_event( time(), 'wpghs_' . $type . '' );
-		spawn_cron();
+		//update_option( '_wpghs_' . $type . '_started', 'yes' );
+		//wp_schedule_single_event( time(), 'wpghs_' . $type . '' );
+		//spawn_cron();
 	}
 }
