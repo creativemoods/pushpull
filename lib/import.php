@@ -44,46 +44,67 @@ class PushPull_Import {
 
 		$post = $this->app->api()->fetch()->getPostByName($type, $name);
 		// Post
-		$id = wp_insert_post($post, true);
+		$id = url_to_postid($name);
+		if ($id !== 0) {
+			$post->ID = $id;
+			$this->app->write_log(__( 'Post already exists locally. Updating.', 'pushpull' ));
+			wp_update_post($post, true);
+		} else {
+			$this->app->write_log(__( 'Creating new post.', 'pushpull' ));
+			$id = wp_insert_post($post, true);
+		}
+
 		// Post meta
 		foreach ($post->meta as $key => $value) {
-			add_post_meta($id, $key, $value);
+			update_post_meta($id, $key, $value);
 		}
+
+		// Post terms
+		$this->app->write_log($post->terms);
+		foreach ($post->terms as $term) {
+			wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
+		}
+
 		// Post images
 		foreach ($post->images as $image) {
 			// Get attachment from Git
-			$this->app->write_log($image);
 			$imagepost = $this->app->api()->fetch()->getPostByName('attachment', $image);
 			// Find local filename
 			$fn = wp_upload_dir()['path']."/".$imagepost->meta->_wp_attached_file;
-			$this->app->write_log($fn);
 			// Get binary contents from Git
-			$media = $this->app->api()->fetch()->getPostByName('media', $value);
+			$media = $this->app->api()->fetch()->getPostByName('media', $imagepost->meta->_wp_attached_file);
 			// Write binary contents to local file in uploads/
 			$fh = fopen($fn, 'w');
 			fwrite($fh, $media);
 			fclose($fh);
 			// Create attachment
-			$wp_filetype = wp_check_filetype($fn, null);
-			$return = apply_filters( 'wp_handle_upload', array( 'file' => $fn, 'url' => $uploads['url'].'/'.$imagepost->meta['_wp_attached_file'], 'type' => $wp_filetype['type'] ) );
-			$attachment = [
-				'post_mime_type' => $return['type'],
-				'guid'           => $return['url'],
-				'post_parent'    => 0,
-				'post_title'     => $imagepost['post_title'],
-				'post_name'      => $imagepost['post_name'],
-				'post_content'   => $imagepost['post_content'],
-				'post_excerpt'   => $imagepost['post_excerpt'],
-				'post_date'      => $imagepost['post_date'],
-				'post_date_gmt'  => $imagepost['post_date_gmt'],
-			];
-			$id = wp_insert_attachment($attachment, $fn, 0);
-			// Regenerate attachment metadata
-			$data = wp_generate_attachment_metadata($id, $fn);
-			wp_update_attachment_metadata($id, $data);
-			// TODO Quid de postimage->meta['_wp_attachment_image_alt'] ?
-			// Move to Static folder
-			wp_rml_move(wp_rml_create_or_return_existing_id('Static', _wp_rml_root(), 0, [], false, true), [$id]);
+			$imageid = url_to_postid($image);
+			if ($imageid !== 0) {
+				$this->app->write_log(__( 'Image attachment '.$image.' ('.$fn.') already exists locally. Updating.', 'pushpull' ));
+				// TODO
+			} else {
+				$this->app->write_log(__( 'Creating new image attachment.', 'pushpull' ));
+				$wp_filetype = wp_check_filetype($fn, null);
+				$return = apply_filters( 'wp_handle_upload', array( 'file' => $fn, 'url' => wp_upload_dir()['url'].'/'.$imagepost->meta->_wp_attached_file, 'type' => $wp_filetype['type'] ) );
+				$attachment = [
+					'post_mime_type' => $return['type'],
+					'guid'           => $return['url'],
+					'post_parent'    => 0,
+					'post_title'     => $imagepost->post_title,
+					'post_name'      => $imagepost->post_name,
+					'post_content'   => $imagepost->post_content,
+					'post_excerpt'   => property_exists($imagepost, 'post_excerpt') ? $imagepost->post_excerpt : "",
+					'post_date'      => $imagepost->post_date,
+					'post_date_gmt'  => property_exists($imagepost, 'post_date_gmt') ? $imagepost->post_date_gmt : $imagepost->post_date,
+				];
+				$id = wp_insert_attachment($attachment, $fn, 0);
+				// Regenerate attachment metadata
+				$data = wp_generate_attachment_metadata($id, $fn);
+				wp_update_attachment_metadata($id, $data);
+				// TODO Quid de postimage->meta['_wp_attachment_image_alt'] ?
+				// Move to Static folder
+				wp_rml_move(wp_rml_create_or_return_existing_id('Static', _wp_rml_root(), 0, [], false, true), [$id]);
+			}
 		}
 		$this->app->write_log(__( 'End import from Git.', 'pushpull' ));
 	}

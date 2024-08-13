@@ -30,6 +30,28 @@ class PushPull_Base_Client {
 	}
 
 	/**
+	 * Generic GitHub API HEAD interface and response handler
+	 *
+	 * @param string $method HTTP method.
+	 * @param string $endpoint API endpoint.
+	 * @param array  $body Request body.
+	 *
+	 * @return stdClass|WP_Error
+	 */
+	protected function head( $endpoint, $body = array() ) {
+		$args = array(
+			'method'  => 'HEAD',
+			'headers' => array(
+				'PRIVATE-TOKEN' => $this->oauth_token(),
+			),
+		);
+
+		$response = wp_remote_head( $endpoint, $args );
+
+		return $response;
+	}
+
+	/**
 	 * Generic GitHub API interface and response handler
 	 *
 	 * @param string $method HTTP method.
@@ -58,6 +80,7 @@ class PushPull_Base_Client {
 		}
 
 		$response = wp_remote_request( $endpoint, $args );
+		//$this->app->write_log($response);
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
@@ -158,6 +181,16 @@ class PushPull_Base_Client {
 		$url = $this->api_base() . '/projects/';
 		//$url = $url . $this->repository() . '/git/refs/heads/' . $sync_branch;
 		$url = $url . $this->repository() . '/repository/branches/' . $sync_branch;
+
+		return $url;
+	}
+
+	/**
+	 * Api to get files
+	 */
+	public function file_endpoint($name) {
+		$url = $this->api_base() . '/projects/';
+		$url = $url . $this->repository() . '/repository/files/' . $name. "?ref=main";
 
 		return $url;
 	}

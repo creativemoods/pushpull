@@ -19,6 +19,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	 * @return bool|mixed|PushPull_Commit|WP_Error
 	 */
 	public function commit( WP_Post $post ) {
+		$this->app->write_log(__( 'Starting export to Git.', 'pushpull' ));
 		// Handle post images
 		$imageids = $this->extract_imageids($post);
 		$imagelist = [];
@@ -27,18 +28,19 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 			$imagelist[] = $image->post_name;
 			$commitres = $this->create_commit($image);
 			if ( is_wp_error( $commitres ) ) {
+				$this->app->write_log($commitres);
 				return $commitres;
 			}
-			update_post_meta($image->ID, 'pushpull_sha', $commitres->id);
 		}
 
 		// Handle post
 		$commitres = $this->create_commit( $post, $imagelist );
 		if ( is_wp_error( $commitres ) ) {
+			$this->app->write_log($commitres);
 			return $commitres;
 		}
-		update_post_meta($post->ID, 'pushpull_sha', $commitres->id);
 
+		$this->app->write_log(__( 'End export to Git.', 'pushpull' ));
 		return true;
 	}
 
@@ -87,6 +89,13 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 			}
 		}
 		$data['meta'] = $meta;
+		$taxonomies = get_object_taxonomies($post->post_type);
+		if (!empty($taxonomies)) {
+			$terms = wp_get_object_terms($post->ID, $taxonomies);
+			$data['terms'] = (array)$terms;
+		} else {
+			$data['terms'] = [];
+		}
 
 		return $data;
 	}
@@ -112,6 +121,18 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	}
 
 	/**
+	 * Checks whether a file exists in the Git repository
+	 *
+	 * @param string $name The name of the file
+	 *
+	 * @return bool
+	 */
+	protected function git_exists( $name ) {
+		$res = $this->head( $this->file_endpoint($name) );
+		return array_key_exists('response', $res) && array_key_exists('code', $res['response']) && $res['response']['code'] === 200;
+	}
+
+	/**
 	 * Create the commit from tree sha.
 	 *
 	 * @param PushPull_Commit $commit Commit to create.
@@ -120,7 +141,6 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	 */
 	protected function create_commit( WP_Post $post, $imagelist = [] ) {
 		$author = $this->export_user();
-		$sha = get_post_meta($post->ID, 'pushpull_sha', true);
 		$content = $this->create_post_export($post);
 		$content['images'] = $imagelist;
 		$files = [];
@@ -131,7 +151,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 			$fc = fread($fh, filesize($fn));
 			fclose($fh);
 			$files[] = [
-				'action' => $sha === "" ? 'create' : 'update',
+				'action' => $this->git_exists("_media%2F".$content['meta']['_wp_attached_file']) ? 'update' : 'create',
 				'file_path' => "_media/".$content['meta']['_wp_attached_file'],
 				'content' => base64_encode($fc),
 				'encoding' => "base64",
@@ -141,7 +161,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 			'branch' => 'main',
 			'commit_message' => "PushPull Git export single post",
 			'actions' => array_merge([[
-				'action' => $sha === "" ? 'create' : 'update',
+				'action' => $this->git_exists("_".$post->post_type."%2F".$post->post_name) ? 'update' : 'create',
 				'file_path' => "_".$post->post_type."/".$post->post_name,
 				'content' => json_encode($content),
 			]], $files),
