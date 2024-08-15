@@ -82,10 +82,13 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$data['post_date'] = $post->status === 'publish' ? $post->post_date : '';
 		$meta = [];
 		foreach (get_post_meta($post->ID) as $key => $value) {
+			$this->app->write_log($key);
+			$this->app->write_log($value);
+			// TODO Toujours [0] ?
 			if ($key === "_wp_attached_file" || $key === "_wp_attachment_image_alt") {
 				$meta[$key] = $value[0];
 			} elseif ($key !== "_edit_lock") {
-				$meta[$key] = $value;
+				$meta[$key] = $value[0];
 			}
 		}
 		$data['meta'] = $meta;
