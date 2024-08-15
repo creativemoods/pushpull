@@ -22,19 +22,24 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$this->app->write_log(__( 'Starting export to Git.', 'pushpull' ));
 		// Handle post images
 		$imageids = $this->extract_imageids($post);
-		$imagelist = [];
+		$intimagelist = [];
+		$extimagelist = [];
 		foreach ($imageids as $imageid) {
-			$image = get_post($imageid['id']);
-			$imagelist[] = $image->post_name;
-			$commitres = $this->create_commit($image);
-			if ( is_wp_error( $commitres ) ) {
-				$this->app->write_log($commitres);
-				return $commitres;
+			if ($imageid['id']) {
+				$image = get_post($imageid['id']);
+				$intimagelist[] = $image->post_name;
+				$commitres = $this->create_commit($image);
+				if ( is_wp_error( $commitres ) ) {
+					$this->app->write_log($commitres);
+					return $commitres;
+				}
+			} else {
+				$extimagelist[] = $imageid['url'];
 			}
 		}
 
 		// Handle post
-		$commitres = $this->create_commit( $post, $imagelist );
+		$commitres = $this->create_commit( $post, $intimagelist, $extimagelist );
 		if ( is_wp_error( $commitres ) ) {
 			$this->app->write_log($commitres);
 			return $commitres;
@@ -61,7 +66,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		global $wpdb;
 		$image_url = preg_replace("(^https?://)", "", $image_url);
 		$the_attachment = $wpdb->get_col($wpdb->prepare("SELECT ID FROM $wpdb->posts WHERE guid LIKE %s;", '%'.$image_url ));
-		return $the_attachment[0];
+		return empty($the_attachemnt) ? null : $the_attachment[0];
 	}
 
 	/**
@@ -142,10 +147,11 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	 *
 	 * @return mixed
 	 */
-	protected function create_commit( WP_Post $post, $imagelist = [] ) {
+	protected function create_commit( WP_Post $post, $intimagelist = [], $extimagelist = [] ) {
 		$author = $this->export_user();
 		$content = $this->create_post_export($post);
-		$content['images'] = $imagelist;
+		$content['intimages'] = $intimagelist;
+		$content['extimages'] = $extimagelist;
 		$files = [];
 		if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
 			// This is an attachment that references a file in uploads, we need to add it

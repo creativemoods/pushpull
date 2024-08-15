@@ -70,8 +70,8 @@ class PushPull_Import {
 		}
 
 		// Post images
-		if (property_exists($post, 'images')) {
-			foreach ($post->images as $image) {
+		if (property_exists($post, 'intimages')) {
+			foreach ($post->intimages as $image) {
 				// Get attachment from Git
 				$imagepost = $this->app->api()->fetch()->getPostByName('attachment', $image);
 				// Find local filename
