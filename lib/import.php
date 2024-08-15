@@ -102,18 +102,19 @@ class PushPull_Import {
 						'post_date'      => $imagepost->post_date,
 						'post_date_gmt'  => property_exists($imagepost, 'post_date_gmt') ? $imagepost->post_date_gmt : $imagepost->post_date,
 					];
-					$id = wp_insert_attachment($attachment, $fn, 0);
+					$attachid = wp_insert_attachment($attachment, $fn, 0);
 					// Regenerate attachment metadata
-					$data = wp_generate_attachment_metadata($id, $fn);
-					wp_update_attachment_metadata($id, $data);
+					$data = wp_generate_attachment_metadata($attachid, $fn);
+					wp_update_attachment_metadata($attachid, $data);
 					// TODO Quid de postimage->meta['_wp_attachment_image_alt'] ?
 					// Move to Static folder
-					wp_rml_move(wp_rml_create_or_return_existing_id('Static', _wp_rml_root(), 0, [], false, true), [$id]);
+					wp_rml_move(wp_rml_create_or_return_existing_id('Static', _wp_rml_root(), 0, [], false, true), [$attachid]);
 				}
 			}
 		}
 
 		$this->app->write_log(__( 'End import from Git.', 'pushpull' ));
+		return $id;
 	}
 
 	/**
