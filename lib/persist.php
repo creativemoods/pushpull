@@ -87,14 +87,10 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$data['post_date'] = $post->status === 'publish' ? $post->post_date : '';
 		$meta = [];
 		foreach (get_post_meta($post->ID) as $key => $value) {
-			$this->app->write_log($key);
-			$this->app->write_log($value);
-			// TODO Toujours [0] ?
-			if ($key === "_wp_attached_file" || $key === "_wp_attachment_image_alt") {
-				$meta[$key] = $value[0];
-			} elseif ($key !== "_edit_lock") {
-				$meta[$key] = $value[0];
+			if ($key === "_edit_lock") {
+				continue;
 			}
+			$meta[$key] = $value[0];
 		}
 		$data['meta'] = $meta;
 		$taxonomies = get_object_taxonomies($post->post_type);
@@ -103,6 +99,18 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 			$data['terms'] = (array)$terms;
 		} else {
 			$data['terms'] = [];
+		}
+		// Rewrite post IDs into post names for polylang post_translations taxonomies
+		foreach ($data['terms'] as $i => $term) {
+			if ($term->taxonomy === 'post_translations') {
+				$newvals = [];
+				$description = maybe_unserialize($term->description);
+				foreach($description as $lang => $id) {
+					$post = get_post($id);
+					$newvals[$lang] = $post->post_type."/".$post->post_name;
+				}
+				$data['terms'][$i]->description = maybe_serialize($newvals);
+			}
 		}
 
 		return $data;

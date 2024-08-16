@@ -26,6 +26,15 @@ class PushPull_Import {
 		$this->app = $app;
 	}
 
+	public function get_post_by_name(string $name, string $post_type = "post") {
+		$query = new WP_Query([
+			"post_type" => $post_type,
+			"name" => $name
+		]);
+
+		return $query->have_posts() ? reset($query->posts) : null;
+	}
+
 	/**
 	 * Import a post.
 	 *
@@ -65,7 +74,19 @@ class PushPull_Import {
 		if (property_exists($post, 'terms')) {
 			$this->app->write_log($post->terms);
 			foreach ($post->terms as $term) {
-				wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
+				if ($term->taxonomy === "post_translations") {
+					// Change back from post names to IDs
+					$newvals = [];
+					$description = maybe_unserialize($term->description);
+					foreach($description as $lang => $name) {
+						$arr = explode('/', $name); // e.g. "page/our-story"
+						$post = $this->get_post_by_name($arr[1], $arr[0]);
+						$newvals[$lang] = $post->ID;
+					}
+					pll_save_post_translations($newvals);
+				} else {
+					wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
+				}
 			}
 		}
 
