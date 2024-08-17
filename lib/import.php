@@ -66,6 +66,7 @@ class PushPull_Import {
 		// Post meta
 		if (property_exists($post, 'meta')) {
 			foreach ($post->meta as $key => $value) {
+				$this->app->write_log(__( 'Creating meta key '.$key.' with value '.$value.'.', 'pushpull' ));
 				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
 				$value = maybe_unserialize($value);
 				update_post_meta($id, $key, $value);
@@ -74,8 +75,8 @@ class PushPull_Import {
 
 		// Post terms
 		if (property_exists($post, 'terms')) {
-			$this->app->write_log($post->terms);
 			foreach ($post->terms as $term) {
+				$this->app->write_log(__( 'Creating term for taxonomy '.$term->taxonomy.'.', 'pushpull' ));
 				if ($term->taxonomy === "post_translations") {
 					// Change back from post names to IDs
 					$newvals = [];
@@ -83,9 +84,9 @@ class PushPull_Import {
 					$found = true;
 					foreach($description as $lang => $name) {
 						$arr = explode('/', $name); // e.g. "page/our-story"
-						$post = $this->get_post_by_name($arr[1], $arr[0]);
-						if ($post !== null) {
-							$newvals[$lang] = $post->ID;
+						$tmppost = $this->get_post_by_name($arr[1], $arr[0]);
+						if ($tmppost !== null) {
+							$newvals[$lang] = $tmppost->ID;
 						} else {
 							$found = false;
 						}
