@@ -80,12 +80,19 @@ class PushPull_Import {
 					// Change back from post names to IDs
 					$newvals = [];
 					$description = maybe_unserialize($term->description);
+					$found = true;
 					foreach($description as $lang => $name) {
 						$arr = explode('/', $name); // e.g. "page/our-story"
 						$post = $this->get_post_by_name($arr[1], $arr[0]);
-						$newvals[$lang] = $post->ID;
+						if ($post !== null) {
+							$newvals[$lang] = $post->ID;
+						} else {
+							$found = false;
+						}
 					}
-					pll_save_post_translations($newvals);
+					if ($found) {
+						pll_save_post_translations($newvals);
+					}
 				} else {
 					wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
 				}
