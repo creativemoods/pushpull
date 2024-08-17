@@ -66,6 +66,8 @@ class PushPull_Import {
 		// Post meta
 		if (property_exists($post, 'meta')) {
 			foreach ($post->meta as $key => $value) {
+				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
+				$value = maybe_unserialize($value);
 				update_post_meta($id, $key, $value);
 			}
 		}

@@ -84,7 +84,8 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$data['post_name'] = $post->post_name;
 		$data['post_title'] = $post->post_title;
 		$data['post_password'] = $post->post_password;
-		$data['post_date'] = $post->status === 'publish' ? $post->post_date : '';
+		$data['post_date'] = $post->post_date;
+		$data['post_date_gmt'] = $post->post_date_gmt;
 		$meta = [];
 		foreach (get_post_meta($post->ID) as $key => $value) {
 			if ($key === "_edit_lock") {
