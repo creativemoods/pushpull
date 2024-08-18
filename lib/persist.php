@@ -127,6 +127,9 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$data = [];
 		$document = new DOMDocument();
 		libxml_use_internal_errors(true);
+		if ($post->content === "") {
+			return $data;
+		}
 		$document->loadHTML($post->post_content);
 		$images = $document->getElementsByTagName('img');
 		foreach ($images as $image) {
