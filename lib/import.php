@@ -66,7 +66,7 @@ class PushPull_Import {
 		// Post meta
 		if (property_exists($post, 'meta')) {
 			foreach ($post->meta as $key => $value) {
-				$this->app->write_log(__( 'Creating meta key '.$key.' with value '.$value.'.', 'pushpull' ));
+				$this->app->write_log(__( 'Creating meta key '.$key.'.', 'pushpull' ));
 				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
 				$value = maybe_unserialize($value);
 				update_post_meta($id, $key, $value);
