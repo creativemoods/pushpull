@@ -66,7 +66,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		global $wpdb;
 		$image_url = preg_replace("(^https?://)", "", $image_url);
 		$the_attachment = $wpdb->get_col($wpdb->prepare("SELECT ID FROM $wpdb->posts WHERE guid LIKE %s;", '%'.$image_url ));
-		return empty($the_attachemnt) ? null : $the_attachment[0];
+		return empty($the_attachment) ? null : $the_attachment[0];
 	}
 
 	/**
@@ -127,7 +127,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$data = [];
 		$document = new DOMDocument();
 		libxml_use_internal_errors(true);
-		if ($post->content === "") {
+		if ($post->post_content === "") {
 			return $data;
 		}
 		$document->loadHTML($post->post_content);
