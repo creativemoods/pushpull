@@ -113,6 +113,13 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 				$data['terms'][$i]->description = maybe_serialize($newvals);
 			}
 		}
+		// If we have a media folder plugin, add location
+		if ($post->post_type === "attachment" && function_exists('wp_attachment_folder')) {
+			$folder = wp_rml_get_by_id(wp_attachment_folder($post->ID));
+			if (is_rml_folder($folder)) {
+				$data['folder'] = $folder->getName();
+			}
+		}
 
 		return $data;
 	}

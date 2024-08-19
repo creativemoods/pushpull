@@ -138,8 +138,10 @@ class PushPull_Import {
 					$data = wp_generate_attachment_metadata($attachid, $fn);
 					wp_update_attachment_metadata($attachid, $data);
 					// TODO Quid de postimage->meta['_wp_attachment_image_alt'] ?
-					// Move to Static folder
-					wp_rml_move(wp_rml_create_or_return_existing_id('Static', _wp_rml_root(), 0, [], false, true), [$attachid]);
+					// Move to original folder
+					if (function_exists('wp_rml_move') && property_exists($imagepost, 'folder')) {
+						wp_rml_move(wp_rml_create_or_return_existing_id($imagepost->folder, _wp_rml_root(), 0, [], false, true), [$attachid]);
+					}
 				}
 			}
 		}
