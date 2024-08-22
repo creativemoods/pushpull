@@ -9,6 +9,11 @@
       "homepage": "https://creativemoods.pt"
     }
   ],
+  "autoload": {
+    "psr-4": {
+      "CreativeMoods\\PushPull\\": "includes/"
+    }
+  },
   "type": "wordpress-plugin",
   "require": {
     "php": ">=8.0"

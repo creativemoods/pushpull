@@ -1,0 +1,24 @@
+{
+  "name": "pushpull",
+  "version": "1.0.0",
+  "description": "PushPull",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "wp-scripts build",
+    "start": "wp-scripts start"
+  },
+  "author": "Creative Moods",
+  "license": "ISC",
+  "devDependencies": {
+    "@wordpress/data": "^10.5.0",
+    "@wordpress/notices": "^5.5.0",
+    "@wordpress/scripts": "^28.5.0"
+  },
+  "dependencies": {
+    "react-diff-viewer-continued": "^3.4.0"
+  }
+}

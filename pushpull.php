@@ -4,7 +4,7 @@
  * Plugin Name:       PushPull
  * Plugin URI:        https://creativemoods.pt/
  * Description:       Push Pull DevOps plugin for Wordpress
- * Version:           0.0.11
+ * Version:           0.0.12
  * Requires at least: 6.6
  * Requires PHP:      8.0
  * Author:            Creative Moods
@@ -25,6 +25,7 @@ if (is_admin()) {
 
 require_once __DIR__ . '/lib/api.php';
 require_once __DIR__ . '/lib/import.php';
+require_once __DIR__ . '/lib/rest.php';
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once __DIR__ . '/lib/cli.php';
 }
@@ -97,11 +98,25 @@ class PushPull {
 	protected $api;
 
 	/**
+	 * REST object.
+	 *
+	 * @var PushPull_Rest
+	 */
+	protected $rest;
+
+	/**
 	 * Import object.
 	 *
 	 * @var WordPress_GitHub_Sync_Import
 	 */
 	protected $import;
+
+	/**
+	 * Persist object.
+	 *
+	 * @var WordPress_GitHub_Sync_Persist
+	 */
+	protected $persist;
 
 	/**
 	 * Export object.
@@ -131,10 +146,11 @@ class PushPull {
 		self::$instance = $this;
 
 		if ( is_admin() ) {
-			$this->admin = new PushPull_Admin;
+			$this->admin = new PushPull_Admin($this);
 		}
 
 //		$this->controller = new WordPress_GitHub_Sync_Controller( $this );
+		$this->rest = new PushPull_Rest($this);
 
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			WP_CLI::add_command( 'pushpull', $this->cli() );
@@ -357,6 +373,19 @@ class PushPull {
 		}
 
 		return $this->api;
+	}
+
+	/**
+	 * Lazy-load persist client.
+	 *
+	 * @return PushPull_Persist_Client
+	 */
+	public function persist() {
+		if ( ! $this->persist ) {
+			$this->persist = new PushPull_Persist_Client( $this );
+		}
+
+		return $this->persist;
 	}
 
 	/**

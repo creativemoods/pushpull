@@ -1,0 +1,93 @@
+<?php
+/**
+ * Provides REST API for React
+ * @package PushPull
+ */
+
+/**
+ * Class PushPull_Rest
+ */
+class PushPull_Rest {
+
+	/**
+	 * Application container.
+	 *
+	 * @var PushPull
+	 */
+	protected $app;
+
+	/**
+	 * Instantiates a new Rest object.
+	 *
+	 * @param PushPull $app Application container.
+	 */
+	public function __construct( PushPull $app ) {
+		$this->app = $app;
+		add_action( 'rest_api_init', array( $this, 'register_rest_route' ) );
+	}
+
+	public function register_rest_route() {
+		register_rest_route('pushpull/v1', '/settings/', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_option'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/settings/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'set_option'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/posts/', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_posts'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/diff/', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_diff'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+	}
+
+	// TODO transformer en json
+	public function get_diff($data) {
+		$params = $data->get_query_params();
+		// Local
+		$post = $this->app->import()->get_post_by_name($params['post_name'], 'page');
+		$local = $this->app->persist()->create_post_export($post);
+		// Remote
+		$remote = $this->app->api()->fetch()->getPostByName($post->post_type, $params['post_name']);
+		$this->app->write_log($remote);
+		return ['local' => json_encode($local, JSON_PRETTY_PRINT), 'remote' => json_encode($remote, JSON_PRETTY_PRINT)];
+	}
+
+	public function get_posts() {
+		$posts = get_posts(['numberposts' => -1, 'post_type' => 'any']);
+		$res = [];
+		foreach ($posts as $post) {
+			$res[$post->post_name] = $post->post_title;
+		}
+		return $res;
+	}
+
+	public function get_option($data) {
+		return ['oauth-token' => get_option('pushpull_oauth_token'), 'host' => get_option('pushpull_host'), 'repository' => get_option('pushpull_repository')];
+	}
+
+	public function set_option($data) {
+		$params = $data->get_json_params();
+		// TODO Verify data
+		update_option('pushpull_host', $params['host']);
+		update_option('pushpull_repository', $params['repository']);
+		update_option('pushpull_oauth_token', $params['oauth-token']);
+		return ['oauth-token' => get_option('pushpull_oauth_token'), 'host' => get_option('pushpull_host'), 'repository' => get_option('pushpull_repository')];
+	}
+}

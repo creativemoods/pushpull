@@ -94,6 +94,12 @@ class PushPull_Import {
 					if ($found) {
 						pll_save_post_translations($newvals);
 					}
+				} elseif ($term->taxonomy === "language") {
+					// Use our language property instead
+					if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
+						pll_set_post_language($id, $post->language);
+					}
+					// Whatever we do don't use the original ids because they're not valid anymore
 				} else {
 					wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
 				}

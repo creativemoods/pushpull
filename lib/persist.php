@@ -22,24 +22,19 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$this->app->write_log(__( 'Starting export to Git.', 'pushpull' ));
 		// Handle post images
 		$imageids = $this->extract_imageids($post);
-		$intimagelist = [];
-		$extimagelist = [];
 		foreach ($imageids as $imageid) {
 			if ($imageid['id']) {
 				$image = get_post($imageid['id']);
-				$intimagelist[] = $image->post_name;
 				$commitres = $this->create_commit($image);
 				if ( is_wp_error( $commitres ) ) {
 					$this->app->write_log($commitres);
 					return $commitres;
 				}
-			} else {
-				$extimagelist[] = $imageid['url'];
 			}
 		}
 
 		// Handle post
-		$commitres = $this->create_commit( $post, $intimagelist, $extimagelist );
+		$commitres = $this->create_commit($post);
 		if ( is_wp_error( $commitres ) ) {
 			$this->app->write_log($commitres);
 			return $commitres;
@@ -75,10 +70,9 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	 * @param WP_Post
 	 *
 	 */
-	protected function create_post_export(WP_Post $post) {
+	public function create_post_export(WP_Post $post) {
 		$data = [];
 		$data['post_content'] = $post->post_content;
-		$data['id'] = $post->ID;
 		$data['post_type'] = $post->post_type;
 		$data['post_status'] = $post->post_status;
 		$data['post_name'] = $post->post_name;
@@ -86,6 +80,8 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$data['post_password'] = $post->post_password;
 		$data['post_date'] = $post->post_date;
 		$data['post_date_gmt'] = $post->post_date_gmt;
+
+		// Meta
 		$meta = [];
 		foreach (get_post_meta($post->ID) as $key => $value) {
 			if ($key === "_edit_lock") {
@@ -101,6 +97,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		} else {
 			$data['terms'] = [];
 		}
+
 		// Rewrite post IDs into post names for polylang post_translations taxonomies
 		foreach ($data['terms'] as $i => $term) {
 			if ($term->taxonomy === 'post_translations') {
@@ -112,7 +109,11 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 				}
 				$data['terms'][$i]->description = maybe_serialize($newvals);
 			}
+			if ($term->taxonomy === 'language') {
+				$data['language'] = $term->slug;
+			}
 		}
+
 		// If we have a media folder plugin, add location
 		if ($post->post_type === "attachment" && function_exists('wp_attachment_folder')) {
 			$folder = wp_rml_get_by_id(wp_attachment_folder($post->ID));
@@ -120,6 +121,21 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 				$data['folder'] = $folder->getName();
 			}
 		}
+
+		// Handle post images
+		$imageids = $this->extract_imageids($post);
+		$intimagelist = [];
+		$extimagelist = [];
+		foreach ($imageids as $imageid) {
+			if ($imageid['id']) {
+				$image = get_post($imageid['id']);
+				$intimagelist[] = $image->post_name;
+			} else {
+				$extimagelist[] = $imageid['url'];
+			}
+		}
+		$data['intimages'] = $intimagelist;
+		$data['extimages'] = $extimagelist;
 
 		return $data;
 	}
@@ -166,11 +182,9 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	 *
 	 * @return mixed
 	 */
-	protected function create_commit( WP_Post $post, $intimagelist = [], $extimagelist = [] ) {
+	protected function create_commit(WP_Post $post) {
 		$author = $this->export_user();
 		$content = $this->create_post_export($post);
-		$content['intimages'] = $intimagelist;
-		$content['extimages'] = $extimagelist;
 		$files = [];
 		if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
 			// This is an attachment that references a file in uploads, we need to add it
