@@ -158,7 +158,7 @@ class PushPull_Import {
 
 		// Post images
 		if (property_exists($post, 'featuredimage')) {
-			$this->import_image($post['featuredimage']);
+			$this->import_image($post->featuredimage);
 		}
 		if (property_exists($post, 'intimages')) {
 			foreach ($post->intimages as $image) {
