@@ -18,6 +18,7 @@ class PushPull_Fetch_Client extends PushPull_Base_Client {
 		$data = $this->call( 'GET', $this->rawfile_endpoint("_".$type."%2F".$name) );
 
 		if ( is_wp_error( $data ) ) {
+			$this->app->write_log($data);
 			return $data;
 		}
 

@@ -33,6 +33,17 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 			}
 		}
 
+		// Handle featured image
+		$meta = get_post_meta($post->ID);
+		if (array_key_exists('_thumbnail_id', $meta)) {
+			$image = get_post($meta['_thumbnail_id'][0]);
+			$commitres = $this->create_commit($image);
+			if ( is_wp_error( $commitres ) ) {
+				$this->app->write_log($commitres);
+				return $commitres;
+			}
+		}
+
 		// Handle post
 		$commitres = $this->create_commit($post);
 		if ( is_wp_error( $commitres ) ) {
@@ -85,6 +96,11 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$meta = [];
 		foreach (get_post_meta($post->ID) as $key => $value) {
 			if ($key === "_edit_lock") {
+				continue;
+			}
+			if ($key === "_thumbnail_id") {
+				$image = get_post($value[0]);
+				$data['featuredimage'] = $image->post_name;
 				continue;
 			}
 			$meta[$key] = $value[0];

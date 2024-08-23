@@ -17,6 +17,8 @@ const App = () => {
 	const {createSuccessNotice} = useDispatch( noticesStore );
 	const [tab, setTab] = useState('settings');
 	const [posts, setPosts] = useState([]);
+	const [posttypes, setPosttypes] = useState([]);
+	const [curPostType, setCurPostType] = useState("");
 	const [curPost, setCurPost] = useState("");
 	const [oldCode, setOldCode] = useState("toto");
 	const [newCode, setNewCode] = useState("tata");
@@ -32,9 +34,9 @@ const App = () => {
 			console.error(error);
 		});
 		apiFetch({
-			path: '/pushpull/v1/posts',
+			path: '/pushpull/v1/posttypes',
 		}).then((data) => {
-			setPosts(data);
+			setPosttypes(data);
 		}).catch((error) => {
 			console.error(error);
 		});
@@ -42,7 +44,17 @@ const App = () => {
 
 	useEffect( () => {
 		apiFetch({
-			path: addQueryArgs('/pushpull/v1/diff', { 'post_name': curPost } ),
+			path: addQueryArgs('/pushpull/v1/posts', { 'post_type': curPostType } ),
+		}).then((data) => {
+			setPosts(data);
+		}).catch((error) => {
+			console.error(error);
+		});
+	}, [curPostType] );
+
+	useEffect( () => {
+		apiFetch({
+			path: addQueryArgs('/pushpull/v1/diff', { 'post_name': curPost, 'post_type': curPostType } ),
 		}).then((data) => {
 			setOldCode(data['local']);
 			setNewCode(data['remote']);
@@ -57,6 +69,10 @@ const App = () => {
 
 	const onSelectPost = ( post ) => {
 		setCurPost(post);
+	};
+
+	const onSelectPostType = ( posttype ) => {
+		setCurPostType(posttype);
 	};
 
 	const handleSubmit = (event) => {
@@ -130,6 +146,12 @@ const App = () => {
 	    </form>)}
 		{tab === "diff" && (
 			<>
+			<SelectControl
+				label={__('Choose post type', 'pushpull')}
+				value={curPostType}
+				onChange={onSelectPostType}
+				options={Object.entries(posttypes).map(([k,v]) => { return { label: v, value: k}; })}
+			/>
 			<SelectControl
 				label={__('Choose post', 'pushpull')}
 				value={curPost}

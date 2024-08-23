@@ -41,6 +41,13 @@ class PushPull_Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/posttypes/', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_posttypes'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 		register_rest_route('pushpull/v1', '/posts/', array(
 			'methods' => 'GET',
 			'callback' => array( $this, 'get_posts'),
@@ -61,21 +68,25 @@ class PushPull_Rest {
 	public function get_diff($data) {
 		$params = $data->get_query_params();
 		// Local
-		$post = $this->app->import()->get_post_by_name($params['post_name'], 'page');
+		$post = $this->app->import()->get_post_by_name($params['post_name'], $params['post_type']);
 		$local = $this->app->persist()->create_post_export($post);
 		// Remote
 		$remote = $this->app->api()->fetch()->getPostByName($post->post_type, $params['post_name']);
-		$this->app->write_log($remote);
 		return ['local' => json_encode($local, JSON_PRETTY_PRINT), 'remote' => json_encode($remote, JSON_PRETTY_PRINT)];
 	}
 
-	public function get_posts() {
-		$posts = get_posts(['numberposts' => -1, 'post_type' => 'any']);
+	public function get_posts($data) {
+		$params = $data->get_query_params();
+		$posts = get_posts(['numberposts' => -1, 'post_type' => 'any', 'post_type' => $params['post_type']]);
 		$res = [];
 		foreach ($posts as $post) {
 			$res[$post->post_name] = $post->post_title;
 		}
 		return $res;
+	}
+
+	public function get_posttypes() {
+		return get_post_types();
 	}
 
 	public function get_option($data) {

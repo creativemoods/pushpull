@@ -36,6 +36,56 @@ class PushPull_Import {
 	}
 
 	/**
+	 * Import an image.
+	 *
+	 * @param string $image the name of the image.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function import_image($image) {
+		// Get attachment from Git
+		$imagepost = $this->app->api()->fetch()->getPostByName('attachment', $image);
+		// Find local filename
+		$fn = wp_upload_dir()['path']."/".$imagepost->meta->_wp_attached_file;
+		// Get binary contents from Git
+		$media = $this->app->api()->fetch()->getPostByName('media', $imagepost->meta->_wp_attached_file);
+		// Write binary contents to local file in uploads/
+		$fh = fopen($fn, 'w');
+		fwrite($fh, $media);
+		fclose($fh);
+		// Create attachment
+		$imageid = url_to_postid($image);
+		if ($imageid !== 0) {
+			$this->app->write_log(__( 'Image attachment '.$image.' ('.$fn.') already exists locally. Updating.', 'pushpull' ));
+			// TODO
+		} else {
+			$this->app->write_log(__( 'Creating new image attachment.', 'pushpull' ));
+			$wp_filetype = wp_check_filetype($fn, null);
+			$return = apply_filters( 'wp_handle_upload', array( 'file' => $fn, 'url' => wp_upload_dir()['url'].'/'.$imagepost->meta->_wp_attached_file, 'type' => $wp_filetype['type'] ) );
+			$attachment = [
+				'post_mime_type' => $return['type'],
+				'guid'           => $return['url'],
+				'post_parent'    => 0,
+				'post_title'     => $imagepost->post_title,
+				'post_name'      => $imagepost->post_name,
+				'post_content'   => $imagepost->post_content,
+				'post_excerpt'   => property_exists($imagepost, 'post_excerpt') ? $imagepost->post_excerpt : "",
+				'post_date'      => $imagepost->post_date,
+				'post_date_gmt'  => property_exists($imagepost, 'post_date_gmt') ? $imagepost->post_date_gmt : $imagepost->post_date,
+			];
+			$attachid = wp_insert_attachment($attachment, $fn, 0);
+			// Regenerate attachment metadata
+			$data = wp_generate_attachment_metadata($attachid, $fn);
+			wp_update_attachment_metadata($attachid, $data);
+			// TODO Quid de postimage->meta['_wp_attachment_image_alt'] ?
+			// Move to original folder
+			if (function_exists('wp_rml_move') && property_exists($imagepost, 'folder')) {
+				wp_rml_move(wp_rml_create_or_return_existing_id($imagepost->folder, _wp_rml_root(), 0, [], false, true), [$attachid]);
+			}
+		}
+	}
+
+	/**
 	 * Import a post.
 	 *
 	 * @param integer $user_id user_id to import to.
@@ -107,48 +157,12 @@ class PushPull_Import {
 		}
 
 		// Post images
+		if (property_exists($post, 'featuredimage')) {
+			$this->import_image($post['featuredimage']);
+		}
 		if (property_exists($post, 'intimages')) {
 			foreach ($post->intimages as $image) {
-				// Get attachment from Git
-				$imagepost = $this->app->api()->fetch()->getPostByName('attachment', $image);
-				// Find local filename
-				$fn = wp_upload_dir()['path']."/".$imagepost->meta->_wp_attached_file;
-				// Get binary contents from Git
-				$media = $this->app->api()->fetch()->getPostByName('media', $imagepost->meta->_wp_attached_file);
-				// Write binary contents to local file in uploads/
-				$fh = fopen($fn, 'w');
-				fwrite($fh, $media);
-				fclose($fh);
-				// Create attachment
-				$imageid = url_to_postid($image);
-				if ($imageid !== 0) {
-					$this->app->write_log(__( 'Image attachment '.$image.' ('.$fn.') already exists locally. Updating.', 'pushpull' ));
-					// TODO
-				} else {
-					$this->app->write_log(__( 'Creating new image attachment.', 'pushpull' ));
-					$wp_filetype = wp_check_filetype($fn, null);
-					$return = apply_filters( 'wp_handle_upload', array( 'file' => $fn, 'url' => wp_upload_dir()['url'].'/'.$imagepost->meta->_wp_attached_file, 'type' => $wp_filetype['type'] ) );
-					$attachment = [
-						'post_mime_type' => $return['type'],
-						'guid'           => $return['url'],
-						'post_parent'    => 0,
-						'post_title'     => $imagepost->post_title,
-						'post_name'      => $imagepost->post_name,
-						'post_content'   => $imagepost->post_content,
-						'post_excerpt'   => property_exists($imagepost, 'post_excerpt') ? $imagepost->post_excerpt : "",
-						'post_date'      => $imagepost->post_date,
-						'post_date_gmt'  => property_exists($imagepost, 'post_date_gmt') ? $imagepost->post_date_gmt : $imagepost->post_date,
-					];
-					$attachid = wp_insert_attachment($attachment, $fn, 0);
-					// Regenerate attachment metadata
-					$data = wp_generate_attachment_metadata($attachid, $fn);
-					wp_update_attachment_metadata($attachid, $data);
-					// TODO Quid de postimage->meta['_wp_attachment_image_alt'] ?
-					// Move to original folder
-					if (function_exists('wp_rml_move') && property_exists($imagepost, 'folder')) {
-						wp_rml_move(wp_rml_create_or_return_existing_id($imagepost->folder, _wp_rml_root(), 0, [], false, true), [$attachid]);
-					}
-				}
+				$this->import_image($image);
 			}
 		}
 
