@@ -40,7 +40,7 @@ class PushPull_Import {
 	 *
 	 * @param string $image the name of the image.
 	 *
-	 * @return string|WP_Error
+	 * @return integer|WP_Error
 	 */
 	public function import_image($image) {
 		// Get attachment from Git
@@ -58,6 +58,7 @@ class PushPull_Import {
 		if ($imageid !== 0) {
 			$this->app->write_log(__( 'Image attachment '.$image.' ('.$fn.') already exists locally. Updating.', 'pushpull' ));
 			// TODO
+			return $imageid;
 		} else {
 			$this->app->write_log(__( 'Creating new image attachment.', 'pushpull' ));
 			$wp_filetype = wp_check_filetype($fn, null);
@@ -82,6 +83,7 @@ class PushPull_Import {
 			if (function_exists('wp_rml_move') && property_exists($imagepost, 'folder')) {
 				wp_rml_move(wp_rml_create_or_return_existing_id($imagepost->folder, _wp_rml_root(), 0, [], false, true), [$attachid]);
 			}
+			return $attachid;
 		}
 	}
 
@@ -158,7 +160,8 @@ class PushPull_Import {
 
 		// Post images
 		if (property_exists($post, 'featuredimage')) {
-			$this->import_image($post->featuredimage);
+			$imageid = $this->import_image($post->featuredimage);
+			update_post_meta($id, '_thumbnail_id', $imageid);
 		}
 		if (property_exists($post, 'intimages')) {
 			foreach ($post->intimages as $image) {
