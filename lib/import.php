@@ -69,7 +69,7 @@ class PushPull_Import {
 				'post_parent'    => 0,
 				'post_title'     => $imagepost->post_title,
 				'post_name'      => $imagepost->post_name,
-				'post_content'   => $imagepost->post_content,
+				'post_content'   => str_replace("@@DOMAIN@@", get_home_url(), $imagepost->post_content),
 				'post_excerpt'   => property_exists($imagepost, 'post_excerpt') ? $imagepost->post_excerpt : "",
 				'post_date'      => $imagepost->post_date,
 				'post_date_gmt'  => property_exists($imagepost, 'post_date_gmt') ? $imagepost->post_date_gmt : $imagepost->post_date,

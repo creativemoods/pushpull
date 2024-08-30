@@ -83,7 +83,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	 */
 	public function create_post_export(WP_Post $post) {
 		$data = [];
-		$data['post_content'] = $post->post_content;
+		$data['post_content'] = str_replace(get_home_url(), "@@DOMAIN@@", $post->post_content);
 		$data['post_type'] = $post->post_type;
 		$data['post_status'] = $post->post_status;
 		$data['post_name'] = $post->post_name;
