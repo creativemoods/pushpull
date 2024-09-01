@@ -226,6 +226,16 @@ class PushPull_Base_Client {
 	}
 
 	/**
+	 * Api to get archive
+	 */
+	public function archive_endpoint() {
+		$url = $this->api_base() . '/projects/';
+		$url = $url . $this->repository() . '/repository/archive.zip';
+
+		return $url;
+	}
+
+	/**
 	 * Builds the proper blob API endpoint for a given post
 	 *
 	 * Returns String the relative API call path
