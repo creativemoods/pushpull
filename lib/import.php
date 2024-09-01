@@ -135,6 +135,10 @@ class PushPull_Import {
 			}
 		}
 
+		if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
+			pll_set_post_language($id, $post->language);
+		}
+
 		if (property_exists($post, 'translations') && function_exists('pll_save_post_translations')) {
 			// Change back from post names to IDs
 			$newvals = [];
@@ -150,13 +154,8 @@ class PushPull_Import {
 				}
 			}
 			if ($found) {
-				$this->app->write_log($newvals);
 				pll_save_post_translations($newvals);
 			}
-		}
-
-		if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
-			pll_set_post_language($id, $post->language);
 		}
 
 		// Post images
