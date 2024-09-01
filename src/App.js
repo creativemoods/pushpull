@@ -20,8 +20,10 @@ const App = () => {
 	const [posttypes, setPosttypes] = useState([]);
 	const [curPostType, setCurPostType] = useState("");
 	const [curPost, setCurPost] = useState("");
-	const [oldCode, setOldCode] = useState("toto");
-	const [newCode, setNewCode] = useState("tata");
+	const [oldCode, setOldCode] = useState("");
+	const [newCode, setNewCode] = useState("");
+	const [localRepository, setLocalRepository] = useState("");
+	const [remoteRepository, setRemoteRepository] = useState("");
 
 	useEffect( () => {
 		apiFetch({
@@ -37,6 +39,20 @@ const App = () => {
 			path: '/pushpull/v1/posttypes',
 		}).then((data) => {
 			setPosttypes(data);
+		}).catch((error) => {
+			console.error(error);
+		});
+		apiFetch({
+			path: '/pushpull/v1/repo/local',
+		}).then((data) => {
+			setLocalRepository(data);
+		}).catch((error) => {
+			console.error(error);
+		});
+		apiFetch({
+			path: '/pushpull/v1/repo/remote',
+		}).then((data) => {
+			setRemoteRepository(data);
 		}).catch((error) => {
 			console.error(error);
 		});
@@ -113,6 +129,11 @@ const App = () => {
 					title: 'Diff viewer',
 					className: 'tab-two',
 				},
+				{
+					name: 'repo',
+					title: 'Repository',
+					className: 'tab-three',
+				},
 			]}
 		>
 			{ ( tab ) => <p>{ tab.title }</p> }
@@ -129,14 +150,14 @@ const App = () => {
                         <TextControl
                             label={ __( 'Project', 'pushpull' ) }
                             help={ __( 'The Git repository to commit to.', 'pushpull' ) }
-			    value={oauthToken}
-			    onChange={setOauthToken}
+			    value={repository}
+			    onChange={setRepository}
                         />
                         <TextControl
                             label={ __( 'Oauth Token', 'pushpull' ) }
                             help={ __( 'A personal oauth token with public_repo scope.', 'pushpull' ) }
-			    value={repository}
-			    onChange={setRepository}
+			    value={oauthToken}
+			    onChange={setOauthToken}
                         />
 			<Button variant="primary" type="submit">
 				{ __( 'Save', 'pushpull' ) }
@@ -165,6 +186,18 @@ const App = () => {
 				extraLinesSurroundingDiff={0}
 				leftTitle={"Local"}
 				rightTitle={"Remote"}
+			/>
+			</>
+		)}
+		{tab === "repo" && (
+			<>
+			<ReactDiffViewer
+				oldValue={localRepository}
+				newValue={remoteRepository}
+				splitView={true}
+				extraLinesSurroundingDiff={0}
+				leftTitle={"Local repository"}
+				rightTitle={"Remote repository"}
 			/>
 			</>
 		)}

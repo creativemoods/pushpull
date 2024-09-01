@@ -62,6 +62,20 @@ class PushPull_Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/repo/local', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_local_repo'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/repo/remote', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_remote_repo'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 	}
 
 	// TODO transformer en json
@@ -100,5 +114,13 @@ class PushPull_Rest {
 		update_option('pushpull_repository', $params['repository']);
 		update_option('pushpull_oauth_token', $params['oauth-token']);
 		return ['oauth-token' => get_option('pushpull_oauth_token'), 'host' => get_option('pushpull_host'), 'repository' => get_option('pushpull_repository')];
+	}
+
+	public function get_local_repo() {
+		return json_encode($this->app->persist()->local_tree(), JSON_PRETTY_PRINT);
+	}
+
+	public function get_remote_repo() {
+		return json_encode($this->app->api()->fetch()->remote_tree(), JSON_PRETTY_PRINT);
 	}
 }

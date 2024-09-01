@@ -86,6 +86,23 @@ class PushPull_Fetch_Client extends PushPull_Base_Client {
 	}
 
 	/**
+	 * Retrieve remote tree
+	 */
+	public function remote_tree() {
+		$res = [];
+		$data = $this->call( 'GET', $this->tree_endpoint() . '?recursive=1&pagination=none' );
+		foreach ($data as $file) {
+			if ($file->type === "blob") {
+				$filedata = $this->call( 'GET', $this->file_endpoint(str_replace("/", "%2F", $file->path)) );
+				$res[] = [ 'path' => $file->path, 'checksum' => $filedata->content_sha256];
+			}
+		}
+
+		usort($res, function($a, $b) { return strcmp($a->path, $b->path); });
+		return $res;
+	}
+
+	/**
 	 * Retrieves a tree by sha recursively from the GitHub API
 	 *
 	 * @param string $sha Commit sha to retrieve tree from.

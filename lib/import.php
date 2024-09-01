@@ -131,33 +131,31 @@ class PushPull_Import {
 		if (property_exists($post, 'terms')) {
 			foreach ($post->terms as $term) {
 				$this->app->write_log(__( 'Creating term for taxonomy '.$term->taxonomy.'.', 'pushpull' ));
-				if ($term->taxonomy === "post_translations") {
-					// Change back from post names to IDs
-					$newvals = [];
-					$description = maybe_unserialize($term->description);
-					$found = true;
-					foreach($description as $lang => $name) {
-						$arr = explode('/', $name); // e.g. "page/our-story"
-						$tmppost = $this->get_post_by_name($arr[1], $arr[0]);
-						if ($tmppost !== null) {
-							$newvals[$lang] = $tmppost->ID;
-						} else {
-							$found = false;
-						}
-					}
-					if ($found) {
-						pll_save_post_translations($newvals);
-					}
-				} elseif ($term->taxonomy === "language") {
-					// Use our language property instead
-					if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
-						pll_set_post_language($id, $post->language);
-					}
-					// Whatever we do don't use the original ids because they're not valid anymore
+				wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
+			}
+		}
+
+		if (property_exists($post, 'translations') && function_exists('pll_save_post_translations')) {
+			// Change back from post names to IDs
+			$newvals = [];
+			$description = maybe_unserialize($post->translations);
+			$found = true;
+			foreach($description as $lang => $name) {
+				$arr = explode('/', $name); // e.g. "page/our-story"
+				$tmppost = $this->get_post_by_name($arr[1], $arr[0]);
+				if ($tmppost !== null) {
+					$newvals[$lang] = $tmppost->ID;
 				} else {
-					wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
+					$found = false;
 				}
 			}
+			if ($found) {
+				pll_save_post_translations($newvals);
+			}
+		}
+
+		if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
+			pll_set_post_language($id, $post->language);
 		}
 
 		// Post images

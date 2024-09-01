@@ -76,6 +76,59 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	}
 
 	/**
+	 * Get local repo
+	 */
+	public function local_tree() {
+		$res = [];
+		foreach (get_post_types() as $posttype) {
+			if (in_array($posttype, ['attachment', 'gp_elements', 'media', 'page', 'post'])) {
+				$posts = get_posts(['numberposts' => -1, 'post_type' => 'any', 'post_type' => $posttype]);
+				foreach ($posts as $post) {
+					$content = $this->create_post_export($post);
+					$res[] = ['path' => "_".$posttype."/".$post->post_name, 'checksum' => hash('sha256', json_encode($content))];
+					// Also add media
+					if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
+						$res[] = ['path' => "_media/".$content['meta']['_wp_attached_file'], 'checksum' => hash_file('sha256', wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'])];
+					}
+				}
+			}
+		}
+
+		usort($res, function($a, $b) { return strcmp($a['path'], $b['path']); });
+		return $res;
+	}
+
+	/**
+	 * Find images in blocks and replace
+	 */
+	protected function convert_bgImage_urls_to_uppercase($blocks) {
+		// Iterate through all the blocks
+		foreach ($blocks as &$block) {
+			// Check if the block has attributes
+			if (isset($block['attrs'])) {
+				// Check if 'bgImage' attribute exists
+				if (isset($block['attrs']['bgImage'])) {
+					// Check if 'image' property exists in 'bgImage'
+					if (isset($block['attrs']['bgImage']['image'])) {
+						// Check if 'url' property exists in 'image'
+						if (isset($block['attrs']['bgImage']['image']['url'])) {
+							// Convert the URL to uppercase
+							$block['attrs']['bgImage']['image']['url'] = str_replace(get_home_url(), "@@DOMAIN@@", $block['attrs']['bgImage']['image']['url']);
+						}
+					}
+				}
+			}
+
+			// If the block has inner blocks, apply the function recursively
+			if (isset($block['innerBlocks']) && is_array($block['innerBlocks'])) {
+				$block['innerBlocks'] = $this->convert_bgImage_urls_to_uppercase($block['innerBlocks']);
+			}
+		}
+
+		return $blocks;
+	}
+
+	/**
 	 * Create post export
 	 *
 	 * @param WP_Post
@@ -109,25 +162,24 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$taxonomies = get_object_taxonomies($post->post_type);
 		if (!empty($taxonomies)) {
 			$terms = wp_get_object_terms($post->ID, $taxonomies);
-			$data['terms'] = (array)$terms;
+			foreach ((array)$terms as $i => $term) {
+				// Rewrite post IDs into post names for polylang post_translations taxonomies
+				if ($term->taxonomy === 'post_translations') {
+					$newvals = [];
+					$description = maybe_unserialize($term->description);
+					foreach($description as $lang => $id) {
+						$post = get_post($id);
+						$newvals[$lang] = $post->post_type."/".$post->post_name;
+					}
+					$data['translations'] = maybe_serialize($newvals);
+				} elseif ($term->taxonomy === 'language') {
+					$data['language'] = $term->slug;
+				} else {
+					$data['terms'][] = $term;
+				}
+			}
 		} else {
 			$data['terms'] = [];
-		}
-
-		// Rewrite post IDs into post names for polylang post_translations taxonomies
-		foreach ($data['terms'] as $i => $term) {
-			if ($term->taxonomy === 'post_translations') {
-				$newvals = [];
-				$description = maybe_unserialize($term->description);
-				foreach($description as $lang => $id) {
-					$post = get_post($id);
-					$newvals[$lang] = $post->post_type."/".$post->post_name;
-				}
-				$data['terms'][$i]->description = maybe_serialize($newvals);
-			}
-			if ($term->taxonomy === 'language') {
-				$data['language'] = $term->slug;
-			}
 		}
 
 		// If we have a media folder plugin, add location
@@ -157,6 +209,30 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	}
 
 	/**
+	 * Find images in blocks code
+	 */
+	protected function find_bg_image_urls($blocks) {
+		$urls = [];
+		foreach ($blocks as $block) {
+			// Check if the block has attributes and a bgImage attribute
+			if (isset($block['attrs']) && isset($block['attrs']['bgImage'])) {
+				$bgImage = $block['attrs']['bgImage'];
+				// Check if bgImage has an image with a URL
+				if (isset($bgImage['image']['url'])) {
+					$urls[] = $bgImage['image']['url'];
+				}
+			}
+			// Recursively search in innerBlocks if they exist
+			if (isset($block['innerBlocks']) && is_array($block['innerBlocks'])) {
+				$innerUrls = $this->find_bg_image_urls($block['innerBlocks']);
+				$urls = array_merge($urls, $innerUrls);
+			}
+		}
+
+		return $urls;
+	}
+
+	/**
 	 * Export post images that are in the media library
 	 *
 	 * @param WP_Post
@@ -174,6 +250,12 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		foreach ($images as $image) {
 			$url = $image->getAttribute('src');
 			$data[] = ['id' => $this->get_image_id($url), 'url' => $url];
+		}
+
+		// Also look for images in blocks code
+		$images = $this->find_bg_image_urls(parse_blocks($post->post_content));
+		foreach ($images as $image) {
+			$data[] = ['id' => $this->get_image_id($image), 'url' => $image];
 		}
 
 		return $data;
