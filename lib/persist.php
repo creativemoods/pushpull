@@ -52,6 +52,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		}
 
 		$this->app->write_log(__( 'End export to Git.', 'pushpull' ));
+		delete_transient('pushpull_remote_repo_files');
 		return true;
 	}
 

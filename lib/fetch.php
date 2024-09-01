@@ -88,54 +88,46 @@ class PushPull_Fetch_Client extends PushPull_Base_Client {
 	/**
 	 * Retrieve remote tree
 	 */
-	/*public function remote_tree() {
-		$res = [];
-		$data = $this->call( 'GET', $this->tree_endpoint() . '?recursive=1&pagination=none' );
-		foreach ($data as $file) {
-			if ($file->type === "blob") {
-				$filedata = $this->call( 'GET', $this->file_endpoint(str_replace("/", "%2F", $file->path)) );
-				$res[] = [ 'path' => $file->path, 'checksum' => $filedata->content_sha256];
-			}
-		}
-
-		usort($res, function($a, $b) { return strcmp($a->path, $b->path); });
-		return $res;
-	}*/
 	public function remote_tree() {
-		// Step 1: Download the repository archive
-		$data = $this->call( 'GET', $this->archive_endpoint() . '?sha=main' );
-		if ($archiveContent === false) {
-			throw new Exception("Failed to download repository archive.");
-		}
-		$tempArchive = tempnam(sys_get_temp_dir(), 'repo_archive_');
-		file_put_contents($tempArchive, $archiveContent);
-		$zip = new ZipArchive;
-		if ($zip->open($tempArchive) === TRUE) {
-			$zip->extractTo(sys_get_temp_dir()); // Extract to the system temp directory
-			$zip->close();
-		} else {
-			throw new Exception("Failed to unzip the archive.");
-		}
-		$repoFiles = [];
-		$extractedDir = sys_get_temp_dir() . '/' . $zip->getNameIndex(0); // Get the name of the first directory
-		$rii = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($extractedDir));
-		foreach ($rii as $file) {
-			if ($file->isDir()){
-				continue;
+		if (false === ($repoFiles = get_transient('pushpull_remote_repo_files'))) {
+			$this->app->write_log("Fetching remote repo contents.");
+			$archiveContent = $this->call( 'GET', $this->archive_endpoint() . '?sha=main' );
+			if ($archiveContent === false) {
+				throw new Exception("Failed to download repository archive.");
 			}
-			$filePath = $file->getPathname();
-			$relativePath = str_replace($extractedDir . '/', '', $filePath);
-			$hash = hash_file('sha256', $filePath);
-			$repoFiles[] = [
-				'path' => $relativePath,
-				'checksum' => $hash
-			];
-		}
-		unlink($tempArchive);
-		array_map('unlink', glob("$extractedDir/*.*"));
-		rmdir($extractedDir);
+			$tempArchive = tempnam(sys_get_temp_dir(), 'repo_archive_');
+			file_put_contents($tempArchive, $archiveContent);
+			$zip = new ZipArchive;
+			if ($zip->open($tempArchive) === TRUE) {
+				$zip->extractTo(sys_get_temp_dir()); // Extract to the system temp directory
+			} else {
+				throw new Exception("Failed to unzip the archive.");
+			}
+			$repoFiles = [];
+			$extractedDir = sys_get_temp_dir() . '/' . $zip->getNameIndex(0); // Get the name of the first directory
+			$rii = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($extractedDir));
+			foreach ($rii as $file) {
+				if ($file->isDir()){
+					continue;
+				}
+				$filePath = $file->getPathname();
+				$relativePath = str_replace($extractedDir, '', $filePath);
+				$hash = hash_file('sha256', $filePath);
+				$repoFiles[] = [
+					'path' => $relativePath,
+					'checksum' => $hash
+				];
+			}
+			unlink($tempArchive);
+			array_map('unlink', glob("$extractedDir/*.*"));
+			rmdir($extractedDir);
+			$zip->close();
 
-		usort($repoFiles, function($a, $b) { return strcmp($a->path, $b->path); });
+			usort($repoFiles, function($a, $b) { return strcmp($a['path'], $b['path']); });
+			// Cache results
+			set_transient('pushpull_remote_repo_files', $repoFiles, 24 * HOUR_IN_SECONDS);
+		}
+
 		return $repoFiles;
 	}
 
