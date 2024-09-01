@@ -141,7 +141,6 @@ class PushPull_Import {
 			$description = maybe_unserialize($post->translations);
 			$found = true;
 			foreach($description as $lang => $name) {
-				$this->app->write_log($name);
 				$arr = explode('/', $name); // e.g. "page/our-story"
 				$tmppost = $this->get_post_by_name($arr[1], $arr[0]);
 				if ($tmppost !== null) {
@@ -151,6 +150,7 @@ class PushPull_Import {
 				}
 			}
 			if ($found) {
+				$this->app->write_log($newvals);
 				pll_save_post_translations($newvals);
 			}
 		}
