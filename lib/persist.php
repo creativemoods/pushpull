@@ -169,8 +169,8 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 					$newvals = [];
 					$description = maybe_unserialize($term->description);
 					foreach($description as $lang => $id) {
-						$post = get_post($id);
-						$newvals[$lang] = $post->post_type."/".$post->post_name;
+						$tmppost = get_post($id);
+						$newvals[$lang] = $tmppost->post_type."/".$tmppost->post_name;
 					}
 					$data['translations'] = maybe_serialize($newvals);
 				} elseif ($term->taxonomy === 'language') {
