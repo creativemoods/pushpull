@@ -101,7 +101,7 @@ class PushPull_Import {
 			$this->app->write_log(__( 'Invalid user ID', 'pushpull' ));
 		}
 
-		$this->app->write_log(__( 'Starting import from Git.', 'pushpull' ));
+		$this->app->write_log(__( 'Starting import from Git for '.$name.'.', 'pushpull' ));
 
 		$post = $this->app->api()->fetch()->getPostByName($type, $name);
 		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), $post->post_content);
@@ -120,7 +120,7 @@ class PushPull_Import {
 		// Post meta
 		if (property_exists($post, 'meta')) {
 			foreach ($post->meta as $key => $value) {
-				$this->app->write_log(__( 'Creating meta key '.$key.'.', 'pushpull' ));
+				//$this->app->write_log(__( 'Creating meta key '.$key.'.', 'pushpull' ));
 				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
 				$value = maybe_unserialize($value);
 				update_post_meta($id, $key, $value);
