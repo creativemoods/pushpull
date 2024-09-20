@@ -71,6 +71,7 @@ class PushPull_Base_Client {
 			'headers' => array(
 				'PRIVATE-TOKEN' => $this->oauth_token(),
 			),
+			'timeout' => 30,
 		);
 
 		if ( 'GET' !== $method ) {
@@ -78,7 +79,6 @@ class PushPull_Base_Client {
 				wp_json_encode( $body ) :
 				json_encode( $body );
 			$args['headers']['Content-Type'] = 'application/json';
-			$args['timeout'] = 30;
 		}
 
 		$response = wp_remote_request( $endpoint, $args );
