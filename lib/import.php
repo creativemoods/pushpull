@@ -104,7 +104,8 @@ class PushPull_Import {
 		$this->app->write_log(__( 'Starting import from Git for '.$name.'.', 'pushpull' ));
 
 		$post = $this->app->api()->fetch()->getPostByName($type, $name);
-		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), $post->post_content);
+		// We need to add wp_slash otherwise \\ will be deleted
+		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), wp_slash($post->post_content));
 
 		// Post
 		$id = url_to_postid($name);
