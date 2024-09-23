@@ -124,6 +124,18 @@ class PushPull_Import {
 				//$this->app->write_log(__( 'Creating meta key '.$key.'.', 'pushpull' ));
 				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
 				$value = maybe_unserialize($value);
+				if ($key === "_generate_element_display_conditions") {
+					// We need to reset the post name to its ID if it exists
+					foreach ($value as $item => $displaycond) {
+						if ($displaycond['rule'] === "post:page") {
+							$arr = explode('/', $displaycond['object']); // e.g. "page/our-story"
+							$tmppost = $this->get_post_by_name($arr[1], $arr[0]);
+							if ($tmppost !== null) {
+								$value[$item]['object'] = $tmppost->ID;
+							}
+						}
+					}
+				}
 				update_post_meta($id, $key, $value);
 			}
 		}

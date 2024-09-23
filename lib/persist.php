@@ -157,6 +157,19 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 				$data['featuredimage'] = $image->post_name;
 				continue;
 			}
+			if ($key === "_generate_element_display_conditions") {
+				$unserialized = maybe_unserialize($value[0]);
+				foreach ($unserialized as $item => $displaycond) {
+					if ($displaycond['rule'] === "post:page") {
+						$tmppost = get_post($displaycond['object']);
+						if ($tmppost) {
+							$unserialized[$item]['object'] = $tmppost->post_type."/".$tmppost->post_name;
+						}
+					}
+				}
+				$meta[$key] = maybe_serialize($unserialized);
+				continue;
+			}
 			$meta[$key] = $value[0];
 		}
 		$data['meta'] = $meta;
