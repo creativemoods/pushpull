@@ -80,22 +80,58 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 	 * Get local repo
 	 */
 	public function local_tree() {
-		$res = [];
+		$localres = [];
+		$localres['media'] = [];
 		foreach (get_post_types() as $posttype) {
 			if (in_array($posttype, ['attachment', 'gp_elements', 'media', 'page', 'post'])) {
 				$posts = get_posts(['numberposts' => -1, 'post_type' => 'any', 'post_type' => $posttype]);
+				$localres[$posttype] = [];
 				foreach ($posts as $post) {
 					$content = $this->create_post_export($post);
-					$res[] = ['path' => "_".$posttype."/".$post->post_name, 'checksum' => hash('sha256', json_encode($content))];
+					$localres[$posttype][$post->post_name] = ['localchecksum' => hash('sha256', json_encode($content)), 'remotechecksum' => null];
 					// Also add media
 					if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
-						$res[] = ['path' => "_media/".$content['meta']['_wp_attached_file'], 'checksum' => hash_file('sha256', wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'])];
+						$localres['media'][$content['meta']['_wp_attached_file']] = ['localchecksum' => hash_file('sha256', wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file']), 'remotechecksum' => null];
 					}
 				}
 			}
 		}
 
-		usort($res, function($a, $b) { return strcmp($a['path'], $b['path']); });
+		// Get remote repo files
+		// TODO remonter fetch()
+		$remotefiles = $this->app->api()->fetch()->remote_tree();
+		foreach ($remotefiles as $remotefile) {
+			preg_match('/_(.+?)\/(.+)/', $remotefile['path'], $matches);
+			$posttype = $matches[1];
+			$postname = $matches[2];
+			$checksum = $remotefile['checksum'];
+			if (array_key_exists($posttype, $localres) && array_key_exists($postname, $localres[$posttype])) {
+				$localres[$posttype][$postname]['remotechecksum'] = $checksum;
+			} else {
+				if (!array_key_exists($posttype, $localres)) {
+					$localres[$posttype] = [];
+				}
+				$localres[$posttype][$postname] = ['localchecksum' => null, 'remotechecksum' => $checksum];
+			}
+		}
+
+		// Format res for DataGrid
+		$res = [];
+		foreach($localres as $posttypename => $posttype) {
+			foreach ($posttype as $postname => $post) {
+				$status = "";
+				if ($post['localchecksum'] === $post['remotechecksum']) {
+					$status = 'identical';
+				} elseif ($post['localchecksum'] === null) {
+					$status = 'notlocal';
+				} elseif ($post['remotechecksum'] === null) {
+					$status = 'notremote';
+				} else {
+					$status = 'different';
+				}
+				$res []= ['id' => $postname, 'postType' => $posttypename, 'localChecksum' => $post['localchecksum'], 'remoteChecksum' => $post['remotechecksum'], 'status' => $status];
+			}
+		}
 		return $res;
 	}
 

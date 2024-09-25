@@ -121,6 +121,7 @@ class PushPull_Rest {
 	}
 
 	public function get_remote_repo() {
+		// TODO remonter fetch()
 		return json_encode($this->app->api()->fetch()->remote_tree(), JSON_PRETTY_PRINT);
 	}
 }

@@ -123,7 +123,7 @@ class PushPull_Fetch_Client extends PushPull_Base_Client {
 			rmdir($extractedDir);
 			$zip->close();
 
-			usort($repoFiles, function($a, $b) { return strcmp($a['path'], $b['path']); });
+			//usort($repoFiles, function($a, $b) { return strcmp($a['path'], $b['path']); });
 			// Cache results
 			set_transient('pushpull_remote_repo_files', $repoFiles, 24 * HOUR_IN_SECONDS);
 		}
