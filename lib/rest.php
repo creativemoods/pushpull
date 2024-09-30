@@ -76,6 +76,13 @@ class PushPull_Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/pull/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'pull'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 	}
 
 	// TODO transformer en json
@@ -123,5 +130,12 @@ class PushPull_Rest {
 	public function get_remote_repo() {
 		// TODO remonter fetch()
 		return json_encode($this->app->api()->fetch()->remote_tree(), JSON_PRETTY_PRINT);
+	}
+
+	public function pull($data) {
+		$params = $data->get_json_params();
+		// TODO Verify data
+		$id = $this->app->import()->import_post(1, $params['posttype'], $params['postname']);
+		return ['id' => $id];
 	}
 }

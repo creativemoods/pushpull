@@ -10,6 +10,9 @@ import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import DifferenceIcon from '@mui/icons-material/Difference';
 import DoneIcon from '@mui/icons-material/Done';
 import BackupIcon from '@mui/icons-material/Backup';
+import { useDispatch } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
+import { __ } from '@wordpress/i18n';
 
 // Demo
 import {
@@ -24,83 +27,6 @@ import {
   random,
 } from '@mui/x-data-grid-generator';
 
-const columns = [
-  {
-    field: 'postType',
-    headerName: 'Post type',
-    width: 110,
-    editable: false,
-  },
-  {
-    field: 'id',
-    headerName: 'Post name',
-    width: 140,
-    editable: false,
-  },
-  {
-    field: 'status',
-    headerName: 'Status',
-    renderCell: renderStatus,
-    width: 140,
-    editable: false,
-  },
-  {
-    field: 'localChecksum',
-    headerName: 'Local checksum',
-    width: 110,
-    editable: false,
-  },
-  {
-    field: 'remoteChecksum',
-    headerName: 'Remote checksum',
-    width: 110,
-    editable: false,
-  },
-  {
-    field: "action",
-    headerName: "Action",
-    width: 130,
-    sortable: false,
-    renderCell: (params) => {
-      const onClick = (e) => {
-        const currentRow = params.row;
-        return alert(JSON.stringify(currentRow, null, 4));
-      };
-      const onClickDiff = (e) => {
-        const currentRow = params.row;
-        return alert(JSON.stringify(currentRow, null, 4));
-      };
-
-      //console.log(params);
-      if (params.row.status === 'identical') {
-        // Nothing to do, files are identical
-        return (<></>);
-      } else if (params.row.status === 'notlocal') {
-        // File can be pulled
-        return (
-          <>
-            <Button variant="outlined" color="warning" size="small" onClick={onClick}>Pull</Button>
-          </>
-        );
-      } else if (params.row.status === 'notremote') {
-        // File can be pushed
-        return (
-          <>
-            <Button variant="outlined" color="error" size="small" onClick={onClick}>Push</Button>
-          </>
-        );
-      }
-      // Files are not identical, we can either push or pull
-      return (
-        <>
-          <Button variant="outlined" color="warning" size="small" onClick={onClick}>Pull</Button>
-          <Button variant="outlined" color="error" size="small" onClick={onClick}>Push</Button>
-          <Button variant="outlined" color="error" size="small" onClick={onClickDiff}>Diff</Button>
-        </>
-      );
-    }
-  },
-];
 
 const getBackgroundColor = (color, theme, coefficient) => ({
   backgroundColor: darken(color, coefficient),
@@ -161,10 +87,106 @@ const StyledDataGrid = styled(DataGrid)(({ theme }) => ({
 }));
 
 const RepositoryPane = () => {
+	const {createSuccessNotice} = useDispatch( noticesStore );
 	const [repository, setRepository] = useState([]);
 	const [devices, setDevices] = React.useState(() => ['notremote', 'notlocal', 'different']);
 
-	useEffect( () => {
+const columns = [
+  {
+    field: 'postType',
+    headerName: 'Post type',
+    width: 110,
+    editable: false,
+  },
+  {
+    field: 'id',
+    headerName: 'Post name',
+    width: 140,
+    editable: false,
+  },
+  {
+    field: 'status',
+    headerName: 'Status',
+    renderCell: renderStatus,
+    width: 140,
+    editable: false,
+  },
+  {
+    field: 'localChecksum',
+    headerName: 'Local checksum',
+    width: 110,
+    editable: false,
+  },
+  {
+    field: 'remoteChecksum',
+    headerName: 'Remote checksum',
+    width: 110,
+    editable: false,
+  },
+  {
+    field: "action",
+    headerName: "Action",
+    width: 130,
+    sortable: false,
+    renderCell: (params) => {
+      const onClick = (e) => {
+        const currentRow = params.row;
+        return alert(JSON.stringify(currentRow, null, 4));
+      };
+
+      const onClickDiff = (e) => {
+        const currentRow = params.row;
+        return alert(JSON.stringify(currentRow, null, 4));
+      };
+
+      const onClickPull = (e) => {
+        const currentRow = params.row;
+        apiFetch({
+          path: '/pushpull/v1/pull',
+          method: 'POST',
+          data: { postname: currentRow.id, posttype: currentRow.postType },
+		}).then((data) => {
+			createSuccessNotice(__('Post pulled successfully.'), {
+				isDismissible: true,
+			});
+			getRepoData();
+		}).catch((error) => {
+			console.error(error);
+		});
+      };
+
+      //console.log(params);
+      if (params.row.status === 'identical') {
+        // Nothing to do, files are identical
+        return (<></>);
+      } else if (params.row.status === 'notlocal') {
+        // File can be pulled
+        return (
+          <>
+            <Button variant="outlined" color="warning" size="small" onClick={onClickPull}>Pull</Button>
+          </>
+        );
+      } else if (params.row.status === 'notremote') {
+        // File can be pushed
+        return (
+          <>
+            <Button variant="outlined" color="error" size="small" onClick={onClick}>Push</Button>
+          </>
+        );
+      }
+      // Files are not identical, we can either push or pull
+      return (
+        <>
+          <Button variant="outlined" color="warning" size="small" onClick={onClickPull}>Pull</Button>
+          <Button variant="outlined" color="error" size="small" onClick={onClick}>Push</Button>
+          <Button variant="outlined" color="error" size="small" onClick={onClickDiff}>Diff</Button>
+        </>
+      );
+    }
+  },
+];
+
+	const getRepoData = () => {
 		apiFetch({
 			path: '/pushpull/v1/repo/local',
 		}).then((data) => {
@@ -172,13 +194,18 @@ const RepositoryPane = () => {
 		}).catch((error) => {
 			console.error(error);
 		});
+	}
+
+	useEffect( () => {
+		getRepoData();
 	}, [] );
 
 	const handleDevices = (event, newDevices) => {
-    if (newDevices.length) {
-      setDevices(newDevices);
-    }
-  };
+		if (newDevices.length) {
+			setDevices(newDevices);
+		}
+	};
+
 	return (
 	<>
 		<ToggleButtonGroup
@@ -208,11 +235,11 @@ const RepositoryPane = () => {
 			initialState={{
 				pagination: {
 					paginationModel: {
-						pageSize: 25,
+						pageSize: 50,
 					},
 				},
 			}}
-			pageSizeOptions={[5, 25, 100]}
+			pageSizeOptions={[5, 25, 50, 100]}
 			checkboxSelection
 			disableRowSelectionOnClick
 			getRowClassName={(params) => `super-app-theme--${params.row.status}`}
