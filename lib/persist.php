@@ -10,6 +10,25 @@ require_once __DIR__ . '/base.php';
  * Class PushPull_Persist_Client
  */
 class PushPull_Persist_Client extends PushPull_Base_Client {
+	/**
+	 * Push a post.
+	 *
+	 * @param integer $user_id user_id to import to.
+	 * @param string $type the type of post.
+	 * @param string $name the name of the post.
+	 *
+	 * @return integer|WP_Error
+	 */
+	public function push_post($type, $name) {
+		$this->app->write_log(__( 'Starting export to Git for '.$name.'.', 'pushpull' ));
+		$post = $this->app->import()->get_post_by_name($name, $type);
+		if (!$post) {
+			return new WP_Error( '404', esc_html__( 'Post not found', 'pushpull' ), array( 'status' => 404 ) );
+		}
+		$id = $this->commit($post);
+		$this->app->write_log(__( 'End export to Git.', 'pushpull' ));
+		return $id;
+	}
 
 	/**
 	 * Add a new commit to the master branch.
@@ -83,7 +102,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$localres = [];
 		$localres['media'] = [];
 		foreach (get_post_types() as $posttype) {
-			if (in_array($posttype, ['attachment', 'gp_elements', 'media', 'page', 'post'])) {
+			if (in_array($posttype, ['attachment', 'gp_elements', 'wp_block', 'media', 'page', 'post'])) {
 				$posts = get_posts(['numberposts' => -1, 'post_type' => 'any', 'post_type' => $posttype]);
 				$localres[$posttype] = [];
 				foreach ($posts as $post) {

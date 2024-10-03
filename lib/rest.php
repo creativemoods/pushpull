@@ -83,6 +83,13 @@ class PushPull_Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/push/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'push'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 	}
 
 	// TODO transformer en json
@@ -136,6 +143,13 @@ class PushPull_Rest {
 		$params = $data->get_json_params();
 		// TODO Verify data
 		$id = $this->app->import()->import_post(1, $params['posttype'], $params['postname']);
-		return ['id' => $id];
+		return is_wp_error($id) ? $id : ['id' => $id];
+	}
+
+	public function push($data) {
+		$params = $data->get_json_params();
+		// TODO Verify data
+		$id = $this->app->persist()->push_post($params['posttype'], $params['postname']);
+		return is_wp_error($id) ? $id : ['id' => $id];
 	}
 }

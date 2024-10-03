@@ -87,7 +87,7 @@ const StyledDataGrid = styled(DataGrid)(({ theme }) => ({
 }));
 
 const RepositoryPane = () => {
-	const {createSuccessNotice} = useDispatch( noticesStore );
+	const {createSuccessNotice, createErrorNotice} = useDispatch( noticesStore );
 	const [repository, setRepository] = useState([]);
 	const [devices, setDevices] = React.useState(() => ['notremote', 'notlocal', 'different']);
 
@@ -129,9 +129,22 @@ const columns = [
     width: 130,
     sortable: false,
     renderCell: (params) => {
-      const onClick = (e) => {
+      const onClickPush = (e) => {
         const currentRow = params.row;
-        return alert(JSON.stringify(currentRow, null, 4));
+        apiFetch({
+          path: '/pushpull/v1/push',
+          method: 'POST',
+          data: { postname: currentRow.id, posttype: currentRow.postType },
+		}).then((data) => {
+			createSuccessNotice(__('Post '+currentRow.id+' pushed successfully.'), {
+				isDismissible: true,
+			});
+			getRepoData();
+		}).catch((error) => {
+			createErrorNotice(__('Error pushing post '+currentRow.id+': '+error.message), {
+				isDismissible: true,
+			});
+		});
       };
 
       const onClickDiff = (e) => {
@@ -170,7 +183,7 @@ const columns = [
         // File can be pushed
         return (
           <>
-            <Button variant="outlined" color="error" size="small" onClick={onClick}>Push</Button>
+            <Button variant="outlined" color="error" size="small" onClick={onClickPush}>Push</Button>
           </>
         );
       }
@@ -178,7 +191,7 @@ const columns = [
       return (
         <>
           <Button variant="outlined" color="warning" size="small" onClick={onClickPull}>Pull</Button>
-          <Button variant="outlined" color="error" size="small" onClick={onClick}>Push</Button>
+          <Button variant="outlined" color="error" size="small" onClick={onClickPush}>Push</Button>
           <Button variant="outlined" color="error" size="small" onClick={onClickDiff}>Diff</Button>
         </>
       );
