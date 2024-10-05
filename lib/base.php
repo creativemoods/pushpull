@@ -149,7 +149,7 @@ class PushPull_Base_Client {
 	 * @return string
 	 */
 	public function repository() {
-		return (string) get_option( self::REPO_OPTION_KEY );
+		return (string) urlencode(get_option( self::REPO_OPTION_KEY ));
 	}
 
 	/**
