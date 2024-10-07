@@ -164,7 +164,27 @@ const columns = [
 			});
 			getRepoData();
 		}).catch((error) => {
-			console.error(error);
+			createErrorNotice(__('Error pulling post '+currentRow.id+': '+error.message), {
+				isDismissible: true,
+			});
+		});
+      };
+
+      const onClickDelete = (e) => {
+        const currentRow = params.row;
+        apiFetch({
+          path: '/pushpull/v1/delete',
+          method: 'DELETE',
+          data: { postname: currentRow.id, posttype: currentRow.postType },
+		}).then((data) => {
+			createSuccessNotice(__('Post deleted successfully.'), {
+				isDismissible: true,
+			});
+			getRepoData();
+		}).catch((error) => {
+			createErrorNotice(__('Error deleting post '+currentRow.id+': '+error.message), {
+				isDismissible: true,
+			});
 		});
       };
 
@@ -177,6 +197,7 @@ const columns = [
         return (
           <>
             <Button variant="outlined" color="warning" size="small" onClick={onClickPull}>Pull</Button>
+            <Button variant="outlined" color="error" size="small" onClick={onClickDelete}>Delete</Button>
           </>
         );
       } else if (params.row.status === 'notremote') {

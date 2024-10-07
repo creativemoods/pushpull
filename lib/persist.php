@@ -102,7 +102,7 @@ class PushPull_Persist_Client extends PushPull_Base_Client {
 		$localres = [];
 		$localres['media'] = [];
 		foreach (get_post_types() as $posttype) {
-			if (in_array($posttype, ['attachment', 'gp_elements', 'wp_block', 'media', 'page', 'post'])) {
+			if (in_array($posttype, ['attachment', 'gp_elements', 'wp_block', 'media', 'page', 'post', 'wpcf7_contact_form'])) {
 				$posts = get_posts(['numberposts' => -1, 'post_type' => 'any', 'post_type' => $posttype]);
 				$localres[$posttype] = [];
 				foreach ($posts as $post) {
