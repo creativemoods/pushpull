@@ -7,7 +7,9 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 
 //$option_name = 'wporg_option';
 
-//delete_option( $option_name );
+delete_option('pushpull_host');
+delete_option('pushpull_oauth_token');
+delete_option('pushpull_repository');
 
 // for site options in Multisite
 //delete_site_option( $option_name );

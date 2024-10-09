@@ -1,21 +1,25 @@
 {
-  "name": "creativemoods/pushpull",
-  "description": "Push Pull DevOps plugin for Wordpress",
-  "keywords": ["wordpress", "plugin"],
-  "homepage": "https://creativemoods.pt",
-  "authors": [
-    {
-      "name": "Creative Moods",
-      "homepage": "https://creativemoods.pt"
+    "name": "creativemoods/pushpull",
+    "description": "Push Pull DevOps plugin for Wordpress",
+    "keywords": ["wordpress", "plugin"],
+    "homepage": "https://creativemoods.pt",
+    "type": "wordpress-plugin",
+    "autoload": {
+        "psr-4": {
+            "CreativeMoods\\PushPull\\": "inc/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Creative Moods",
+            "homepage": "https://creativemoods.pt"
+        }
+    ],
+    "require": {
+        "php": ">=8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9",
+        "yoast/phpunit-polyfills": "^3.0"
     }
-  ],
-  "autoload": {
-    "psr-4": {
-      "CreativeMoods\\PushPull\\": "includes/"
-    }
-  },
-  "type": "wordpress-plugin",
-  "require": {
-    "php": ">=8.0"
-  }
 }

@@ -15,14 +15,16 @@ const DiffPane = () => {
 	const [newCode, setNewCode] = useState("");
 
 	useEffect( () => {
-		apiFetch({
-			path: addQueryArgs('/pushpull/v1/diff', { 'post_name': curPost, 'post_type': curPostType } ),
-		}).then((data) => {
-			setOldCode(data['local']);
-			setNewCode(data['remote']);
-		}).catch((error) => {
-			console.error(error);
-		});
+		if (curPost !== "" && curPostType !== "") {
+			apiFetch({
+				path: addQueryArgs('/pushpull/v1/diff', { 'post_name': curPost, 'post_type': curPostType } ),
+			}).then((data) => {
+				setOldCode(data['local']);
+				setNewCode(data['remote']);
+			}).catch((error) => {
+				console.error(error);
+			});
+		}
 	}, [curPost] );
 
 	useEffect( () => {

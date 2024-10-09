@@ -1,10 +1,10 @@
 {
   "name": "pushpull",
-  "version": "1.0.0",
+  "version": "0.0.33",
   "description": "PushPull",
   "main": "index.js",
   "directories": {
-    "lib": "lib"
+    "inc": "inc"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
