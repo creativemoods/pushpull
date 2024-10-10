@@ -99,7 +99,7 @@ class FetchClient extends BaseClient {
 			}
 			$tempArchive = tempnam(sys_get_temp_dir(), 'repo_archive_');
 			file_put_contents($tempArchive, $archiveContent);
-			$zip = new ZipArchive;
+			$zip = new \ZipArchive;
 			if ($zip->open($tempArchive) === TRUE) {
 				$zip->extractTo(sys_get_temp_dir()); // Extract to the system temp directory
 			} else {
@@ -107,7 +107,7 @@ class FetchClient extends BaseClient {
 			}
 			$repoFiles = [];
 			$extractedDir = sys_get_temp_dir() . '/' . $zip->getNameIndex(0); // Get the name of the first directory
-			$rii = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($extractedDir));
+			$rii = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($extractedDir));
 			foreach ($rii as $file) {
 				if ($file->isDir()){
 					continue;
