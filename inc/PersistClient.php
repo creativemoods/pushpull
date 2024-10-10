@@ -346,7 +346,7 @@ class PersistClient extends BaseClient {
 			// This is an attachment that references a file in uploads, we need to add it
 			$fn = wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'];
 			$wpfsd = new \WP_Filesystem_Direct( false );
-			$fc = $wpfsd->get_contents ( $check_this_file );
+			$fc = $wpfsd->get_contents ( $fn );
 			$files[] = [
 				'action' => $this->git_exists("_media%2F".$content['meta']['_wp_attached_file']) ? 'update' : 'create',
 				'file_path' => "_media/".$content['meta']['_wp_attached_file'],
