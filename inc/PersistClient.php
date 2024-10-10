@@ -345,7 +345,7 @@ class PersistClient extends BaseClient {
 		if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
 			// This is an attachment that references a file in uploads, we need to add it
 			$fn = wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'];
-			$wpfsd = new WP_Filesystem_Direct( false );
+			$wpfsd = new \WP_Filesystem_Direct( false );
 			$fc = $wpfsd->get_contents ( $check_this_file );
 			$files[] = [
 				'action' => $this->git_exists("_media%2F".$content['meta']['_wp_attached_file']) ? 'update' : 'create',

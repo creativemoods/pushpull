@@ -121,7 +121,7 @@ class PushPull {
 		$this->rest = new Rest($this);
 
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
-			CLI::add_command( 'pushpull', $this->cli() );
+			\WP_CLI::add_command( 'pushpull', $this->cli() );
 		}
 	}
 
@@ -300,9 +300,9 @@ class PushPull {
 	public static function write_log( $msg, $write = 'line' ) {
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			if ( is_array( $msg ) || is_object( $msg ) ) {
-				CLI::print_value( $msg );
+				\WP_CLI::print_value( $msg );
 			} else {
-				CLI::$write( $msg );
+				\WP_CLI::$write( $msg );
 			}
 		} elseif ( true === WP_DEBUG ) {
 			if ( is_array( $msg ) || is_object( $msg ) ) {

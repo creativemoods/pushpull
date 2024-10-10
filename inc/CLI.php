@@ -11,7 +11,7 @@ use CreativeMoods\PushPull\Api;
 /**
  * Class CLI
  */
-class CLI extends WP_CLI_Command {
+class CLI extends \WP_CLI_Command {
 
 	/**
 	 * Application container.
@@ -52,16 +52,16 @@ class CLI extends WP_CLI_Command {
 		list( $post_id, $user_id ) = $args;
 
 		if ( ! is_numeric( $user_id ) ) {
-			WP_CLI::error( __( 'Invalid user ID', 'pushpull' ) );
+			\WP_CLI::error( __( 'Invalid user ID', 'pushpull' ) );
 		}
 
 		$this->app->export()->set_user( $user_id );
 
 		if ( 'all' === $post_id ) {
-			WP_CLI::line( __( 'Starting full export to GitHub.', 'pushpull' ) );
+			\WP_CLI::line( __( 'Starting full export to GitHub.', 'pushpull' ) );
 			$this->app->controller()->export_all();
 		} elseif ( is_numeric( $post_id ) ) {
-			WP_CLI::line(
+			\WP_CLI::line(
 				sprintf(
 					__( 'Exporting post ID to GitHub: %d', 'pushpull' ),
 					$post_id
@@ -69,7 +69,7 @@ class CLI extends WP_CLI_Command {
 			);
 			$this->app->controller()->export_post( (int) $post_id );
 		} else {
-			WP_CLI::error( __( 'Invalid post ID', 'pushpull' ) );
+			\WP_CLI::error( __( 'Invalid post ID', 'pushpull' ) );
 		}
 	}
 
@@ -123,19 +123,19 @@ class CLI extends WP_CLI_Command {
 	 */
 	public function prime( $args, $assoc_args ) {
 		if ( isset( $assoc_args['branch'] ) ) {
-			WP_CLI::line( __( 'Starting branch import.', 'pushpull' ) );
+			\WP_CLI::line( __( 'Starting branch import.', 'pushpull' ) );
 
 			$commit = $this->app->fetch()->master();
 
 			if ( is_wp_error( $commit ) ) {
-				WP_CLI::error(
+				\WP_CLI::error(
 					sprintf(
 						__( 'Failed to import and cache branch with error: %s', 'pushpull' ),
 						$commit->get_error_message()
 					)
 				);
 			} else {
-				WP_CLI::success(
+				\WP_CLI::success(
 					sprintf(
 						__( 'Successfully imported and cached commit %s from branch.', 'pushpull' ),
 						$commit->sha()
@@ -143,18 +143,18 @@ class CLI extends WP_CLI_Command {
 				);
 			}
 		} else if ( isset( $assoc_args['sha'] ) ) {
-			WP_CLI::line( 'Starting sha import.' );
+			\WP_CLI::line( 'Starting sha import.' );
 
 			$commit = $this->app->fetch()->commit( $assoc_args['sha'] );
 
-			WP_CLI::success(
+			\WP_CLI::success(
 				sprintf(
 					__( 'Successfully imported and cached commit %s.', 'pushpull' ),
 					$commit->sha()
 				)
 			);
 		} else {
-			WP_CLI::error( 'Invalid fetch.' );
+			\WP_CLI::error( 'Invalid fetch.' );
 		}
 	}
 }
