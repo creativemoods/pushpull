@@ -13,6 +13,7 @@ import BackupIcon from '@mui/icons-material/Backup';
 import { useDispatch } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { __ } from '@wordpress/i18n';
+import PropTypes from 'prop-types';
 
 // Demo
 import {
@@ -86,7 +87,8 @@ const StyledDataGrid = styled(DataGrid)(({ theme }) => ({
   },
 }));
 
-const RepositoryPane = () => {
+const RepositoryPane = (props) => {
+	const { setTab, setCurPost, setCurPostType } = props;
 	const {createSuccessNotice, createErrorNotice} = useDispatch( noticesStore );
 	const [repository, setRepository] = useState([]);
 	const [devices, setDevices] = React.useState(() => ['notremote', 'notlocal', 'different']);
@@ -149,7 +151,9 @@ const columns = [
 
       const onClickDiff = (e) => {
         const currentRow = params.row;
-        return alert(JSON.stringify(currentRow, null, 4));
+        setTab('diff');
+        setCurPostType(currentRow.postType);
+        setCurPost(currentRow.id);
       };
 
       const onClickPull = (e) => {
@@ -280,5 +284,11 @@ const columns = [
 		/>
 	</>);
 }
+
+RepositoryPane.propTypes = {
+  setTab: PropTypes.func.isRequired,
+  setCurPost: PropTypes.func.isRequired,
+  setCurPostType: PropTypes.func.isRequired,
+};
 
 export default RepositoryPane;

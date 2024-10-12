@@ -9,6 +9,8 @@ import { TabPanel } from '@wordpress/components';
 
 const App = () => {
 	const [tab, setTab] = useState('settings');
+	const [curPost, setCurPost] = useState("");
+	const [curPostType, setCurPostType] = useState("");
 
 	const onSelect = ( tabName ) => {
 		setTab(tabName);
@@ -43,8 +45,8 @@ const App = () => {
 			{ ( tab ) => <p>{ tab.title }</p> }
 		</TabPanel>
 		{tab === "settings" && <SettingsPane />}
-		{tab === "diff" && <DiffPane />}
-		{tab === "repo" && <RepositoryPane />}
+		{tab === "diff" && <DiffPane curPost={curPost} setCurPost={setCurPost} curPostType={curPostType} setCurPostType={setCurPostType} />}
+		{tab === "repo" && <RepositoryPane setTab={setTab} setCurPost={setCurPost} setCurPostType={setCurPostType} />}
         </div>
 	);
 }

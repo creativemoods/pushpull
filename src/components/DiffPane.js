@@ -5,10 +5,10 @@ import ReactDiffViewer from 'react-diff-viewer-continued';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
+import PropTypes from 'prop-types';
 
-const DiffPane = () => {
-	const [curPost, setCurPost] = useState("");
-	const [curPostType, setCurPostType] = useState("");
+const DiffPane = (props) => {
+	const { curPost, setCurPost, curPostType, setCurPostType } = props;
 	const [posts, setPosts] = useState([]);
 	const [posttypes, setPosttypes] = useState([]);
 	const [oldCode, setOldCode] = useState("");
@@ -79,5 +79,12 @@ const DiffPane = () => {
 		</>
 	);
 }
+
+DiffPane.propTypes = {
+  curPost: PropTypes.string.isRequired,
+  setCurPost: PropTypes.func.isRequired,
+  curPostType: PropTypes.string.isRequired,
+  setCurPostType: PropTypes.func.isRequired,
+};
 
 export default DiffPane;
