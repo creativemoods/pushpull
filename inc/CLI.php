@@ -79,9 +79,6 @@ class CLI extends \WP_CLI_Command {
 	 *
 	 * ## OPTIONS
 	 *
-	 * <user_id>
-	 * : The user ID you'd like to save the commit as
-	 *
 	 * <type>
 	 * : The type of the post to import
 	 *
@@ -90,16 +87,16 @@ class CLI extends \WP_CLI_Command {
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp pushpull import 1 page our-story
+	 *     wp pushpull import page our-story
 	 *
-	 * @synopsis <user_id> <type> <name>
+	 * @synopsis <type> <name>
 	 *
 	 * @param array $args Command arguments.
 	 */
 	public function import( $args ) {
-		list( $user_id, $type, $name ) = $args;
+		list( $type, $name ) = $args;
 
-		$this->app->import()->import_post($user_id, $type, $name);
+		$this->app->import()->import_post($type, $name);
 	}
 
 	/**

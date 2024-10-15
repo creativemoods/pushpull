@@ -121,17 +121,12 @@ class Import {
 	/**
 	 * Import a post.
 	 *
-	 * @param integer $user_id user_id to import to.
 	 * @param string $type the type of post.
 	 * @param string $name the name of the post.
 	 *
 	 * @return string|WP_Error
 	 */
-	public function import_post( $user_id, $type, $name ) {
-		if ( ! is_numeric( $user_id ) ) {
-			$this->app->write_log(__( 'Invalid user ID', 'pushpull' ));
-		}
-
+	public function import_post( $type, $name ) {
 		$this->app->write_log(__( 'Starting import from Git for '.$name.'.', 'pushpull' ));
 
 		$post = $this->app->fetch()->getPostByName($type, $name);
@@ -144,6 +139,11 @@ class Import {
 			$parsed = parse_blocks(str_replace('\\"', '"', $post->post_content));
 			$replaced = $this->replace_patterns($parsed, $post->patterns);
 			$post->post_content = serialize_blocks($replaced);
+		}
+
+		// Handle author (otherwise will be admin)
+		if (property_exists($post, 'author')) {
+			$post->post_author = get_user_by('login', $post->author)->ID;
 		}
 
 		// Post

@@ -189,6 +189,7 @@ class PersistClient extends BaseClient {
 		$data['post_password'] = $post->post_password;
 		$data['post_date'] = $post->post_date;
 		$data['post_date_gmt'] = $post->post_date_gmt;
+		$data['author'] = get_userdata($post->post_author)->user_login;
 
 		// Meta
 		$meta = [];

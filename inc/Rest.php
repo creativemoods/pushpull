@@ -143,7 +143,7 @@ class Rest {
 	public function pull($data) {
 		$params = $data->get_json_params();
 		// TODO Verify data
-		$id = $this->app->import()->import_post(1, $params['posttype'], $params['postname']);
+		$id = $this->app->import()->import_post($params['posttype'], $params['postname']);
 		return is_wp_error($id) ? $id : ['id' => $id];
 	}
 
