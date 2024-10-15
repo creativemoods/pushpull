@@ -90,6 +90,35 @@ class Import {
 	}
 
 	/**
+	 * Replace patterns in blocks code
+	 */
+	protected function replace_patterns($blocks, $patterns) {
+		$res = [];
+		foreach ($blocks as $block) {
+			// Check if the block has attributes and a ref attribute
+			if (isset($block['attrs']) && isset($block['attrs']['ref'])) {
+				foreach ($patterns as $pattern) {
+					if ($block['attrs']['ref'] === $pattern->id) {
+						// We have a replacement match
+						$tmppost = $this->get_post_by_name($pattern->name, 'wp_block');
+						$this->app->write_log("Replacing ".$block['attrs']['ref']." with ".$tmppost->post_name." with ID ".$tmppost->ID);
+						$block['attrs']['ref'] = $tmppost->ID;
+					}
+				}
+			}
+			$newBlock = $block;
+			// Recursively search in innerBlocks if they exist
+			if (isset($block['innerBlocks']) && is_array($block['innerBlocks'])) {
+				$innerRes = $this->replace_patterns($block['innerBlocks'], $patterns);
+				$newBlock['innerBlocks'] = $innerRes;
+			}
+			$res[] = $newBlock;
+		}
+
+		return $res;
+	}
+
+	/**
 	 * Import a post.
 	 *
 	 * @param integer $user_id user_id to import to.
@@ -108,6 +137,14 @@ class Import {
 		$post = $this->app->fetch()->getPostByName($type, $name);
 		// We need to add wp_slash otherwise \\ will be deleted
 		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), wp_slash($post->post_content));
+
+		// Replace references to patterns
+		if (property_exists($post, 'patterns') && count($post->patterns) > 0) {
+			// https://wordpress.stackexchange.com/questions/391381/gutenberg-block-manipulation-undo-parse-blocks-with-serialize-blocks-result
+			$parsed = parse_blocks(str_replace('\\"', '"', $post->post_content));
+			$replaced = $this->replace_patterns($parsed, $post->patterns);
+			$post->post_content = serialize_blocks($replaced);
+		}
 
 		// Post
 		$id = url_to_postid($name);
