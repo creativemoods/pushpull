@@ -12,16 +12,20 @@ use CreativeMoods\PushPull\PushPull;
  */
 class Admin {
 	/**
-	 * Application container.
+	 * Application container
 	 *
 	 * @var PushPull
 	 */
 	protected $app;
 
+	/**
+	 * Constructor
+	 *
+	 * @param PushPull $app
+	 */
 	public function __construct(PushPull $app) {
 		$this->app = $app;
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
-	//	add_action( 'current_screen', array( $this, 'trigger_cron' ) );
 	}
 
 	/**

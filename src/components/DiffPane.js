@@ -8,9 +8,8 @@ import { addQueryArgs } from '@wordpress/url';
 import PropTypes from 'prop-types';
 
 const DiffPane = (props) => {
-	const { curPost, setCurPost, curPostType, setCurPostType } = props;
+	const { curPost, setCurPost, curPostType, setCurPostType, selectedPostTypes } = props;
 	const [posts, setPosts] = useState([]);
-	const [posttypes, setPosttypes] = useState([]);
 	const [oldCode, setOldCode] = useState("");
 	const [newCode, setNewCode] = useState("");
 
@@ -37,21 +36,12 @@ const DiffPane = (props) => {
 		});
 	}, [curPostType] );
 
-	useEffect( () => {
-		apiFetch({
-			path: '/pushpull/v1/posttypes',
-		}).then((data) => {
-			setPosttypes(data);
-		}).catch((error) => {
-			console.error(error);
-		});
-	}, [] );
-
 	const onSelectPost = ( post ) => {
 		setCurPost(post);
 	};
 
 	const onSelectPostType = ( posttype ) => {
+		console.log(posttype);
 		setCurPostType(posttype);
 	};
 
@@ -60,7 +50,7 @@ const DiffPane = (props) => {
 				label={__('Choose post type', 'pushpull')}
 				value={curPostType}
 				onChange={onSelectPostType}
-				options={Object.entries(posttypes).map(([k,v]) => { return { label: v, value: k}; })}
+				options={Object.entries(selectedPostTypes).map(([k,v]) => { return { label: v, value: v}; })}
 			/>
 			<SelectControl
 				label={__('Choose post', 'pushpull')}
@@ -85,6 +75,7 @@ DiffPane.propTypes = {
   setCurPost: PropTypes.func.isRequired,
   curPostType: PropTypes.string.isRequired,
   setCurPostType: PropTypes.func.isRequired,
+  selectedPostTypes: PropTypes.array.isRequired,
 };
 
 export default DiffPane;

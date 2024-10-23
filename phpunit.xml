@@ -2,8 +2,9 @@
         colors="false" convertErrorsToExceptions="true"
         convertNoticesToExceptions="true" convertWarningsToExceptions="true">
         <testsuites>
-                <testsuite>
+                <testsuite name="default">
                         <file>tests/phpunit/tests/Test_PushPull.php</file>
+                        <file>tests/phpunit/tests/Test_Rest.php</file>
                 </testsuite>
         </testsuites>
 </phpunit>

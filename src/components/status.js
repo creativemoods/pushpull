@@ -1,22 +1,10 @@
 import * as React from 'react';
 import Chip from '@mui/material/Chip';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import MenuItem from '@mui/material/MenuItem';
-
-import Select from '@mui/material/Select';
 import { styled } from '@mui/material/styles';
 import DifferenceIcon from '@mui/icons-material/Difference';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import BackupIcon from '@mui/icons-material/Backup';
-import SyncIcon from '@mui/icons-material/Sync';
-import InfoIcon from '@mui/icons-material/Info';
-import AutorenewIcon from '@mui/icons-material/Autorenew';
 import DoneIcon from '@mui/icons-material/Done';
-import {
-  useGridApiContext,
-  useGridRootProps,
-} from '@mui/x-data-grid';
 
 const StyledChip = styled(Chip)(({ theme }) => ({
   justifyContent: 'left',

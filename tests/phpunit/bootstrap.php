@@ -13,7 +13,7 @@ $GLOBALS[ 'wp_tests_options' ] = array(
         'active_plugins' => array(
                 'pushpull/PushPull.php'
         ),
-        'wpsp_test' => true
+        'pushpull_test' => true
 );
 
 // call test-lib's bootstrap.php

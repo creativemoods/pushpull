@@ -5,49 +5,109 @@ import DiffPane from './components/DiffPane';
 import RepositoryPane from './components/RepositoryPane';
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from 'react';
-import { TabPanel } from '@wordpress/components';
+import apiFetch from '@wordpress/api-fetch';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Box from '@mui/material/Box';
 
+const providers = [
+	{
+		'id': 'github',
+		'name': 'GitHub',
+		'proonly': false,
+		'url': 'https://api.github.com',
+		'disabledurl': true,
+	},
+	{
+		'id': 'gitlab',
+		'name': 'GitLab',
+		'proonly': true,
+		'url': 'https://gitlab.com/api/v4',
+		'disabledurl': true,
+	},
+	{
+		'id': 'bitbucket',
+		'name': 'Bitbucket',
+		'proonly': true,
+		'url': 'https://',
+		'disabledurl': true,
+	},
+	{
+		'id': 'custom',
+		'name': 'Custom',
+		'proonly': true,
+		'url': 'https://...',
+		'disabledurl': false,
+	},
+];
+
+function CustomTabPanel(props) {
+	const { children, value, index, ...other } = props;
+
+	return (
+		<div
+		role="tabpanel"
+		hidden={value !== index}
+		id={`simple-tabpanel-${index}`}
+		aria-labelledby={`simple-tab-${index}`}
+		{...other}
+		>
+		{value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+		</div>
+	);
+}
+
+function a11yProps(index) {
+	return {
+		id: `simple-tab-${index}`,
+		'aria-controls': `simple-tabpanel-${index}`,
+	};
+}
+
+// TODO Move to Typescript
 const App = () => {
 	const [tab, setTab] = useState('settings');
 	const [curPost, setCurPost] = useState("");
 	const [curPostType, setCurPostType] = useState("");
-
-	const onSelect = ( tabName ) => {
+	const [selectedPostTypes, setSelectedPostTypes] = useState([]);
+	
+	const onSelect = ( event, tabName ) => {
 		setTab(tabName);
 	};
-
+	
+	useEffect( () => {
+		apiFetch({
+			path: '/pushpull/v1/settings',
+		}).then((data) => {
+			setSelectedPostTypes(data['posttypes']);
+		}).catch((error) => {
+			console.error(error);
+		});
+	}, [] );
+	
 	return (
-	<div>
+		<div>
 		<h1 className='app-title'>{ __( 'PushPull Settings', 'pushpull' ) }</h1>
 		<Notices/>
-		<TabPanel
-			className="my-tab-panel"
-			activeClass="active-tab"
-			onSelect={onSelect}
-			tabs={[
-				{
-					name: 'settings',
-					title: 'Settings',
-					className: 'tab-one',
-				},
-				{
-					name: 'diff',
-					title: 'Diff viewer',
-					className: 'tab-two',
-				},
-				{
-					name: 'repo',
-					title: 'Repository',
-					className: 'tab-three',
-				},
-			]}
-		>
-			{ ( tab ) => <p>{ tab.title }</p> }
-		</TabPanel>
-		{tab === "settings" && <SettingsPane />}
-		{tab === "diff" && <DiffPane curPost={curPost} setCurPost={setCurPost} curPostType={curPostType} setCurPostType={setCurPostType} />}
+		<Box sx={{ width: '100%' }}>
+		<Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+		<Tabs value={tab} onChange={onSelect} aria-label="Main tabs">
+			<Tab label="Settings" value='settings' {...a11yProps('settings')} />
+		<Tab label="Diff viewer" value='diff' {...a11yProps('diff')} />
+		<Tab label="Repository" value='repo' {...a11yProps('repo')} />
+		</Tabs>
+		</Box>
+		<CustomTabPanel value={tab} index='settings'>
+		<SettingsPane providers={providers} selectedPostTypes={selectedPostTypes} setSelectedPostTypes={setSelectedPostTypes} />
+		</CustomTabPanel>
+		<CustomTabPanel value={tab} index='diff'>
+		{tab === "diff" && <DiffPane curPost={curPost} setCurPost={setCurPost} curPostType={curPostType} setCurPostType={setCurPostType} selectedPostTypes={selectedPostTypes} />}
+		</CustomTabPanel>
+		<CustomTabPanel value={tab} index='repo'>
 		{tab === "repo" && <RepositoryPane setTab={setTab} setCurPost={setCurPost} setCurPostType={setCurPostType} />}
-        </div>
+		</CustomTabPanel>
+		</Box>
+		</div>
 	);
 }
 

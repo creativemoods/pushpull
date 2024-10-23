@@ -14,20 +14,7 @@ import { useDispatch } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 import { __ } from '@wordpress/i18n';
 import PropTypes from 'prop-types';
-
-// Demo
-import {
-  renderStatus,
-} from './status';
-import {
-  randomColor,
-  randomEmail,
-  randomInt,
-  randomName,
-  randomArrayItem,
-  random,
-} from '@mui/x-data-grid-generator';
-
+import { renderStatus } from './status';
 
 const getBackgroundColor = (color, theme, coefficient) => ({
   backgroundColor: darken(color, coefficient),
@@ -91,7 +78,7 @@ const RepositoryPane = (props) => {
 	const { setTab, setCurPost, setCurPostType } = props;
 	const {createSuccessNotice, createErrorNotice} = useDispatch( noticesStore );
 	const [repository, setRepository] = useState([]);
-	const [devices, setDevices] = React.useState(() => ['notremote', 'notlocal', 'different']);
+	const [statuses, setStatuses] = React.useState(() => ['notremote', 'notlocal', 'different']);
 
 const columns = [
   {
@@ -226,7 +213,7 @@ const columns = [
 
 	const getRepoData = () => {
 		apiFetch({
-			path: '/pushpull/v1/repo/local',
+			path: '/pushpull/v1/repo/diff',
 		}).then((data) => {
 			setRepository(JSON.parse(data));
 		}).catch((error) => {
@@ -238,18 +225,18 @@ const columns = [
 		getRepoData();
 	}, [] );
 
-	const handleDevices = (event, newDevices) => {
-		if (newDevices.length) {
-			setDevices(newDevices);
+	const handleStatuses = (event, newStatuses) => {
+		if (newStatuses.length) {
+			setStatuses(newStatuses);
 		}
 	};
 
 	return (
 	<>
 		<ToggleButtonGroup
-			value={devices}
-			onChange={handleDevices}
-			aria-label="device"
+			value={statuses}
+			onChange={handleStatuses}
+			aria-label="status"
 		>
 			<ToggleButton value="notremote" aria-label="notremote">
 				<BackupIcon />
@@ -268,7 +255,9 @@ const columns = [
 			rows={repository}
 			columns={columns}
 			filterModel={{
-				items: [{ field: 'status', operator: 'isAnyOf', value: devices }],
+				items: [
+          { field: 'status', operator: 'isAnyOf', value: statuses },
+        ],
 			}}
 			initialState={{
 				pagination: {
