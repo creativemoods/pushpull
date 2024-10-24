@@ -81,9 +81,9 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	/**
 	 * Get a post by type and name.
 	 *
-	 * @return stdClass|WP_Error
+	 * @return string|stdClass|WP_Error
 	 */
-	public function getRemotePostByName(string $type, string $name): stdClass|WP_Error {
+	public function getRemotePostByName(string $type, string $name): string|stdClass|WP_Error {
 		$data = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/contents/' . "_".$type. "/" . $name );
 
 		if ( is_wp_error( $data ) ) {
@@ -91,7 +91,12 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 			return $data;
 		}
 
-		return json_decode(base64_decode($data->content));
+		if ($type === "media") {
+			// TODO Solve this stupid thing
+			return base64_decode(base64_decode($data->content));
+		} else {
+			return json_decode(base64_decode($data->content));
+		}
 	}
 
     /**

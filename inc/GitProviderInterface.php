@@ -26,9 +26,9 @@ interface GitProviderInterface {
 	 *
      * @param string $type Post type.
      * @param string $name Post name.
-	 * @return stdClass|WP_Error
+	 * @return string|stdClass|WP_Error
 	 */
-    public function getRemotePostByName(string $type, string $name): stdClass|WP_Error;
+    public function getRemotePostByName(string $type, string $name): string|stdClass|WP_Error;
 
 	/**
 	 * Commit a post and its dependencies.

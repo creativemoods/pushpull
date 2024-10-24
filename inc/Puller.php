@@ -90,35 +90,6 @@ class Puller {
 	}
 
 	/**
-	 * Replace patterns in blocks code
-	 */
-	protected function replace_patterns($blocks, $patterns) {
-		$res = [];
-		foreach ($blocks as $block) {
-			// Check if the block has attributes and a ref attribute
-			if (isset($block['attrs']) && isset($block['attrs']['ref'])) {
-				foreach ($patterns as $pattern) {
-					if ($block['attrs']['ref'] === $pattern->id) {
-						// We have a replacement match
-						$tmppost = $this->app->utils()->getLocalPostByName('wp_block', $pattern->name);
-						$this->app->write_log("Replacing ".$block['attrs']['ref']." with ".$tmppost->post_name." with ID ".$tmppost->ID);
-						$block['attrs']['ref'] = $tmppost->ID;
-					}
-				}
-			}
-			$newBlock = $block;
-			// Recursively search in innerBlocks if they exist
-			if (isset($block['innerBlocks']) && is_array($block['innerBlocks'])) {
-				$innerRes = $this->replace_patterns($block['innerBlocks'], $patterns);
-				$newBlock['innerBlocks'] = $innerRes;
-			}
-			$res[] = $newBlock;
-		}
-
-		return $res;
-	}
-
-	/**
 	 * Pull a post.
 	 *
 	 * @param string $type the type of post.
@@ -139,16 +110,8 @@ class Puller {
 		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
 		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
 		$post = $gitProvider->getRemotePostByName($type, $name);
-		// We need to add wp_slash otherwise \\ will be deleted
+		// TODO We need to add wp_slash otherwise \\ will be deleted -> too many slashes
 		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), wp_slash($post->post_content));
-
-		// Replace references to patterns
-		if (property_exists($post, 'patterns') && count($post->patterns) > 0) {
-			// https://wordpress.stackexchange.com/questions/391381/gutenberg-block-manipulation-undo-parse-blocks-with-serialize-blocks-result
-			$parsed = parse_blocks(str_replace('\\"', '"', $post->post_content));
-			$replaced = $this->replace_patterns($parsed, $post->patterns);
-			$post->post_content = serialize_blocks($replaced);
-		}
 
 		// Handle author (otherwise will be admin)
 		if (property_exists($post, 'author')) {
@@ -164,30 +127,9 @@ class Puller {
 		} else {
 			$this->app->write_log(__( 'Creating new post.', 'pushpull' ));
 			$id = wp_insert_post($post, true);
+			$post->ID = $id;
 			if (is_wp_error($id)) {
 				$this->app->write_log(__( 'Error creating post.', 'pushpull' ));
-			}
-		}
-
-		// Post meta
-		if (property_exists($post, 'meta')) {
-			foreach ($post->meta as $key => $value) {
-				//$this->app->write_log(__( 'Creating meta key '.$key.'.', 'pushpull' ));
-				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
-				$value = maybe_unserialize($value);
-				if ($key === "_generate_element_display_conditions") {
-					// We need to reset the post name to its ID if it exists
-					foreach ($value as $item => $displaycond) {
-						if ($displaycond['rule'] === "post:page") {
-							$arr = explode('/', $displaycond['object']); // e.g. "page/our-story"
-							$tmppost = $this->app->utils()->getLocalPostByName($arr[0], $arr[1]);
-							if ($tmppost !== null) {
-								$value[$item]['object'] = $tmppost->ID;
-							}
-						}
-					}
-				}
-				update_post_meta($id, $key, $value);
 			}
 		}
 
@@ -205,29 +147,6 @@ class Puller {
 			}
 		}
 
-		if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
-			pll_set_post_language($id, $post->language);
-		}
-
-		if (property_exists($post, 'translations') && function_exists('pll_save_post_translations')) {
-			// Change back from post names to IDs
-			$newvals = [];
-			$description = maybe_unserialize($post->translations);
-			$found = true;
-			foreach($description as $lang => $name) {
-				$arr = explode('/', $name); // e.g. "page/our-story"
-				$tmppost = $this->app->utils()->getLocalPostByName($arr[0], $arr[1]);
-				if ($tmppost !== null) {
-					$newvals[$lang] = $tmppost->ID;
-				} else {
-					$found = false;
-				}
-			}
-			if ($found) {
-				pll_save_post_translations($newvals);
-			}
-		}
-
 		// Post images
 		if (property_exists($post, 'featuredimage')) {
 			$imageid = $this->import_image($post->featuredimage);
@@ -236,6 +155,21 @@ class Puller {
 		if (property_exists($post, 'intimages')) {
 			foreach ($post->intimages as $image) {
 				$this->import_image($image);
+			}
+		}
+
+		// We find out registered plugins and apply one action for each.
+		// If you are a plugin maintainer and want PushPull to handle your
+		// data, create an action hook named pushpull_import_yourplugin
+		$active_plugins = get_option('active_plugins');
+		foreach ($active_plugins as $plugin) {
+			$plugin = explode("/", $plugin)[0];
+			if (has_action('pushpull_import_' . $plugin)) {
+				// We call the 3rd party filter hook if it exists
+				do_action('pushpull_import_' . $plugin, $post);
+			} else {
+				// Call our default filter hook for this 3rd party plugin
+				do_action('pushpull_default_import_' . $plugin, $post);
 			}
 		}
 

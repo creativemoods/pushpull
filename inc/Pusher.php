@@ -42,14 +42,12 @@ class Pusher {
 	 * @return integer|WP_Error
 	 */
 	public function pushByName($type, $name) {
-		/* translators: 1: name of the post */
-		$this->app->write_log(sprintf(__( 'Starting export to Git for post %s.', 'pushpull' ), $name));
 		$post = $this->app->utils()->getLocalPostByName($type, $name);
 		if (!$post) {
 			return new WP_Error( '404', esc_html__( 'Post not found', 'pushpull' ), array( 'status' => 404 ) );
 		}
 		$id = $this->push($post);
-		$this->app->write_log(__( 'End export to Git.', 'pushpull' ));
+
 		return $id;
 	}
 
@@ -110,7 +108,10 @@ class Pusher {
 	 */
 	protected function get_image_id($image_url) {
 		global $wpdb;
+		// Remove scheme
 		$image_url = preg_replace("(^https?://)", "", $image_url);
+		// Remove size
+		$image_url = preg_replace("/-(\d+)x(\d+)\./", ".", $image_url);
 		// No WP function to get image by URL and unable to cache
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$the_attachment = $wpdb->get_col($wpdb->prepare("SELECT ID FROM $wpdb->posts WHERE guid LIKE %s;", '%'.$image_url ));
@@ -138,24 +139,41 @@ class Pusher {
 		$data['author'] = get_userdata($post->post_author)->user_login;
 
 		// Meta
-		$meta = [];
+		$meta = []; // TODO remplacer par $data['meta']
 		foreach (get_post_meta($post->ID) as $key => $value) {
 			// Use this filter hook to modify meta values before export
 			// Returning False will delete the key
 			// Returning True will keep the key
 			// Returning a value will change the key
-			$newvalue = apply_filters('pushpull_meta_'.$key, $value);
-			if ($newvalue === False) {
-				// Delete this meta key
-				continue;
-			} elseif ($newvalue === True) {
-				// Keep this meta key
-				$meta[$key] = $value[0];
-				continue;
-			} elseif ($newvalue !== $value) {
-				// Change this meta key
-				$meta[$key] = $newvalue;
-				continue;
+			if (has_filter('pushpull_meta_' . $key)) {
+				$newvalue = apply_filters('pushpull_meta_'.$key, $value);
+				if ($newvalue === False) {
+					// Delete this meta key
+					continue;
+				} elseif ($newvalue === True) {
+					// Keep this meta key
+					$meta[$key] = $value[0];
+					continue;
+				} elseif ($newvalue !== $value) {
+					// Change this meta key
+					$meta[$key] = $newvalue;
+					continue;
+				}
+			} elseif (has_filter('pushpull_default_meta_' . $key)) {
+				// Call our default filter hook for this meta key
+				$newvalue = apply_filters('pushpull_default_meta_' . $key, $value);
+				if ($newvalue === False) {
+					// Delete this meta key
+					continue;
+				} elseif ($newvalue === True) {
+					// Keep this meta key
+					$meta[$key] = $value[0];
+					continue;
+				} elseif ($newvalue !== $value) {
+					// Change this meta key
+					$meta[$key] = $newvalue;
+					continue;
+				}
 			}
 
 			// Hard-coded filtering
@@ -169,52 +187,55 @@ class Pusher {
 				$data['featuredimage'] = $image->post_name;
 				continue;
 			}
-			if ($key === "_generate_element_display_conditions") {
-				// Rewrite post IDs into post names
-				$unserialized = maybe_unserialize($value[0]);
-				foreach ($unserialized as $item => $displaycond) {
-					if ($displaycond['rule'] === "post:page") {
-						$tmppost = get_post($displaycond['object']);
-						if ($tmppost) {
-							$unserialized[$item]['object'] = $tmppost->post_type."/".$tmppost->post_name;
-						}
-					}
-				}
-				$meta[$key] = maybe_serialize($unserialized);
-				continue;
-			}
 			// By default we keep the meta key and value
 			$meta[$key] = $value[0];
 		}
 		$data['meta'] = $meta;
+
+		// Taxonomies
 		$taxonomies = get_object_taxonomies($post->post_type);
+		$data['terms'] = [];
 		if (!empty($taxonomies)) {
 			$terms = wp_get_object_terms($post->ID, $taxonomies);
 			foreach ((array)$terms as $i => $term) {
-				// Rewrite post IDs into post names for polylang post_translations taxonomies
-				if ($term->taxonomy === 'post_translations') {
-					$newvals = [];
-					$description = maybe_unserialize($term->description);
-					foreach($description as $lang => $id) {
-						$tmppost = get_post($id);
-						$newvals[$lang] = $tmppost->post_type."/".$tmppost->post_name;
+				// Use this filter hook to modify term values before export
+				// Returning False will delete the key
+				// Returning True will keep the key
+				// Returning a value will change the key
+				if (has_filter('pushpull_term_' . $term->taxonomy)) {
+					// We call the 3rd party filter hook for this taxonomy if it exists
+					$newvalue = apply_filters_ref_array('pushpull_term_' . $term->taxonomy, array($term, &$data));
+					if ($newvalue === False) {
+						// Delete this term
+						continue;
+					} elseif ($newvalue === True) {
+						// Keep this term
+						$data['terms'][] = $term;
+						continue;
+					} elseif ($newvalue !== $value) {
+						// Change this term
+						$data['terms'][] = $newvalue;
+						continue;
 					}
-					$data['translations'] = maybe_serialize($newvals);
-				} elseif ($term->taxonomy === 'language') {
-					$data['language'] = $term->slug;
+				} elseif (has_filter('pushpull_default_term_' . $term->taxonomy)) {
+					// Call our default filter hook for this taxonomy
+					$newvalue = apply_filters_ref_array('pushpull_default_term_' . $term->taxonomy, array($term, &$data));
+					if ($newvalue === False) {
+						// Delete this term
+						continue;
+					} elseif ($newvalue === True) {
+						// Keep this term
+						$data['terms'][] = $term;
+						continue;
+					} elseif ($newvalue !== $value) {
+						// Change this term
+						$data['terms'][] = $newvalue;
+						continue;
+					}
 				} else {
+					// No filter, keep the term
 					$data['terms'][] = $term;
 				}
-			}
-		} else {
-			$data['terms'] = [];
-		}
-
-		// If we have a media folder plugin, add location
-		if ($post->post_type === "attachment" && function_exists('wp_attachment_folder')) {
-			$folder = wp_rml_get_by_id(wp_attachment_folder($post->ID));
-			if (is_rml_folder($folder)) {
-				$data['folder'] = $folder->getName();
 			}
 		}
 
@@ -233,8 +254,20 @@ class Pusher {
 		$data['intimages'] = $intimagelist;
 		$data['extimages'] = $extimagelist;
 
-		// Use this filter hook to perform custom modifications to the data
-		$data = apply_filters('pushpull_export', $data, $post);
+		// We find out registered plugins and apply one filter for each.
+		// If you are a plugin maintainer and want PushPull to handle your
+		// data, create a filter hook named pushpull_export_yourplugin
+		$active_plugins = get_option('active_plugins');
+		foreach ($active_plugins as $plugin) {
+			$plugin = explode("/", $plugin)[0];
+			if (has_filter('pushpull_export_' . $plugin)) {
+				// We call the 3rd party filter hook if it exists
+				$data = apply_filters('pushpull_export_' . $plugin, $data, $post);
+			} else {
+				// Call our default filter hook for this 3rd party plugin
+				$data = apply_filters('pushpull_default_export_' . $plugin, $data, $post);
+			}
+		}
 
 		return $data;
 	}
