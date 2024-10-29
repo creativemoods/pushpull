@@ -92,7 +92,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 * @return bool
 	 */
 	protected function git_exists( $name ) {
-		$res = $this->head($this->url() . '/projects/' . $this->repository() . '/repository/files/' . $name. "?ref=" . $this->branch());
+		$res = $this->head($this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . $name. "?ref=" . $this->branch());
 		return array_key_exists('response', $res) && array_key_exists('code', $res['response']) && $res['response']['code'] === 200;
 	}
 
@@ -102,7 +102,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 * @return stdClass|WP_Error
 	 */
 	public function getRemotePostByName(string $type, string $name): stdClass|WP_Error {
-		$data = $this->call( 'GET', $this->url() . '/projects/' . $this->repository() . '/repository/files/' . "_".$type."%2F" . $name . '/raw' );
+		$data = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . "_".$type."%2F" . $name . '/raw' );
 
 		if ( is_wp_error( $data ) ) {
 			$this->app->write_log($data);
