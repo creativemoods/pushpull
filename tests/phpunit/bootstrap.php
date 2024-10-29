@@ -11,7 +11,7 @@ if ( ! file_exists( $test_lib_bootstrap_file ) ) {
 // set plugin and options for activation
 $GLOBALS[ 'wp_tests_options' ] = array(
         'active_plugins' => array(
-                'pushpull/PushPull.php'
+                'pushpull/PushPull.php',
         ),
         'pushpull_test' => true
 );

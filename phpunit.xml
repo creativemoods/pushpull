@@ -5,6 +5,7 @@
                 <testsuite name="default">
                         <file>tests/phpunit/tests/Test_PushPull.php</file>
                         <file>tests/phpunit/tests/Test_Rest.php</file>
+                        <file>tests/phpunit/tests/Test_RealMediaLibrary.php</file>
                 </testsuite>
         </testsuites>
 </phpunit>

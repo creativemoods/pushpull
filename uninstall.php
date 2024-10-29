@@ -12,6 +12,7 @@ delete_option('pushpull_host');
 delete_option('pushpull_oauth_token');
 delete_option('pushpull_repository');
 delete_option('pushpull_post_types');
+delete_option('pushpull_branch');
 
 // for site options in Multisite
 //delete_site_option( $option_name );

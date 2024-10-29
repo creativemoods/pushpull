@@ -9,8 +9,19 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "wp-scripts build",
-    "start": "wp-scripts start"
+    "start": "wp-scripts start",
+    "zip": "wp-scripts plugin-zip"
   },
+  "files": [
+    "inc/",
+    "build/",
+    "src/",
+    "templates/",
+    "PushPull.php",
+    "uninstall.php",
+    "vendor/autoload.php",
+    "vendor/composer/"
+  ],
   "author": "Creative Moods",
   "license": "ISC",
   "devDependencies": {

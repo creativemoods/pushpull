@@ -5,7 +5,7 @@
  * @package PushPull
  */
 
-namespace CreativeMoods\PushPull;
+namespace CreativeMoods\PushPull\providers;
 
 /**
  * Class GitProviderFactory
@@ -17,10 +17,11 @@ class GitProviderFactory {
                 return new GitHubProvider($app);
             case 'gitlab':
                 return new GitLabProvider($app);
-/*            case 'bitbucket':
-                return new BitbucketProvider();*/
+            case 'bitbucket':
+                return new BitbucketProvider($app);
             default:
-                throw new \Exception("Unsupported Git provider: $provider");
+				/* translators: 1: provider slug */
+                throw new \Exception(esc_html(sprintf(__( 'Unsupported Git provider: %1$s.', 'pushpull' ), $provider)));
         }
     }
 }

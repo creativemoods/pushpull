@@ -11,8 +11,9 @@ import Stack from '@mui/material/Stack';
 import { Button as MUIButton, FormHelperText, Select as MUISelect, MenuItem } from '@mui/material';
 
 const SettingsPane = (props) => {
-	const { providers, selectedPostTypes, setSelectedPostTypes } = props;
+	const { selectedPostTypes, setSelectedPostTypes } = props;
 	const {createSuccessNotice} = useDispatch( noticesStore );
+	const [providers, setProviders] = useState([]);
 	const [provider, setProvider] = useState('');
 	const [host, setHost] = useState('');
 	const [repository, setRepository] = useState('');
@@ -42,10 +43,17 @@ const SettingsPane = (props) => {
 		}).catch((error) => {
 			console.error(error);
 		});
+		apiFetch({
+			path: '/pushpull/v1/providers',
+		}).then((data) => {
+			setProviders(data);
+		}).catch((error) => {
+			console.error(error);
+		});
 	}, [] );
 
 	useEffect( () => {
-		if (provider && provider !== "custom") {
+		if (provider && provider !== "custom" && providers.length > 0) {
 			setHost(providers.find((p) => p.id === provider).url);
 		}
 	}, [provider]);
@@ -139,7 +147,7 @@ const SettingsPane = (props) => {
 					help={ __( 'The Git API URL.', 'pushpull' ) }
 					value={ host }
 					onChange={ setHost }
-					disabled={ provider ? providers.find((p) => p.id === provider).disabledurl : true }
+					disabled={ provider && providers.length > 0 ? providers.find((p) => p.id === provider).disabledurl : true }
 				/>
 				<TextControl
 					label={ __( 'Oauth Token', 'pushpull' ) }
@@ -190,7 +198,6 @@ const SettingsPane = (props) => {
 }
 
 SettingsPane.propTypes = {
-	providers: PropTypes.array.isRequired,
 	selectedPostTypes: PropTypes.array.isRequired,
 	setSelectedPostTypes: PropTypes.func.isRequired,
 };

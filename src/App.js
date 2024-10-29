@@ -10,37 +10,6 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
 
-const providers = [
-	{
-		'id': 'github',
-		'name': 'GitHub',
-		'proonly': false,
-		'url': 'https://api.github.com',
-		'disabledurl': true,
-	},
-	{
-		'id': 'gitlab',
-		'name': 'GitLab',
-		'proonly': true,
-		'url': 'https://gitlab.com/api/v4',
-		'disabledurl': true,
-	},
-	{
-		'id': 'bitbucket',
-		'name': 'Bitbucket',
-		'proonly': true,
-		'url': 'https://',
-		'disabledurl': true,
-	},
-	{
-		'id': 'custom',
-		'name': 'Custom',
-		'proonly': true,
-		'url': 'https://...',
-		'disabledurl': false,
-	},
-];
-
 function CustomTabPanel(props) {
 	const { children, value, index, ...other } = props;
 
@@ -98,7 +67,7 @@ const App = () => {
 		</Tabs>
 		</Box>
 		<CustomTabPanel value={tab} index='settings'>
-		<SettingsPane providers={providers} selectedPostTypes={selectedPostTypes} setSelectedPostTypes={setSelectedPostTypes} />
+		<SettingsPane selectedPostTypes={selectedPostTypes} setSelectedPostTypes={setSelectedPostTypes} />
 		</CustomTabPanel>
 		<CustomTabPanel value={tab} index='diff'>
 		{tab === "diff" && <DiffPane curPost={curPost} setCurPost={setCurPost} curPostType={curPostType} setCurPostType={setCurPostType} selectedPostTypes={selectedPostTypes} />}

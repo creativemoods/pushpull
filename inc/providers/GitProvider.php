@@ -1,6 +1,8 @@
 <?php
 
-namespace CreativeMoods\PushPull;
+namespace CreativeMoods\PushPull\providers;
+
+use CreativeMoods\PushPull\PushPull;
 
 class GitProvider {
     /**

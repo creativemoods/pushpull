@@ -7,6 +7,7 @@
 namespace CreativeMoods\PushPull;
 
 use WP_REST_Request;
+use CreativeMoods\PushPull\providers\GitProviderFactory;
 
 /**
  * Class Rest
@@ -107,6 +108,13 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/providers/', array(
+			'methods' => 'GET',
+			'callback' => array( $this->app->utils(), 'getProviders'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 	}
 
 	/**
@@ -196,7 +204,11 @@ class Rest {
 		$params = $data->get_json_params();
 
 		$params['provider'] = sanitize_text_field($params['provider']);
-		// TODO Check provider is in the list of providers
+
+		// Check provider is in the list of providers
+		if (!in_array($params['provider'], array_map(function($v) { return $v['id']; }, $this->app->utils()->getProviders()))) {
+			return new \WP_Error('invalid_provider', __('The provided provider is not valid.', 'pushpull'));
+		}
 		update_option('pushpull_provider', $params['provider']);
 
 		$params['host'] = sanitize_text_field($params['host']);

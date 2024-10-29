@@ -4,7 +4,7 @@
  * @package PushPull
  */
 
-namespace CreativeMoods\PushPull;
+namespace CreativeMoods\PushPull\providers;
 
 use WP_Error;
 use stdClass;

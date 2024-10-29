@@ -48,13 +48,14 @@ class RealMediaLibrary {
     public function export(array $data, WP_Post $post) {
 		// If we have a media folder plugin, add location
 		if ($post->post_type === "attachment" && function_exists('wp_attachment_folder')) {
-			$this->app->write_log("RealMediaLibrary::export");
 			$folder = wp_rml_get_by_id(wp_attachment_folder($post->ID));
 			if (is_rml_folder($folder)) {
+		        fwrite(STDERR, print_r($folder, TRUE));
 				$data['folder'] = $folder->getName();
 			}
 		}
 
+		$this->app->write_log("Setting folder: ".json_encode($data));
         return $data;
     }
 }

@@ -6,6 +6,7 @@
  */
 
 namespace CreativeMoods\PushPull;
+use CreativeMoods\PushPull\providers\GitProviderFactory;
 
 /**
  * Class Import
@@ -173,7 +174,14 @@ class Puller {
 			}
 		}
 
-		$this->app->write_log(__( 'End import from Git with id '.$id.'.', 'pushpull' ));
+		$this->app->write_log(
+			sprintf(
+				/* translators: 1: id of post */
+				__( 'End import from Git with id %1$s.', 'pushpull' ),
+				$id,
+			)
+		);
+
 		return $id;
 	}
 }

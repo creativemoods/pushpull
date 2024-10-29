@@ -6,6 +6,7 @@
 
 namespace CreativeMoods\PushPull;
 
+use CreativeMoods\PushPull\providers\GitProviderFactory;
 use DOMElement;
 use WP_Error;
 use WP_Post;
@@ -139,7 +140,7 @@ class Pusher {
 		$data['author'] = get_userdata($post->post_author)->user_login;
 
 		// Meta
-		$meta = []; // TODO remplacer par $data['meta']
+		$data['meta'] = [];
 		foreach (get_post_meta($post->ID) as $key => $value) {
 			// Use this filter hook to modify meta values before export
 			// Returning False will delete the key
@@ -152,11 +153,11 @@ class Pusher {
 					continue;
 				} elseif ($newvalue === True) {
 					// Keep this meta key
-					$meta[$key] = $value[0];
+					$data['meta'][$key] = $value[0];
 					continue;
 				} elseif ($newvalue !== $value) {
 					// Change this meta key
-					$meta[$key] = $newvalue;
+					$data['meta'][$key] = $newvalue;
 					continue;
 				}
 			} elseif (has_filter('pushpull_default_meta_' . $key)) {
@@ -167,11 +168,11 @@ class Pusher {
 					continue;
 				} elseif ($newvalue === True) {
 					// Keep this meta key
-					$meta[$key] = $value[0];
+					$data['meta'][$key] = $value[0];
 					continue;
 				} elseif ($newvalue !== $value) {
 					// Change this meta key
-					$meta[$key] = $newvalue;
+					$data['meta'][$key] = $newvalue;
 					continue;
 				}
 			}
@@ -188,9 +189,8 @@ class Pusher {
 				continue;
 			}
 			// By default we keep the meta key and value
-			$meta[$key] = $value[0];
+			$data['meta'][$key] = $value[0];
 		}
-		$data['meta'] = $meta;
 
 		// Taxonomies
 		$taxonomies = get_object_taxonomies($post->post_type);
@@ -347,6 +347,7 @@ class Pusher {
 			$data[] = ['id' => $this->get_image_id($image), 'url' => $image];
 		}
 
+		$this->app->write_log("Extracted image ids: ".json_encode($data));
 		return $data;
 	}
 

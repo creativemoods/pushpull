@@ -6,6 +6,7 @@
  */
 
 namespace CreativeMoods\PushPull;
+use CreativeMoods\PushPull\providers\GitProviderFactory;
 
 /**
  * Class Repository

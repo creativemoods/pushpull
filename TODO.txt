@@ -1,6 +1,0 @@
-unit tests:
-cd tests
-curl -O https://wordpress.org/latest.zip
-mv latest.zip wp
-cd ..
-vendor/bin/phpunit

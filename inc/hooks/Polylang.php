@@ -56,6 +56,7 @@ class Polylang {
 			$newvals[$lang] = $tmppost->post_type."/".$tmppost->post_name;
 		}
 		$data['translations'] = maybe_serialize($newvals);
+		$this->app->write_log("Setting translations: ".json_encode($data['translations']));
 
 		// We can delete this term.
         return False;
@@ -70,6 +71,7 @@ class Polylang {
      */
     public function term_language($term, &$data) {
 		$data['language'] = $term->slug;
+		$this->app->write_log("Setting language: ".json_encode($data['language']));
 
 		// We can delete this term.
         return False;
@@ -101,6 +103,7 @@ class Polylang {
 				}
 			}
 			if ($found) {
+				$this->app->write_log("Setting post translation: ".json_encode($newvals));
 				pll_save_post_translations($newvals);
 			}
 		}

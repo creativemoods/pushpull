@@ -1,27 +1,48 @@
 <?php
 
-namespace CreativeMoods\PushPull;
+namespace CreativeMoods\PushPull\providers;
 
 use WP_Error;
 use stdClass;
 
-class GitHubProvider extends GitProvider implements GitProviderInterface {
+class GitLabProvider extends GitProvider implements GitProviderInterface {
 	/**
-	 * GitHub API interface and response handler
+	 * Generic GitHub API HEAD interface and response handler
 	 *
 	 * @param string $method HTTP method.
 	 * @param string $endpoint API endpoint.
 	 * @param array  $body Request body.
 	 *
-	 * @return stdClass|WP_Error
+	 * @return array|WP_Error
+	 */
+	protected function head( $endpoint, $body = array() ) {
+		$args = array(
+			'method'  => 'HEAD',
+			'headers' => array(
+				'PRIVATE-TOKEN' => $this->token(),
+			),
+			'timeout' => 30,
+		);
+
+		$response = wp_remote_head( $endpoint, $args );
+
+		return $response;
+	}
+
+	/**
+	 * GitLab API interface and response handler
+	 *
+	 * @param string $method HTTP method.
+	 * @param string $endpoint API endpoint.
+	 * @param array  $body Request body.
+	 *
+	 * @return array|WP_Error
 	 */
 	protected function call( $method, $endpoint, $body = array() ) {
 		$args = array(
 			'method'  => $method,
 			'headers' => array(
-				'Authorization' => 'Bearer '.$this->token(),
-				'X-GitHub-Api-Version' => '2022-11-28',
-				'Accept' => 'application/vnd.github+json',
+				'PRIVATE-TOKEN' => $this->token(),
 			),
 			'timeout' => 30,
 		);
@@ -63,71 +84,45 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 
 	/**
 	 * Checks whether a file exists in the Git repository.
+	 * Issues a HEAD request to find out.
 	 * We need this because we need to specify update or create in a commit.
 	 *
 	 * @param string $name The name of the file
 	 *
-	 * @return string|null
+	 * @return bool
 	 */
 	protected function git_exists( $name ) {
-		$res = $this->call('GET', $this->url() . '/repos/' . $this->repository() . '/contents/' . $name);
-		if (is_wp_error($res)) {
-			return null;
-		}
-
-		return $res->sha ?? null;
+		$res = $this->head($this->url() . '/projects/' . $this->repository() . '/repository/files/' . $name. "?ref=" . $this->branch());
+		return array_key_exists('response', $res) && array_key_exists('code', $res['response']) && $res['response']['code'] === 200;
 	}
 
 	/**
 	 * Get a post by type and name.
 	 *
-	 * @return string|stdClass|WP_Error
+	 * @return stdClass|WP_Error
 	 */
-	public function getRemotePostByName(string $type, string $name): string|stdClass|WP_Error {
-		$data = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/contents/' . "_".$type. "/" . $name );
+	public function getRemotePostByName(string $type, string $name): stdClass|WP_Error {
+		$data = $this->call( 'GET', $this->url() . '/projects/' . $this->repository() . '/repository/files/' . "_".$type."%2F" . $name . '/raw' );
 
 		if ( is_wp_error( $data ) ) {
 			$this->app->write_log($data);
 			return $data;
 		}
 
-		if ($type === "media") {
-			// TODO Solve this stupid thing
-			return base64_decode(base64_decode($data->content));
-		} else {
-			return json_decode(base64_decode($data->content));
-		}
+		return $data;
 	}
 
     /**
      * List repository hierarchy.
+     * For Gitlab we can't easily get the repository contents, so we will download the archive and extract it.
      *
      * @param string $repoName Repository name.
      * @return array Repository details.
      */
     public function listRepository(string $repoName): array {
-		// TODO Change to use a local pull from the repository
-/*        $this->app->write_log("Fetching remote repo contents.");
-
-        $archiveContent = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/git/trees/' . $this->branch() . '?recursive=1' );
-        if ($archiveContent === false) {
-            throw new \Exception("Failed to download repository archive.");
-        }
-        $repoFiles = [];
-		$this->app->write_log($archiveContent);
-        foreach ($archiveContent->tree as $file) {
-            if ($file->type === 'blob') {
-                $repoFiles[] = [
-                    'path' => $file->path,
-                    'checksum' => $file->sha
-                ];
-            }
-        }
-
-        return $repoFiles;*/
         $this->app->write_log("Fetching remote repo contents.");
 
-        $archiveContent = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/zipball/' . $this->branch() );
+        $archiveContent = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/archive.zip?sha=' . $this->branch() );
         if ($archiveContent === false) {
             throw new \Exception("Failed to download repository archive.");
         }
@@ -171,26 +166,14 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @return stdClass|WP_Error
 	 */
     public function commit(array $wrap): stdClass|WP_Error {
-		// Doesn't seem we can commit multiple files in one go, so we will have to loop
 		foreach ($wrap['actions'] as $action) {
-			$fileData = [
-				'message' => $wrap['commit_message'],
-				'content' => base64_encode($action['content']),
-				'branch' => $this->branch(),
-				'committer' => ['name' => $wrap['author_name'], 'email' => $wrap['author_email']],
-				'sha' => $this->git_exists($action['file_path']),
-			];
-
-			$endpoint = $this->url() . '/repos/' . $this->repository() . '/contents/' . $action['file_path'];
-			$response = $this->call('PUT', $endpoint, $fileData);
-
-			if (is_wp_error($response)) {
-				return $response;
-			}
+			$action['action'] = $this->git_exists($action['file_path']) ? 'update' : 'create';
 		}
+		$wrap['branch'] = $this->branch();
+		// TODO Check if $wrap was really updated
+		$res = $this->call( 'POST', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits', $wrap );
 
-		// TODO last only
-		return $response;
+		return $res;
 	}
 
 	/**
@@ -203,7 +186,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 */
 	public function getBranches(string $url, string $token, string $repository): array|WP_Error {
 		// TODO Need to override repo, url and token
-        $branches = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/branches' );
+        $branches = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/branches' );
 		if (is_wp_error($branches)) {
 			return $branches;
 		}

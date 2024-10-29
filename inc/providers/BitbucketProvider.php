@@ -1,11 +1,11 @@
 <?php
 
-namespace CreativeMoods\PushPull;
+namespace CreativeMoods\PushPull\providers;
 
 use WP_Error;
 use stdClass;
 
-class GitLabProvider extends GitProvider implements GitProviderInterface {
+class BitbucketProvider extends GitProvider implements GitProviderInterface {
 	/**
 	 * Generic GitHub API HEAD interface and response handler
 	 *
@@ -30,7 +30,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	}
 
 	/**
-	 * GitLab API interface and response handler
+	 * Bitbucket API interface and response handler
 	 *
 	 * @param string $method HTTP method.
 	 * @param string $endpoint API endpoint.
@@ -42,7 +42,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 		$args = array(
 			'method'  => $method,
 			'headers' => array(
-				'PRIVATE-TOKEN' => $this->token(),
+				'Authorization' => 'Basic '.$this->token(),
 			),
 			'timeout' => 30,
 		);
@@ -114,7 +114,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 
     /**
      * List repository hierarchy.
-     * For Gitlab we can't easily get the repository contents, so we will download the archive and extract it.
+     * For Bitbucket we can't easily get the repository contents, so we will download the archive and extract it.
      *
      * @param string $repoName Repository name.
      * @return array Repository details.
@@ -186,11 +186,13 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 */
 	public function getBranches(string $url, string $token, string $repository): array|WP_Error {
 		// TODO Need to override repo, url and token
-        $branches = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/branches' );
+        $branches = $this->call( 'GET', $this->url() . '/repositories/' . $this->repository() . '/refs/branches' );
 		if (is_wp_error($branches)) {
 			return $branches;
 		}
 
-		return $branches;
+		return array_map(function($branch) {
+			return ['name' => $branch->name];
+		}, $branches->values);
 	}
 }
