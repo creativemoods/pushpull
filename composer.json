@@ -6,8 +6,7 @@
     "type": "wordpress-plugin",
     "autoload": {
         "psr-4": {
-            "CreativeMoods\\PushPull\\": "inc/",
-            "CreativeMoods\\PushPullTests\\": "tests/phpunit/Tests/"
+            "CreativeMoods\\PushPull\\": "inc/"
         }
     },
     "authors": [

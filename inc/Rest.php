@@ -191,7 +191,7 @@ class Rest {
 	 * @return array — The current settings.
 	 */
 	public function get_settings() {
-		return ['provider' => get_option('pushpull_provider'), 'posttypes' => get_option('pushpull_post_types'), 'oauth-token' => get_option('pushpull_oauth_token'), 'host' => get_option('pushpull_host'), 'repository' => get_option('pushpull_repository'), 'branch' => get_option('pushpull_branch')];
+		return ['provider' => get_option('pushpull_provider', 'github'), 'posttypes' => get_option('pushpull_post_types', []), 'oauth-token' => get_option('pushpull_oauth_token'), 'host' => get_option('pushpull_host'), 'repository' => get_option('pushpull_repository'), 'branch' => get_option('pushpull_branch', 'main')];
 	}
 
 	/**
