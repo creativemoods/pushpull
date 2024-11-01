@@ -120,6 +120,7 @@ class Puller {
 		}
 
 		// Post
+		// TODO When pulling a pattern that already exists, it creates pattern-2
 		$id = url_to_postid($name);
 		if ($id !== 0) {
 			$post->ID = $id;

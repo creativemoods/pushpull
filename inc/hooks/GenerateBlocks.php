@@ -7,6 +7,7 @@
 namespace CreativeMoods\PushPull\hooks;
 
 use CreativeMoods\PushPull\PushPull;
+use stdClass;
 use WP_Post;
 
 /**
@@ -39,7 +40,7 @@ class GenerateBlocks {
 		add_filter('pushpull_default_meta_generateblocks_patterns_tree', array(&$this, 'meta_generateblocks_patterns_tree'), 10, 2);
 		add_filter('pushpull_default_meta_generate_element_display_conditions', array(&$this, 'meta_generate_element_display_conditions'), 10, 2);
 		add_filter('pushpull_default_export_generateblocks', array(&$this, 'export'), 10, 2);
-		add_action('pushpull_default_import', array(&$this, 'import'), 10, 1);
+		add_action('pushpull_default_import_generateblocks', array(&$this, 'import'), 10, 1);
 	}
 
     /**
@@ -180,10 +181,10 @@ class GenerateBlocks {
     /**
      * Manipulate data on import
      *
-     * @param WP_Post $post
+     * @param stdClass $post
      * @return void
      */
-    public function import(WP_Post $post) {
+    public function import(stdClass $post) {
 		// Replace references to patterns
 		if (property_exists($post, 'patterns') && count($post->patterns) > 0) {
 			// https://wordpress.stackexchange.com/questions/391381/gutenberg-block-manipulation-undo-parse-blocks-with-serialize-blocks-result

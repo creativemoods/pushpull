@@ -7,6 +7,7 @@
 namespace CreativeMoods\PushPull\hooks;
 
 use CreativeMoods\PushPull\PushPull;
+use stdClass;
 use WP_Post;
 
 /**
@@ -36,6 +37,7 @@ class RealMediaLibrary {
 	 */
 	public function add_hooks() {
 		add_filter('pushpull_default_export_real-media-library-lite', array(&$this, 'export'), 10, 2);
+		add_action('pushpull_default_import_real-media-library-lite', array(&$this, 'import'), 10, 1);
 	}
 
     /**
@@ -56,5 +58,15 @@ class RealMediaLibrary {
 		}
 
         return $data;
+    }
+
+    /**
+     * Manipulate data on import
+     *
+     * @param stdClass $post
+     * @return void
+     */
+    public function import(stdClass $post) {
+		$this->app->write_log("Import rml");
     }
 }

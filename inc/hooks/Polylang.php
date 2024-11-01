@@ -7,6 +7,7 @@
 namespace CreativeMoods\PushPull\hooks;
 
 use CreativeMoods\PushPull\PushPull;
+use stdClass;
 use WP_Post;
 
 /**
@@ -37,7 +38,7 @@ class Polylang {
 	public function add_hooks() {
 		add_filter('pushpull_default_term_post_translations', array(&$this, 'term_post_translations'), 10, 2);
 		add_filter('pushpull_default_term_language', array(&$this, 'term_language'), 10, 2);
-		add_action('pushpull_default_import', array(&$this, 'import'), 10, 1);
+		add_action('pushpull_default_import_polylang', array(&$this, 'import'), 10, 1);
 	}
 
     /**
@@ -80,10 +81,10 @@ class Polylang {
     /**
      * Manipulate data on import
      *
-     * @param WP_Post $post
+     * @param stdClass $post
      * @return void
      */
-    public function import(WP_Post $post) {
+    public function import(stdClass $post) {
 		$this->app->write_log("Import pll");
 		if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
 			pll_set_post_language($post->ID, $post->language);
