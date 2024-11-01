@@ -36,10 +36,22 @@ class GenerateBlocks {
 	 */
 	public function add_hooks() {
 		add_filter('pushpull_default_meta__generateblocks_reusable_blocks', array(&$this, 'meta__generateblocks_reusable_blocks'), 10, 2);
+		add_filter('pushpull_default_meta_generateblocks_patterns_tree', array(&$this, 'meta_generateblocks_patterns_tree'), 10, 2);
 		add_filter('pushpull_default_meta_generate_element_display_conditions', array(&$this, 'meta_generate_element_display_conditions'), 10, 2);
 		add_filter('pushpull_default_export_generateblocks', array(&$this, 'export'), 10, 2);
 		add_action('pushpull_default_import', array(&$this, 'import'), 10, 1);
 	}
+
+    /**
+     * meta_generateblocks_patterns_tree filter
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    public function meta_generateblocks_patterns_tree($value) {
+		// Also replace the domain in the pattern tree meta value
+		return str_replace(get_home_url(), "@@DOMAIN@@", $value);
+    }
 
     /**
      * meta__generateblocks_reusable_blocks filter
@@ -196,6 +208,10 @@ class GenerateBlocks {
 							}
 						}
 					}
+				}
+				if ($key === "generateblocks_patterns_tree") {
+					// Also replace the domain in the pattern tree meta value
+					$value = str_replace("@@DOMAIN@@", get_home_url(), $value);
 				}
 				update_post_meta($post->ID, $key, $value);
 			}

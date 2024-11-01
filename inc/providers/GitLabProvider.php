@@ -92,7 +92,8 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 * @return bool
 	 */
 	protected function git_exists( $name ) {
-		$res = $this->head($this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . $name. "?ref=" . $this->branch());
+		$res = $this->head($this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . urlencode($name) . "?ref=" . $this->branch());
+		$this->app->write_log($res);
 		return array_key_exists('response', $res) && array_key_exists('code', $res['response']) && $res['response']['code'] === 200;
 	}
 
@@ -166,11 +167,10 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 * @return stdClass|WP_Error
 	 */
     public function commit(array $wrap): stdClass|WP_Error {
-		foreach ($wrap['actions'] as $action) {
-			$action['action'] = $this->git_exists($action['file_path']) ? 'update' : 'create';
+		foreach ($wrap['actions'] as $key => $action) {
+			$wrap['actions'][$key]['action'] = $this->git_exists($action['file_path']) ? 'update' : 'create';
 		}
 		$wrap['branch'] = $this->branch();
-		// TODO Check if $wrap was really updated
 		$res = $this->call( 'POST', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits', $wrap );
 
 		return $res;
