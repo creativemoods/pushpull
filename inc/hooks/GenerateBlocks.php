@@ -38,7 +38,7 @@ class GenerateBlocks {
 	public function add_hooks() {
 		add_filter('pushpull_default_meta__generateblocks_reusable_blocks', array(&$this, 'meta__generateblocks_reusable_blocks'), 10, 2);
 		add_filter('pushpull_default_meta_generateblocks_patterns_tree', array(&$this, 'meta_generateblocks_patterns_tree'), 10, 2);
-		add_filter('pushpull_default_meta_generate_element_display_conditions', array(&$this, 'meta_generate_element_display_conditions'), 10, 2);
+		add_filter('pushpull_default_meta__generate_element_display_conditions', array(&$this, 'meta__generate_element_display_conditions'), 10, 2);
 		add_filter('pushpull_default_export_generateblocks', array(&$this, 'export'), 10, 2);
 		add_action('pushpull_default_import_generateblocks', array(&$this, 'import'), 10, 1);
 	}
@@ -69,12 +69,12 @@ class GenerateBlocks {
     }
 
     /**
-     * meta_generate_element_display_conditions filter
+     * meta__generate_element_display_conditions filter
      *
      * @param mixed $value
      * @return mixed
      */
-    public function meta_generate_element_display_conditions($value) {
+    public function meta__generate_element_display_conditions($value) {
 		// Rewrite post IDs into post names
 		$unserialized = maybe_unserialize($value[0]);
 		foreach ($unserialized as $item => $displaycond) {
