@@ -112,6 +112,23 @@ class BitbucketProvider extends GitProvider implements GitProviderInterface {
 		return $data;
 	}
 
+	/**
+	 * Delete a post by type and name.
+	 *
+     * @param string $type Post type.
+     * @param string $name Post name.
+	 * @return bool|WP_Error
+	 */
+    public function deleteRemotePostByName(string $type, string $name): bool|WP_Error {
+		// TODO Implement
+		$res = $this->call( 'DELETE', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . "_".$type."%2F" . $name, ['branch' => $this->branch(), 'commit_message' => 'Deleted by PushPull'] );
+		if (is_wp_error($res) || $res === false) {
+			return $res;
+		}
+
+		return true;
+	}
+
     /**
      * List repository hierarchy.
      * For Bitbucket we can't easily get the repository contents, so we will download the archive and extract it.

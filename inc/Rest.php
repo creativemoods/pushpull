@@ -115,6 +115,13 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/delete/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'delete'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 	}
 
 	/**
@@ -292,5 +299,19 @@ class Rest {
 		$params['postname'] = sanitize_text_field($params['postname']);
 		$id = $this->app->pusher()->pushByName($params['posttype'], $params['postname']);
 		return is_wp_error($id) ? $id : ['id' => $id];
+	}
+
+	/**
+	 * Deletes a post.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return WP_Error|array
+	 */
+	public function delete(WP_REST_Request $data) {
+		$params = $data->get_json_params();
+		$params['posttype'] = sanitize_text_field($params['posttype']);
+		$params['postname'] = sanitize_text_field($params['postname']);
+		$done = $this->app->deleter()->deleteByName($params['posttype'], $params['postname']);
+		return is_wp_error($done) ? $done : ['done' => $done];
 	}
 }

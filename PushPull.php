@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.0.41
+* Version:           0.0.42
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -20,6 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 use CreativeMoods\PushPull\Puller;
+use CreativeMoods\PushPull\Deleter;
 use CreativeMoods\PushPull\Rest;
 use CreativeMoods\PushPull\Admin;
 use CreativeMoods\PushPull\CLI;
@@ -118,6 +119,13 @@ class PushPull {
 	* @var Puller
 	*/
 	protected $puller;
+	
+	/**
+	* Deleter.
+	*
+	* @var Deleter
+	*/
+	protected $deleter;
 	
 	/**
 	* Export object.
@@ -330,6 +338,19 @@ class PushPull {
 		}
 		
 		return $this->puller;
+	}
+	
+	/**
+	* Lazy-load Deleter.
+	*
+	* @return Deleter
+	*/
+	public function deleter() {
+		if ( ! $this->deleter ) {
+			$this->deleter = new Deleter( $this );
+		}
+		
+		return $this->deleter;
 	}
 	
 	/**

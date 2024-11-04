@@ -113,7 +113,23 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 		return $data;
 	}
 
-    /**
+	/**
+	 * Delete a post by type and name.
+	 *
+     * @param string $type Post type.
+     * @param string $name Post name.
+	 * @return bool|WP_Error
+	 */
+    public function deleteRemotePostByName(string $type, string $name): bool|WP_Error {
+		$res = $this->call( 'DELETE', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . "_".$type."%2F" . $name, ['branch' => $this->branch(), 'commit_message' => 'Deleted by PushPull'] );
+		if (is_wp_error($res) || $res === false) {
+			return $res;
+		}
+
+		return true;
+	}
+
+	/**
      * List repository hierarchy.
      * For Gitlab we can't easily get the repository contents, so we will download the archive and extract it.
      *
@@ -171,6 +187,8 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 			$wrap['actions'][$key]['action'] = $this->git_exists($action['file_path']) ? 'update' : 'create';
 		}
 		$wrap['branch'] = $this->branch();
+		// TODO Check if $wrap was really updated
+		$this->app->write_log($wrap);
 		$res = $this->call( 'POST', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits', $wrap );
 
 		return $res;

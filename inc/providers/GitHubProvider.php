@@ -84,7 +84,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @return string|stdClass|WP_Error
 	 */
 	public function getRemotePostByName(string $type, string $name): string|stdClass|WP_Error {
-		$data = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/contents/' . "_".$type. "/" . $name );
+		$data = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/contents/' . "_" . $type . "/" . $name );
 
 		if ( is_wp_error( $data ) ) {
 			$this->app->write_log($data);
@@ -97,6 +97,25 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		} else {
 			return json_decode(base64_decode($data->content));
 		}
+	}
+
+	/**
+	 * Delete a post by type and name.
+	 *
+     * @param string $type Post type.
+     * @param string $name Post name.
+	 * @return bool|WP_Error
+	 */
+    public function deleteRemotePostByName(string $type, string $name): bool|WP_Error {
+		// First get SHA
+		$sha = $this->git_exists("_" . $type . "/" . $name);
+		// TODO Handle error
+		$res = $this->call( 'DELETE', $this->url() . '/repos/' . $this->repository() . '/contents/' . "_" . $type . "/" . $name, ['message' => 'Deleted by PushPull', 'sha' => $sha] );
+		if (is_wp_error($res) || $res === false) {
+			return $res;
+		}
+
+		return true;
 	}
 
     /**

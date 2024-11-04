@@ -31,6 +31,15 @@ interface GitProviderInterface {
     public function getRemotePostByName(string $type, string $name): string|stdClass|WP_Error;
 
 	/**
+	 * Delete a post by type and name.
+	 *
+     * @param string $type Post type.
+     * @param string $name Post name.
+	 * @return bool|WP_Error
+	 */
+    public function deleteRemotePostByName(string $type, string $name): bool|WP_Error;
+
+	/**
 	 * Commit a post and its dependencies.
 	 *
      * @param stdClass $wrap Commit data.

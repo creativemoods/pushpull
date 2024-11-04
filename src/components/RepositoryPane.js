@@ -165,7 +165,7 @@ const columns = [
         const currentRow = params.row;
         apiFetch({
           path: '/pushpull/v1/delete',
-          method: 'DELETE',
+          method: 'POST',
           data: { postname: currentRow.id, posttype: currentRow.postType },
 		}).then((data) => {
 			createSuccessNotice(__('Post deleted successfully.'), {
