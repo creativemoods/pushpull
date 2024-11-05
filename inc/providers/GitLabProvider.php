@@ -100,9 +100,9 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	/**
 	 * Get a post by type and name.
 	 *
-	 * @return stdClass|WP_Error
+	 * @return string|stdClass|WP_Error
 	 */
-	public function getRemotePostByName(string $type, string $name): stdClass|WP_Error {
+	public function getRemotePostByName(string $type, string $name): string|stdClass|WP_Error {
 		$data = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . "_".$type."%2F" . $name . '/raw' );
 
 		if ( is_wp_error( $data ) ) {
