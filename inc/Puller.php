@@ -50,7 +50,9 @@ class Puller {
 		// TODO check result
 		$wpfsd->put_contents ( $fn, $media );
 		// Create attachment
+		$this->app->write_log($image);
 		$imageid = url_to_postid($image);
+		$this->app->write_log($imageid);
 		if ($imageid !== 0) {
 			$this->app->write_log(
 				sprintf(
