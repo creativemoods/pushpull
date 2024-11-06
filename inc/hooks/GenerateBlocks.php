@@ -195,7 +195,11 @@ class GenerateBlocks {
 
 		if (property_exists($post, 'meta')) {
 			foreach ($post->meta as $key => $value) {
-				//$this->app->write_log(__( 'Creating meta key '.$key.'.', 'pushpull' ));
+				// Before unserializing, we need to replace the domain in the whole string
+				if ($key === "generateblocks_patterns_tree") {
+					// Also replace the domain in the pattern tree meta value
+					$value = str_replace("@@DOMAIN@@", get_home_url(), $value);
+				}
 				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
 				$value = maybe_unserialize($value);
 				if ($key === "_generate_element_display_conditions") {
@@ -209,10 +213,6 @@ class GenerateBlocks {
 							}
 						}
 					}
-				}
-				if ($key === "generateblocks_patterns_tree") {
-					// Also replace the domain in the pattern tree meta value
-					$value = str_replace("@@DOMAIN@@", get_home_url(), $value);
 				}
 				update_post_meta($post->ID, $key, $value);
 			}
