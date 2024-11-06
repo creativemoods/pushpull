@@ -50,10 +50,8 @@ class Puller {
 		// TODO check result
 		$wpfsd->put_contents ( $fn, $media );
 		// Create attachment
-		$this->app->write_log($image);
-		$imageid = url_to_postid($image);
-		$this->app->write_log($imageid);
-		if ($imageid !== 0) {
+		$foundimage = $this->app->utils()->getLocalPostByName('attachment', $image);
+		if ($foundimage !== null) {
 			$this->app->write_log(
 				sprintf(
 					/* translators: 1: image name, 2: filename */
@@ -62,8 +60,7 @@ class Puller {
 					$fn,
 				)
 			);
-			// TODO
-			return $imageid;
+			return $foundimage->ID;
 		} else {
 			$this->app->write_log(__( 'Creating new image attachment.', 'pushpull' ));
 			$wp_filetype = wp_check_filetype($fn, null);
