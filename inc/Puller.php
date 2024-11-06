@@ -147,7 +147,11 @@ class Puller {
 		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), wp_slash($post->post_content));
 
 		// Handle author (otherwise will be admin)
-		if (property_exists($post, 'author') && $user = get_user_by('login', $post->author)) {
+		if (property_exists($post, 'author')) {
+			if (!$post->author) {
+				$post->author = 'admin';
+			}
+			$user = get_user_by('login', $post->author);
 			$post->post_author = $user->ID;
 		}
 
