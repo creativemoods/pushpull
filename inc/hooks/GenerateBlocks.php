@@ -190,7 +190,11 @@ class GenerateBlocks {
 			// https://wordpress.stackexchange.com/questions/391381/gutenberg-block-manipulation-undo-parse-blocks-with-serialize-blocks-result
 			$parsed = parse_blocks(str_replace('\\"', '"', $post->post_content));
 			$replaced = $this->replace_patterns($parsed, $post->patterns);
-			$post->post_content = serialize_blocks($replaced);
+			$tmppost = array(
+				'ID' => $post->ID,
+				'post_content' => serialize_blocks($replaced),
+			);
+			wp_update_post($tmppost, true);
 		}
 
 		if (property_exists($post, 'meta')) {

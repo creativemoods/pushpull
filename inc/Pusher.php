@@ -178,7 +178,7 @@ class Pusher {
 			}
 
 			// Hard-coded filtering
-			if ($key === "_edit_lock") {
+			if ($key === "_edit_lock" || $key === "_encloseme") {
 				// Delete this meta key
 				continue;
 			}
