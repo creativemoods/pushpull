@@ -91,6 +91,38 @@ class Puller {
 	}
 
 	/**
+	 * Pull all posts of a specific type.
+	 *
+	 * @param string $type
+	 * @return string|WP_Error
+	 */
+	public function pullall($type) {
+		$this->app->write_log(
+			sprintf(
+				/* translators: 1: type of post */
+				__( 'Starting pull from Git for all %1$s.', 'pushpull' ),
+				$type,
+			)
+		);
+
+		// Get all files in remote repository in directory _$type
+		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+		$posts = $gitProvider->getRemotePostsByType($type);
+		foreach ($posts as $post) {
+			$this->pull($type, $post->name);
+		}
+
+		$this->app->write_log(
+			sprintf(
+				/* translators: 1: id of post */
+				__( 'End pull from Git for all %1$s.', 'pushpull' ),
+				$type,
+			)
+		);
+	}
+
+	/**
 	 * Pull a post.
 	 *
 	 * @param string $type the type of post.

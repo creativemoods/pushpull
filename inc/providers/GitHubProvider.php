@@ -13,7 +13,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @param string $endpoint API endpoint.
 	 * @param array  $body Request body.
 	 *
-	 * @return stdClass|WP_Error
+	 * @return array|WP_Error
 	 */
 	protected function call( $method, $endpoint, $body = array() ) {
 		$args = array(
@@ -97,6 +97,23 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		} else {
 			return json_decode(base64_decode($data->content));
 		}
+	}
+
+	/**
+	 * Get posts by type.
+	 *
+	 * @return array
+	 */
+	public function getRemotePostsByType(string $type): array {
+		// TODO Implement, this is for gitlab
+		$posts = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/tree?ref=' . $this->branch() . '&path=' . "_".$type );
+
+		if ( is_wp_error( $posts ) ) {
+			$this->app->write_log($posts);
+			return $posts;
+		}
+
+		return $posts;
 	}
 
 	/**

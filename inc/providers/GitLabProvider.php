@@ -114,6 +114,22 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	}
 
 	/**
+	 * Get posts by type.
+	 *
+	 * @return array
+	 */
+	public function getRemotePostsByType(string $type): array {
+		$posts = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/tree?ref=' . $this->branch() . '&path=' . "_".$type );
+
+		if ( is_wp_error( $posts ) ) {
+			$this->app->write_log($posts);
+			return $posts;
+		}
+
+		return $posts;
+	}
+
+	/**
 	 * Delete a post by type and name.
 	 *
      * @param string $type Post type.
