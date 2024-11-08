@@ -74,4 +74,26 @@ class CLI extends WP_CLI_Command {
 
 		$this->app->puller()->pull($type, $name);
 	}
+
+	/**
+	 * Pull all posts of a certain type from your GitHub repo into your WordPress blog
+	 *
+	 * ## OPTIONS
+	 *
+	 * <type>
+	 * : The type of the post to pull
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp pushpull pullall page
+	 *
+	 * @synopsis <type>
+	 *
+	 * @param array $args Command arguments.
+	 */
+	public function pullall( $args ) {
+		list( $type ) = $args;
+
+		$this->app->puller()->pullall($type);
+	}
 }

@@ -79,6 +79,19 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 			);
 		}
 
+		/* Check if result is paginated (recursive) */
+		if ( isset( $response['headers']['link'] ) ) {
+			if ( strpos( $response['headers']['link'], 'rel="next"' ) !== false ) {
+				preg_match( '/<(.*)>; rel="next"/', $response['headers']['link'], $matches );
+				if ( isset( $matches[1] ) ) {
+					$next_page = $this->call( $method, $matches[1], $body );
+					if ( ! is_wp_error( $next_page ) ) {
+						$body = array_merge( $body, $next_page );
+					}
+				}
+			}
+		}
+
 		return $body;
 	}
 
