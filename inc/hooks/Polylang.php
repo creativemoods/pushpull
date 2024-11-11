@@ -56,6 +56,7 @@ class Polylang {
 			$tmppost = get_post($id);
 			$newvals[$lang] = $tmppost->post_type."/".$tmppost->post_name;
 		}
+		ksort($newvals);
 		$data['translations'] = maybe_serialize($newvals);
 		$this->app->write_log("Setting translations: ".json_encode($data['translations']));
 

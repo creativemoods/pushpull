@@ -39,6 +39,7 @@ class GenerateBlocks {
 		add_filter('pushpull_default_meta__generateblocks_reusable_blocks', array(&$this, 'meta__generateblocks_reusable_blocks'), 10, 2);
 		add_filter('pushpull_default_meta_generateblocks_patterns_tree', array(&$this, 'meta_generateblocks_patterns_tree'), 10, 2);
 		add_filter('pushpull_default_meta__generate_element_display_conditions', array(&$this, 'meta__generate_element_display_conditions'), 10, 2);
+		add_filter('pushpull_default_meta__generate_element_exclude_conditions', array(&$this, 'meta__generate_element_display_conditions'), 10, 2);
 		add_filter('pushpull_default_export_generateblocks', array(&$this, 'export'), 10, 2);
 		add_action('pushpull_default_import_generateblocks', array(&$this, 'import'), 10, 1);
 	}
@@ -206,7 +207,7 @@ class GenerateBlocks {
 				}
 				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
 				$value = maybe_unserialize($value);
-				if ($key === "_generate_element_display_conditions") {
+				if ($key === "_generate_element_display_conditions" || $key === "_generate_element_exclude_conditions") {
 					// We need to reset the post name to its ID if it exists
 					foreach ($value as $item => $displaycond) {
 						if ($displaycond['rule'] === "post:page") {
