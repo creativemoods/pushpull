@@ -9,7 +9,7 @@ import PropTypes from 'prop-types';
 
 const DiffPane = (props) => {
 	const { curPost, setCurPost, curPostType, setCurPostType, selectedPostTypes } = props;
-	const [posts, setPosts] = useState([]);
+	const [posts, setPosts] = useState({});
 	const [oldCode, setOldCode] = useState("");
 	const [newCode, setNewCode] = useState("");
 
@@ -31,6 +31,9 @@ const DiffPane = (props) => {
 			path: addQueryArgs('/pushpull/v1/posts', { 'post_type': curPostType } ),
 		}).then((data) => {
 			setPosts(data);
+			if( Object.keys(data).length > 0 ) {
+				setCurPost(Object.keys(data)[0]);
+			}
 		}).catch((error) => {
 			console.error(error);
 		});
@@ -41,7 +44,6 @@ const DiffPane = (props) => {
 	};
 
 	const onSelectPostType = ( posttype ) => {
-		console.log(posttype);
 		setCurPostType(posttype);
 	};
 

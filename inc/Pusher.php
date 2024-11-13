@@ -146,6 +146,13 @@ class Pusher {
 			// Returning False will delete the key
 			// Returning True will keep the key
 			// Returning a value will change the key
+//			$this->app->write_log("Meta key: ".$key);
+//			error_log(print_r($value, true));
+//			$this->app->write_log($value);
+			// get_post_meta returns an array of values, each value is exactly what is in the database
+			// (
+    		// 	[0] => a:1:{i:0;a:7:{s:2:"id";s:10:"pattern-77"
+			// ...
 			if (has_filter('pushpull_meta_' . $key)) {
 				$newvalue = apply_filters('pushpull_meta_'.$key, $value);
 				if ($newvalue === False) {
@@ -153,7 +160,7 @@ class Pusher {
 					continue;
 				} elseif ($newvalue === True) {
 					// Keep this meta key
-					$data['meta'][$key] = $value[0];
+					$data['meta'][$key] = $value;
 					continue;
 				} elseif ($newvalue !== $value) {
 					// Change this meta key
@@ -168,7 +175,7 @@ class Pusher {
 					continue;
 				} elseif ($newvalue === True) {
 					// Keep this meta key
-					$data['meta'][$key] = $value[0];
+					$data['meta'][$key] = $value;
 					continue;
 				} elseif ($newvalue !== $value) {
 					// Change this meta key
@@ -188,8 +195,14 @@ class Pusher {
 				$data['featuredimage'] = $image->post_name;
 				continue;
 			}
+			if ($key === "_edit_last") {
+				// Lookup username
+				$user = get_userdata($value[0]);
+				$data['meta'][$key] = $user->user_login;
+				continue;
+			}
 			// By default we keep the meta key and value
-			$data['meta'][$key] = $value[0];
+			$data['meta'][$key] = $value;
 		}
 
 		// Taxonomies
@@ -201,7 +214,7 @@ class Pusher {
 				// Use this filter hook to modify term values before export
 				// Returning False will delete the key
 				// Returning True will keep the key
-				// Returning a value will change the key
+				// Returning a value will change the value
 				if (has_filter('pushpull_term_' . $term->taxonomy)) {
 					// We call the 3rd party filter hook for this taxonomy if it exists
 					$newvalue = apply_filters_ref_array('pushpull_term_' . $term->taxonomy, array($term, &$data));
@@ -269,6 +282,7 @@ class Pusher {
 			}
 		}
 
+		ksort($data['meta']);
 		return $data;
 	}
 
@@ -347,7 +361,7 @@ class Pusher {
 			$data[] = ['id' => $this->get_image_id($image), 'url' => $image];
 		}
 
-		$this->app->write_log("Extracted image ids: ".json_encode($data));
+		//$this->app->write_log("Extracted image ids: ".json_encode($data));
 		return $data;
 	}
 

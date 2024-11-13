@@ -53,7 +53,7 @@ class RealMediaLibrary {
 			$folder = wp_rml_get_by_id(wp_attachment_folder($post->ID));
 			if (is_rml_folder($folder)) {
 				$data['folder'] = $folder->getName();
-				$this->app->write_log("Setting folder: ".$data['folder']);
+				//$this->app->write_log("Setting folder: ".$data['folder']);
 			}
 		}
 
@@ -67,6 +67,6 @@ class RealMediaLibrary {
      * @return void
      */
     public function import(stdClass $post) {
-		$this->app->write_log("Import rml");
+		//$this->app->write_log("Import rml");
     }
 }

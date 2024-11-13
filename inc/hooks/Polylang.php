@@ -58,7 +58,7 @@ class Polylang {
 		}
 		ksort($newvals);
 		$data['translations'] = maybe_serialize($newvals);
-		$this->app->write_log("Setting translations: ".json_encode($data['translations']));
+		//$this->app->write_log("Setting translations: ".json_encode($data['translations']));
 
 		// We can delete this term.
         return False;
@@ -73,7 +73,7 @@ class Polylang {
      */
     public function term_language($term, &$data) {
 		$data['language'] = $term->slug;
-		$this->app->write_log("Setting language: ".json_encode($data['language']));
+		//$this->app->write_log("Setting language: ".json_encode($data['language']));
 
 		// We can delete this term.
         return False;
@@ -86,7 +86,7 @@ class Polylang {
      * @return void
      */
     public function import(stdClass $post) {
-		$this->app->write_log("Import pll");
+		//$this->app->write_log("Import pll");
 		if (property_exists($post, 'language') && function_exists('pll_set_post_language')) {
 			pll_set_post_language($post->ID, $post->language);
 		}
@@ -105,7 +105,7 @@ class Polylang {
 				}
 			}
 			if ($found) {
-				$this->app->write_log("Setting post translation: ".json_encode($newvals));
+				//$this->app->write_log("Setting post translation: ".json_encode($newvals));
 				pll_save_post_translations($newvals);
 			}
 		}

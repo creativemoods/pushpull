@@ -42,9 +42,9 @@ class Puller {
 		// Get attachment from Git
 		$imagepost = $gitProvider->getRemotePostByName('attachment', $image);
 		// Find local filename
-		$fn = wp_upload_dir()['path']."/".$imagepost->meta->_wp_attached_file;
+		$fn = wp_upload_dir()['path']."/".$imagepost->meta->_wp_attached_file[0];
 		// Get binary contents from Git
-		$media = $gitProvider->getRemotePostByName('media', $imagepost->meta->_wp_attached_file);
+		$media = $gitProvider->getRemotePostByName('media', $imagepost->meta->_wp_attached_file[0]);
 		// Write binary contents to local file in uploads/
 		$wpfsd = new \WP_Filesystem_Direct( false );
 		// TODO check result
@@ -64,7 +64,7 @@ class Puller {
 		} else {
 			$this->app->write_log(__( 'Creating new image attachment.', 'pushpull' ));
 			$wp_filetype = wp_check_filetype($fn, null);
-			$return = apply_filters( 'wp_handle_upload', array( 'file' => $fn, 'url' => wp_upload_dir()['url'].'/'.$imagepost->meta->_wp_attached_file, 'type' => $wp_filetype['type'] ) );
+			$return = apply_filters( 'wp_handle_upload', array( 'file' => $fn, 'url' => wp_upload_dir()['url'].'/'.$imagepost->meta->_wp_attached_file[0], 'type' => $wp_filetype['type'] ) );
 			$attachment = [
 				'post_mime_type' => $return['type'],
 				'guid'           => $return['url'],
@@ -142,7 +142,7 @@ class Puller {
 		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
 		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
 		$post = $gitProvider->getRemotePostByName($type, $name);
-		// TODO We need to add wp_slash otherwise \\ will be deleted -> too many slashes
+		// TODO We need to add wp_slash otherwise \\ will be deleted -> too many slashes ?
 		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), wp_slash($post->post_content));
 
 		// Handle author (otherwise will be admin)
@@ -155,20 +155,29 @@ class Puller {
 		}
 
 		// Post
-		// TODO When pulling a pattern that already exists, it creates pattern-2
-		$id = url_to_postid($name);
-		if ($id !== 0) {
-			$post->ID = $id;
-			$this->app->write_log(__( 'Post already exists locally. Updating.', 'pushpull' ));
-			wp_update_post($post, true);
-		} else {
-			$this->app->write_log(__( 'Creating new post.', 'pushpull' ));
-			$id = wp_insert_post($post, true);
-			$post->ID = $id;
-			if (is_wp_error($id)) {
-				$this->app->write_log(__( 'Error creating post.', 'pushpull' ));
-			}
+		$localpost = $this->app->utils()->getLocalPostByName($type, $name);
+		if ($localpost !== null) {
+			$this->app->write_log(__( 'Post already exists locally. Deleting.', 'pushpull' ));
+			wp_delete_post($localpost->ID, true);
 		}
+		$this->app->write_log(__( 'Creating new post.', 'pushpull' ));
+		$subpost = $this->app->utils()->sub_array((array)$post, [
+			'post_title',
+			'post_name',
+			'post_content',
+			'post_password',
+			'post_excerpt',
+			'post_date',
+			'post_date_gmt',
+			'post_status',
+			'post_type',
+			'post_author'
+		]);
+		$id = wp_insert_post($subpost, true);
+		if (is_wp_error($id)) {
+			$this->app->write_log(__( 'Error creating post.', 'pushpull' ));
+		}
+		$post->ID = $id;
 
 		// Post terms
 		if (property_exists($post, 'terms')) {
@@ -192,6 +201,29 @@ class Puller {
 		if (property_exists($post, 'intimages')) {
 			foreach ($post->intimages as $image) {
 				$this->import_image($image);
+			}
+		}
+
+		// First we import all meta data
+		// If you are a plugin maintainer and need to modify a meta value,
+		// do so in the pushpull_import_yourplugin action hook and overwrite what is created here.
+		// If you need to remove a meta key you can do so when pushing the data to Git.
+		if (property_exists($post, 'meta')) {
+			foreach ($post->meta as $key => $value) {
+				if ($key === "_edit_last" and is_string($value)) {
+					// We need to find the user ID from the login
+					$user = get_user_by('login', $value);
+					if ($user) {
+						$this->app->write_log("Setting meta: ".$user->ID);
+						add_post_meta($id, $key, $user->ID);
+					}
+					continue;
+				}
+				foreach ($value as $v) {
+					// We need to maybe_unserialize ourselves because add_post_meta will serialize
+					//$this->app->write_log("Adding meta key ".$key." with value ".$v);
+					add_post_meta($id, $key, maybe_unserialize($v));
+				}
 			}
 		}
 

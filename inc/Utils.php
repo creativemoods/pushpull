@@ -11,6 +11,18 @@ namespace CreativeMoods\PushPull;
  */
 class Utils {
 	/**
+	 * returns a subset of an array
+	 *
+	 * @param array $haystack
+	 * @param array $needle
+	 * @return array
+	 */
+	function sub_array(array $haystack, array $needle): array
+	{
+		return array_intersect_key($haystack, array_flip($needle));
+	}
+
+	/**
 	 * Get post by name
 	 *
 	 * @param string $name
