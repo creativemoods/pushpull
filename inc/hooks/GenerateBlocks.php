@@ -176,13 +176,14 @@ class GenerateBlocks {
 
     /**
      * Manipulate data on export
+	 * Warning! You need to work on $data, not on $post because $data contains previously modified data while $post down not.
      *
      * @param array $data
      * @param WP_Post $post
      * @return array
      */
     public function export(array $data, WP_Post $post) {
-		$data['post_content'] = serialize_blocks($this->replace_patternids(parse_blocks($post->post_content)));
+		$data['post_content'] = serialize_blocks($this->replace_patternids(parse_blocks($data['post_content'])));
         return $data;
     }
 

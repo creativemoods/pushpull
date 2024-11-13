@@ -68,5 +68,6 @@ class RealMediaLibrary {
      */
     public function import(stdClass $post) {
 		//$this->app->write_log("Import rml");
+		// TODO Is this OK because of the metadata ? Otherwise the folder shouldn't be set.
     }
 }
