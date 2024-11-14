@@ -94,7 +94,7 @@ class Pusher {
 
 		$this->app->write_log(__( 'End export to Git.', 'pushpull' ));
 		// Invalidate cache
-		delete_transient('pushpull_remote_repo_files');
+		//delete_transient('pushpull_remote_repo_files');
 
 		return true;
 	}

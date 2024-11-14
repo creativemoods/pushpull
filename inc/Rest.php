@@ -94,6 +94,13 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/repo/sync', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'sync'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 		register_rest_route('pushpull/v1', '/pull/', array(
 			'methods' => 'POST',
 			'callback' => array( $this, 'pull'),
@@ -313,5 +320,18 @@ class Rest {
 		$params['postname'] = sanitize_text_field($params['postname']);
 		$done = $this->app->deleter()->deleteByName($params['posttype'], $params['postname']);
 		return is_wp_error($done) ? $done : ['done' => $done];
+	}
+
+	/**
+	 * Sync repo.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return WP_Error|array
+	 */
+	public function sync(WP_REST_Request $data) {
+		// Invalidate cache
+		delete_transient('pushpull_remote_repo_files');
+
+		return ['result' => 'success'];
 	}
 }

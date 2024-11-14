@@ -9,6 +9,7 @@ import apiFetch from '@wordpress/api-fetch';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
+import { Button as MUIButton } from '@mui/material';
 
 function CustomTabPanel(props) {
 	const { children, value, index, ...other } = props;
@@ -44,6 +45,18 @@ const App = () => {
 		setTab(tabName);
 	};
 	
+	const handleSync = (event) => {
+		apiFetch({
+			path: '/pushpull/v1/repo/sync',
+			method: 'POST',
+			data: {},
+		}).then((data) => {
+			console.log("synced");
+		}).catch((error) => {
+			console.error(error);
+		});
+	};
+
 	useEffect( () => {
 		apiFetch({
 			path: '/pushpull/v1/settings',
@@ -62,9 +75,16 @@ const App = () => {
 		<Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
 		<Tabs value={tab} onChange={onSelect} aria-label="Main tabs">
 			<Tab label="Settings" value='settings' {...a11yProps('settings')} />
-		<Tab label="Diff viewer" value='diff' {...a11yProps('diff')} />
-		<Tab label="Repository" value='repo' {...a11yProps('repo')} />
+			<Tab label="Diff viewer" value='diff' {...a11yProps('diff')} />
+			<Tab label="Repository" value='repo' {...a11yProps('repo')} />
 		</Tabs>
+		<MUIButton
+						variant="contained"
+						onClick={handleSync}
+						color={'primary'}
+					>
+						{ __( 'Sync', 'pushpull' ) }
+			</MUIButton>
 		</Box>
 		<CustomTabPanel value={tab} index='settings'>
 		<SettingsPane selectedPostTypes={selectedPostTypes} setSelectedPostTypes={setSelectedPostTypes} />
