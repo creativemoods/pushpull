@@ -247,7 +247,11 @@ class Pusher {
 					}
 				} else {
 					// No filter, keep the term
-					$data['terms'][] = $term;
+					$data['terms'][] = [
+						'slug' => $term->slug,
+						'taxonomy' => $term->taxonomy,
+						'name' => $term->name,
+					];
 				}
 			}
 		}
@@ -377,12 +381,12 @@ class Pusher {
 		$files = [];
 		if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
 			// This is an attachment that references a file in uploads, we need to add it
-			$fn = wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'];
+			$fn = wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'][0];
 			$wpfsd = new WP_Filesystem_Direct( false );
 			$fc = $wpfsd->get_contents ( $fn );
 			$files[] = [
 				'action' => 'tbd', // Will be filled in later in GitLabProvider
-				'file_path' => "_media/".$content['meta']['_wp_attached_file'],
+				'file_path' => "_media/".$content['meta']['_wp_attached_file'][0],
 				'content' => base64_encode($fc),
 				'encoding' => "base64",
 			];

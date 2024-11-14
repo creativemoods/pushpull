@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.0.55
+* Version:           0.0.56
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -31,6 +31,7 @@ use CreativeMoods\PushPull\hooks\GenerateBlocks;
 use CreativeMoods\PushPull\hooks\RealMediaLibrary;
 use CreativeMoods\PushPull\hooks\Polylang;
 use CreativeMoods\PushPull\hooks\PPTest;
+use CreativeMoods\PushPull\hooks\AIOSEO;
 use WP_CLI;
 
 require __DIR__ . '/vendor/autoload.php';
@@ -164,15 +165,26 @@ class PushPull {
 		add_filter('page_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);
 
 		// Register all default hooks for 3rd party plugins
-		// TODO Il faudrait trouver un système pour pas loader ce qui est pas nécessaire
-		$gb = new GenerateBlocks($this);
-		$gb->add_hooks();
-		$rml = new RealMediaLibrary($this);
-		$rml->add_hooks();
-		$pll = new Polylang($this);
-		$pll->add_hooks();
-		$ppt = new PPTest($this);
-		$ppt->add_hooks();
+		if (is_plugin_active('generateblocks/plugin.php')) {
+			$gb = new GenerateBlocks($this);
+			$gb->add_hooks();
+		}
+		if (is_plugin_active('real-media-library-lite/index.php')) {
+			$rml = new RealMediaLibrary($this);
+			$rml->add_hooks();
+		}
+		if (is_plugin_active('polylang/polylang.php')) {
+			$pll = new Polylang($this);
+			$pll->add_hooks();
+		}
+		if (is_plugin_active('pptest/pptest.php')) {
+			$ppt = new PPTest($this);
+			$ppt->add_hooks();
+		}
+		if (is_plugin_active('all-in-one-seo-pack/all_in_one_seo_pack.php')) {
+			$aioseo = new AIOSEO($this);
+			$aioseo->add_hooks();
+		}
 	}
 
 	public function push_post()

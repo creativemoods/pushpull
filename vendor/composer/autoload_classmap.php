@@ -15,6 +15,7 @@ return array(
     'CreativeMoods\\PushPull\\Repository' => $baseDir . '/inc/Repository.php',
     'CreativeMoods\\PushPull\\Rest' => $baseDir . '/inc/Rest.php',
     'CreativeMoods\\PushPull\\Utils' => $baseDir . '/inc/Utils.php',
+    'CreativeMoods\\PushPull\\hooks\\AIOSEO' => $baseDir . '/inc/hooks/AIOSEO.php',
     'CreativeMoods\\PushPull\\hooks\\GenerateBlocks' => $baseDir . '/inc/hooks/GenerateBlocks.php',
     'CreativeMoods\\PushPull\\hooks\\PPTest' => $baseDir . '/inc/hooks/PPTest.php',
     'CreativeMoods\\PushPull\\hooks\\Polylang' => $baseDir . '/inc/hooks/Polylang.php',

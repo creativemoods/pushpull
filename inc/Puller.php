@@ -189,7 +189,14 @@ class Puller {
 						$term->taxonomy,
 					)
 				);
-				wp_set_post_terms($id, [$term->term_id], $term->taxonomy, false);
+				$term_obj = get_term_by('slug', $term->slug, $term->taxonomy);
+				if ($term_obj) {
+					$termid = $term_obj->term_id;
+				} else {
+					// TODO Handle parent
+					$termid = wp_insert_term($term->name, $term->taxonomy, ['slug' => $term->slug])['term_id'];
+				}
+				wp_set_post_terms($id, [$termid], $term->taxonomy, true);
 			}
 		}
 

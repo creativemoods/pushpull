@@ -56,7 +56,11 @@ class PPTest {
 			return False;
 		}
 
-		return True;
+		return [
+			'slug' => $term->slug,
+			'taxonomy' => $term->taxonomy,
+			'name' => $term->name,
+		];
     }
 
     /**

@@ -106,7 +106,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 */
 	protected function git_exists( $name ) {
 		$res = $this->head($this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . urlencode($name) . "?ref=" . $this->branch());
-		$this->app->write_log($res);
+		//$this->app->write_log($res);
 		return array_key_exists('response', $res) && array_key_exists('code', $res['response']) && $res['response']['code'] === 200;
 	}
 
@@ -217,7 +217,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 		}
 		$wrap['branch'] = $this->branch();
 		// TODO Check if $wrap was really updated
-		$this->app->write_log($wrap);
+		//$this->app->write_log($wrap);
 		$res = $this->call( 'POST', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits', $wrap );
 
 		return $res;

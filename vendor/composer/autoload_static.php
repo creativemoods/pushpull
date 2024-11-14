@@ -30,6 +30,7 @@ class ComposerStaticInit493fc6768438ce8bcc87dab9316a2a69
         'CreativeMoods\\PushPull\\Repository' => __DIR__ . '/../..' . '/inc/Repository.php',
         'CreativeMoods\\PushPull\\Rest' => __DIR__ . '/../..' . '/inc/Rest.php',
         'CreativeMoods\\PushPull\\Utils' => __DIR__ . '/../..' . '/inc/Utils.php',
+        'CreativeMoods\\PushPull\\hooks\\AIOSEO' => __DIR__ . '/../..' . '/inc/hooks/AIOSEO.php',
         'CreativeMoods\\PushPull\\hooks\\GenerateBlocks' => __DIR__ . '/../..' . '/inc/hooks/GenerateBlocks.php',
         'CreativeMoods\\PushPull\\hooks\\PPTest' => __DIR__ . '/../..' . '/inc/hooks/PPTest.php',
         'CreativeMoods\\PushPull\\hooks\\Polylang' => __DIR__ . '/../..' . '/inc/hooks/Polylang.php',
