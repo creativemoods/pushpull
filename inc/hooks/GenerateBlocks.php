@@ -249,8 +249,8 @@ class GenerateBlocks {
 									$vobject[$item]['object'] = $tmppost->ID;
 								}
 							}
-							add_post_meta($post->ID, $key, $vobject);
 						}
+						add_post_meta($post->ID, $key, $vobject);
 					}
 				}
 			}
