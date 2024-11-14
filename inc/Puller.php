@@ -181,22 +181,26 @@ class Puller {
 
 		// Post terms
 		if (property_exists($post, 'terms')) {
-			foreach ($post->terms as $term) {
-				$this->app->write_log(
-					sprintf(
-						/* translators: 1: taxonomy of the term */
-						__( 'Creating term for taxonomy %1$s.', 'pushpull' ),
-						$term->taxonomy,
-					)
-				);
-				$term_obj = get_term_by('slug', $term->slug, $term->taxonomy);
-				if ($term_obj) {
-					$termid = $term_obj->term_id;
-				} else {
-					// TODO Handle parent
-					$termid = wp_insert_term($term->name, $term->taxonomy, ['slug' => $term->slug])['term_id'];
+			foreach ($post->terms as $taxonomy => $terms) {
+				// Remove all terms since we're appending
+				wp_set_object_terms($id, [], $taxonomy, false);
+				foreach ($terms as $term) {
+					$this->app->write_log(
+						sprintf(
+							/* translators: 1: taxonomy of the term */
+							__( 'Creating term for taxonomy %1$s.', 'pushpull' ),
+							$taxonomy,
+						)
+					);
+					$term_obj = get_term_by('slug', $term->slug, $taxonomy);
+					if ($term_obj) {
+						$termid = $term_obj->term_id;
+					} else {
+						// TODO Handle parent
+						$termid = wp_insert_term($term->name, $taxonomy, ['slug' => $term->slug])['term_id'];
+					}
+					wp_set_post_terms($id, [$termid], $taxonomy, true);
 				}
-				wp_set_post_terms($id, [$termid], $term->taxonomy, true);
 			}
 		}
 

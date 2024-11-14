@@ -206,10 +206,11 @@ class Pusher {
 		}
 
 		// Taxonomies
-		$taxonomies = get_object_taxonomies($post->post_type);
+		$taxonomies = get_object_taxonomies($post->post_type, 'names');
 		$data['terms'] = [];
-		if (!empty($taxonomies)) {
-			$terms = wp_get_object_terms($post->ID, $taxonomies);
+		foreach ($taxonomies as $taxonomy) {
+			$terms = wp_get_object_terms($post->ID, $taxonomy);
+			$data['terms'][$taxonomy] = [];
 			foreach ((array)$terms as $i => $term) {
 				// Use this filter hook to modify term values before export
 				// Returning False will delete the key
@@ -223,11 +224,11 @@ class Pusher {
 						continue;
 					} elseif ($newvalue === True) {
 						// Keep this term
-						$data['terms'][] = $term;
+						$data['terms'][$taxonomy][] = $term;
 						continue;
 					} elseif ($newvalue !== $value) {
 						// Change this term
-						$data['terms'][] = $newvalue;
+						$data['terms'][$taxonomy][] = $newvalue;
 						continue;
 					}
 				} elseif (has_filter('pushpull_default_term_' . $term->taxonomy)) {
@@ -238,18 +239,17 @@ class Pusher {
 						continue;
 					} elseif ($newvalue === True) {
 						// Keep this term
-						$data['terms'][] = $term;
+						$data['terms'][$taxonomy][] = $term;
 						continue;
 					} elseif ($newvalue !== $value) {
 						// Change this term
-						$data['terms'][] = $newvalue;
+						$data['terms'][$taxonomy][] = $newvalue;
 						continue;
 					}
 				} else {
 					// No filter, keep the term
-					$data['terms'][] = [
+					$data['terms'][$taxonomy][] = [
 						'slug' => $term->slug,
-						'taxonomy' => $term->taxonomy,
 						'name' => $term->name,
 					];
 				}

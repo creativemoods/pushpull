@@ -48,7 +48,7 @@ const App = () => {
 		apiFetch({
 			path: '/pushpull/v1/settings',
 		}).then((data) => {
-			setSelectedPostTypes(data['posttypes']);
+			setSelectedPostTypes(['Please select a post type', ...data['posttypes']]);
 		}).catch((error) => {
 			console.error(error);
 		});

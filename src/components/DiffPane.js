@@ -14,7 +14,7 @@ const DiffPane = (props) => {
 	const [newCode, setNewCode] = useState("");
 
 	useEffect( () => {
-		if (curPost !== "" && curPostType !== "") {
+		if (curPost !== "" && curPostType !== "" && curPost !== "Please select a post" && curPostType !== "Please select a post type") {
 			apiFetch({
 				path: addQueryArgs('/pushpull/v1/diff', { 'post_name': curPost, 'post_type': curPostType } ),
 			}).then((data) => {
@@ -27,16 +27,15 @@ const DiffPane = (props) => {
 	}, [curPost] );
 
 	useEffect( () => {
-		apiFetch({
-			path: addQueryArgs('/pushpull/v1/posts', { 'post_type': curPostType } ),
-		}).then((data) => {
-			setPosts(data);
-			if( Object.keys(data).length > 0 ) {
-				setCurPost(Object.keys(data)[0]);
-			}
-		}).catch((error) => {
-			console.error(error);
-		});
+		if (curPostType !== "Please select a post type") {
+			apiFetch({
+				path: addQueryArgs('/pushpull/v1/posts', { 'post_type': curPostType } ),
+			}).then((data) => {
+				setPosts({ "Please select a post": "Please select a post", ...data });
+			}).catch((error) => {
+				console.error(error);
+			});
+		}
 	}, [curPostType] );
 
 	const onSelectPost = ( post ) => {

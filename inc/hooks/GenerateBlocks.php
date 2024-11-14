@@ -242,8 +242,6 @@ class GenerateBlocks {
 						// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
 						$vobject = maybe_unserialize($v);
 						foreach ($vobject as $item => $displaycond) {
-							$this->app->write_log($item);
-							$this->app->write_log($displaycond);
 							if ($displaycond['rule'] === "post:page") {
 								$arr = explode('/', $displaycond['object']); // e.g. "page/our-story"
 								$tmppost = $this->app->utils()->getLocalPostByName($arr[0], $arr[1]);

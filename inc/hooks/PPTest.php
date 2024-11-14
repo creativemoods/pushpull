@@ -58,7 +58,6 @@ class PPTest {
 
 		return [
 			'slug' => $term->slug,
-			'taxonomy' => $term->taxonomy,
 			'name' => $term->name,
 		];
     }
