@@ -54,8 +54,19 @@ class GenerateBlocks {
     public function meta_generateblocks_patterns_tree($value) {
 		// Also replace the domain in the pattern tree meta value
 		foreach ($value as $k => $v) {
-			$value[$k] = str_replace(get_home_url(), "@@DOMAIN@@", $v);
+			$v = maybe_unserialize($v);
+			if (is_array($v)) {
+				array_walk_recursive($v, function (&$item) {
+					if (is_string($item)) {
+						$item = str_replace(get_home_url(), "@@DOMAIN@@", $item);
+					}
+				});
+			} else {
+				$v = str_replace(get_home_url(), "@@DOMAIN@@", $v);
+			}
+			$value[$k] = maybe_serialize($v);
 		}
+
 		return $value;
     }
 
@@ -230,7 +241,16 @@ class GenerateBlocks {
 					delete_post_meta($post->ID, $key);
 					foreach ($values as $v) {
 						// Also replace the domain in the pattern tree meta value
-						$v = str_replace("@@DOMAIN@@", get_home_url(), $v);
+						$v = maybe_unserialize($v);
+						if (is_array($v)) {
+							array_walk_recursive($v, function (&$item) {
+								if (is_string($item)) {
+									$item = str_replace("@@DOMAIN@@", get_home_url(), $item);
+								}
+							});
+						} else {
+							$v = str_replace("@@DOMAIN@@", get_home_url(), $v);
+						}
 						add_post_meta($post->ID, $key, $v);
 					}
 				}
