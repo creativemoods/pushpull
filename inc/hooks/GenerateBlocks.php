@@ -223,31 +223,40 @@ class GenerateBlocks {
 		wp_update_post($tmppost, true);
 
 		if (property_exists($post, 'meta')) {
-			foreach ($post->meta as $key => $value) {
+			foreach ($post->meta as $key => $values) {
 				// Before unserializing, we need to replace the domain in the whole string
 				if ($key === "generateblocks_patterns_tree") {
-					// Also replace the domain in the pattern tree meta value
-					// TODO loop ?
-					$value = str_replace("@@DOMAIN@@", get_home_url(), $value);
-					update_post_meta($post->ID, $key, $value);
+					// Replace the values imported by Puller::pull()
+					delete_post_meta($post->ID, $key);
+					foreach ($values as $v) {
+						// Also replace the domain in the pattern tree meta value
+						$v = str_replace("@@DOMAIN@@", get_home_url(), $v);
+						add_post_meta($post->ID, $key, $v);
+					}
 				}
-				// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
-				$value = maybe_unserialize($value);
 				if ($key === "_generate_element_display_conditions" || $key === "_generate_element_exclude_conditions") {
 					// We need to reset the post name to its ID if it exists
-					// TODO is this the loop on meta values ?
-					foreach ($value as $item => $displaycond) {
-						if ($displaycond['rule'] === "post:page") {
-							$arr = explode('/', $displaycond['object']); // e.g. "page/our-story"
-							$tmppost = $this->app->utils()->getLocalPostByName($arr[0], $arr[1]);
-							if ($tmppost !== null) {
-								$value[$item]['object'] = $tmppost->ID;
+					// Replace the values imported by Puller::pull()
+					delete_post_meta($post->ID, $key);
+					foreach ($values as $v) {
+						// Unserialize because https://developer.wordpress.org/reference/functions/update_metadata/ "...or itself a PHP-serialized string"
+						$vobject = maybe_unserialize($v);
+						foreach ($vobject as $item => $displaycond) {
+							$this->app->write_log($item);
+							$this->app->write_log($displaycond);
+							if ($displaycond['rule'] === "post:page") {
+								$arr = explode('/', $displaycond['object']); // e.g. "page/our-story"
+								$tmppost = $this->app->utils()->getLocalPostByName($arr[0], $arr[1]);
+								if ($tmppost !== null) {
+									$vobject[$item]['object'] = $tmppost->ID;
+								}
 							}
+							add_post_meta($post->ID, $key, $vobject);
 						}
 					}
-					update_post_meta($post->ID, $key, $value);
 				}
 			}
 		}
+
     }
 }
