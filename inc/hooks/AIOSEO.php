@@ -56,9 +56,8 @@ class AIOSEO {
 
 		if ($aioseo_data) {
 			// Remove id and post_id and dates that change regularly
-			unset($aioseo_data['id'], $aioseo_data['post_id'], $aioseo_data['image_scan_date'], $aioseo_data['updated']);
-			// TODO We get https:\\\/\\\/lisboa.events.test\\\/app\\\/uploads\\\/
-			// TODO Faire un @@DOMAIN@@ ?
+			// Unset images, they will be regenerated
+			unset($aioseo_data['id'], $aioseo_data['post_id'], $aioseo_data['image_scan_date'], $aioseo_data['updated'], $aioseo_data['images']);
 			$data['aioseo'] = $aioseo_data;
 		}
 
