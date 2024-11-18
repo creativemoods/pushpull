@@ -129,6 +129,27 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/deployscript/', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_deployscript'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/deployscript/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'set_deployscript'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/deploy/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'deploy'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 	}
 
 	/**
@@ -333,5 +354,51 @@ class Rest {
 		delete_transient('pushpull_remote_repo_files');
 
 		return ['result' => 'success'];
+	}
+
+	/**
+	 * Returns the current deploy script.
+	 *
+	 * @return string — The current deploy script.
+	 */
+	public function get_deployscript() {
+		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+		$deployscript = $gitProvider->getRemotePostByName('ppconfig', 'deployscript');
+		// TODO necessary ?
+		update_option('pushpull_deployscript', $deployscript);
+		return ['deployscript' => $deployscript];
+	}
+
+	/**
+	 * Saves the deploy script.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return bool — The results.
+	 */
+	public function set_deployscript(WP_REST_Request $data) {
+		$params = $data->get_json_params();
+		$params['deployscript'] = sanitize_text_field($params['deployscript']);
+
+		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+		$gitProvider->setDeployScript($params['deployscript']);
+
+		update_option('pushpull_deployscript', $params['deployscript']);
+
+		return true;
+	}
+
+	/**
+	 * Deploy configuration and contents.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return bool — The result.
+	 */
+	public function deploy(WP_REST_Request $data) {
+		$deployscript = get_option('pushpull_deployscript', '');
+		eval($deployscript);
+
+		return true;
 	}
 }

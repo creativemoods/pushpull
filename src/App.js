@@ -3,6 +3,7 @@ import Notices from './components/Notices';
 import SettingsPane from './components/SettingsPane';
 import DiffPane from './components/DiffPane';
 import RepositoryPane from './components/RepositoryPane';
+import DeployPane from './components/DeployPane';
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from 'react';
 import apiFetch from '@wordpress/api-fetch';
@@ -77,6 +78,7 @@ const App = () => {
 			<Tab label="Settings" value='settings' {...a11yProps('settings')} />
 			<Tab label="Diff viewer" value='diff' {...a11yProps('diff')} />
 			<Tab label="Repository" value='repo' {...a11yProps('repo')} />
+			<Tab label="Deploy" value='deploy' {...a11yProps('deploy')} />
 		</Tabs>
 		<MUIButton
 						variant="contained"
@@ -94,6 +96,9 @@ const App = () => {
 		</CustomTabPanel>
 		<CustomTabPanel value={tab} index='repo'>
 		{tab === "repo" && <RepositoryPane setTab={setTab} setCurPost={setCurPost} setCurPostType={setCurPostType} />}
+		</CustomTabPanel>
+		<CustomTabPanel value={tab} index='deploy'>
+		{tab === "deploy" && <DeployPane />}
 		</CustomTabPanel>
 		</Box>
 		</div>

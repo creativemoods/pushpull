@@ -65,4 +65,12 @@ interface GitProviderInterface {
 	 * @return array|WP_Error
 	 */
     public function getBranches(string $url, string $token, string $repository): array|WP_Error;
+
+	/**
+	 * Commit deploy script.
+	 *
+	 * @param string $deployscript
+	 * @return bool|WP_Error
+	 */
+	public function setDeployScript(string $deployscript): bool|WP_Error;
 }
