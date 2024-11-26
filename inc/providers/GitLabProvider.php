@@ -53,7 +53,6 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 		}
 
 		$response = wp_remote_request( $endpoint, $args );
-		//$this->app->write_log($response);
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
@@ -168,14 +167,20 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
     public function listRepository(string $repoName): array {
         $this->app->write_log("Fetching remote repo contents.");
 
-        $archiveContent = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/archive.zip?sha=' . $this->branch() );
-        if ($archiveContent === false) {
-            throw new \Exception("Failed to download repository archive.");
-        }
+		// https://www.ramielcreations.com/using-streams-in-wordpress-http-requests
+		// TODO replicate in other providers
         $tempArchive = tempnam(sys_get_temp_dir(), 'repo_archive_');
-        $wpfsd = new \WP_Filesystem_Direct( false );
-        // TODO check result
-        $wpfsd->put_contents ( $tempArchive, $archiveContent );
+		$args = array(
+			'method'  => 'GET',
+			'headers' => array(
+				'PRIVATE-TOKEN' => $this->token(),
+			),
+			'timeout' => 30,
+			'stream' => true,
+			'filename' => $tempArchive,
+		);
+		$response = wp_remote_request( $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/archive.zip?sha=' . $this->branch(), $args );
+
         $zip = new \ZipArchive;
         if ($zip->open($tempArchive) === TRUE) {
             $zip->extractTo(sys_get_temp_dir()); // Extract to the system temp directory
@@ -199,7 +204,6 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
         }
         wp_delete_file($tempArchive);
         array_map('unlink', glob("$extractedDir/*.*"));
-        $wpfsd->rmdir($extractedDir);
         $zip->close();
 
         return $repoFiles;
