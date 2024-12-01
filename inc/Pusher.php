@@ -78,10 +78,14 @@ class Pusher {
 		$meta = get_post_meta($post->ID);
 		if (array_key_exists('_thumbnail_id', $meta)) {
 			$image = get_post($meta['_thumbnail_id'][0]);
-			$pushres = $this->create_commit($image);
-			if ( is_wp_error( $pushres ) ) {
-				$this->app->write_log($pushres);
-				return $pushres;
+			if (!$image) {
+				$this->app->write_log("Unable to get featured image ".$meta['_thumbnail_id'][0]);
+			} else {
+				$pushres = $this->create_commit($image);
+				if ( is_wp_error( $pushres ) ) {
+					$this->app->write_log($pushres);
+					return $pushres;
+				}
 			}
 		}
 
@@ -192,7 +196,9 @@ class Pusher {
 			if ($key === "_thumbnail_id") {
 				// Change the featured image ID into a post name
 				$image = get_post($value[0]);
-				$data['featuredimage'] = $image->post_name;
+				if ($image) {
+					$data['featuredimage'] = $image->post_name;
+				}
 				continue;
 			}
 			if ($key === "_edit_last") {
