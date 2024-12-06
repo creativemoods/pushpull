@@ -171,8 +171,27 @@ class Puller {
 			'post_date_gmt',
 			'post_status',
 			'post_type',
-			'post_author'
+			'post_author',
 		]);
+		// Manage post_parent
+		if ($post->post_parent) {
+			$arr = explode('/', $post->post_parent); // e.g. "page/our-story"
+			$parent = $this->app->utils()->getLocalPostByName($arr[0], $arr[1]);
+			if ($parent !== null) {
+				$subpost['post_parent'] = $parent->ID;
+			} else {
+				$this->app->write_log(
+					sprintf(
+						/* translators: 1: parent post name */
+						__( 'Parent post %1$s not found.', 'pushpull' ),
+						$post->post_parent,
+					)
+				);
+				$subpost['post_parent'] = 0;
+			}
+		} else {
+			$subpost['post_parent'] = 0;
+		}
 		$id = wp_insert_post($subpost, true);
 		if (is_wp_error($id)) {
 			$this->app->write_log(__( 'Error creating post.', 'pushpull' ));

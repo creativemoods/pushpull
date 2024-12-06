@@ -254,6 +254,7 @@ const columns = [
 		<StyledDataGrid
 			rows={repository}
 			columns={columns}
+      getRowId={(row) => row.id + row.localChecksum + row.remoteChecksum}
 			filterModel={{
 				items: [
           { field: 'status', operator: 'isAnyOf', value: statuses },

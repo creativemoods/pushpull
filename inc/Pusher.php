@@ -141,6 +141,13 @@ class Pusher {
 		$data['post_date'] = $post->post_date;
 		$data['post_date_gmt'] = $post->post_date_gmt;
 		$data['post_excerpt'] = $post->post_excerpt;
+		// Manage post_parent
+		if ($post->post_parent === 0) {
+			$data['post_parent'] = null;
+		} else {
+			$parent = get_post($post->post_parent);
+			$data['post_parent'] = $parent ? $parent->post_type."/".$parent->post_name : null;
+		}
 		$data['author'] = get_userdata($post->post_author)->user_login;
 
 		// Meta
