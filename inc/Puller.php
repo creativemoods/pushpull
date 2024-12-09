@@ -220,6 +220,11 @@ class Puller {
 					}
 					wp_set_post_terms($id, [$termid], $taxonomy, true);
 				}
+				// Specifically for woocommerce (TODO move to woocommerce hook)
+				// TODO only if it wasn't in the list of terms
+				if ($taxonomy === 'product_cat') {
+					wp_remove_object_terms( $id, 'uncategorized', 'product_cat' );
+				}
 			}
 		}
 
