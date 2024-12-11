@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.0.64
+* Version:           0.0.65
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -36,7 +36,7 @@ use WP_CLI;
 
 require __DIR__ . '/vendor/autoload.php';
 
-add_action( 'plugins_loaded', array( new PushPull, 'boot' ) );
+add_action( 'admin_init', array( new PushPull, 'boot' ) );
 
 /**
 * Class PushPull
