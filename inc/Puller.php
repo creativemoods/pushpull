@@ -174,7 +174,7 @@ class Puller {
 			'post_author',
 		]);
 		// Manage post_parent
-		if ($post->post_parent) {
+		if (property_exists($post, 'post_parent')) {
 			$arr = explode('/', $post->post_parent); // e.g. "page/our-story"
 			$parent = $this->app->utils()->getLocalPostByName($arr[0], $arr[1]);
 			if ($parent !== null) {

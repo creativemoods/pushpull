@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.0.65
+* Version:           0.0.66
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -36,7 +36,7 @@ use WP_CLI;
 
 require __DIR__ . '/vendor/autoload.php';
 
-add_action( 'admin_init', array( new PushPull, 'boot' ) );
+add_action( 'plugins_loaded', array( new PushPull, 'boot' ) );
 
 /**
 * Class PushPull
@@ -158,6 +158,16 @@ class PushPull {
 	*/
 	public function boot() {
 		//add_action( 'init', array( $this, 'l10n' ) );
+
+		// Pushpull is not needed on the frontend TODO This doesn't work
+/*		$this->write_log(is_admin());
+		$this->write_log(wp_doing_ajax());
+		$this->write_log(wp_doing_cron());
+		$this->write_log(defined('REST_REQUEST'));
+		if (!is_admin() && !wp_doing_ajax() && !wp_doing_cron() && !defined('REST_REQUEST')) {
+			$this->write_log("returning");
+			return;
+		}*/
 
 		add_action('admin_action_pushpull_push', array(&$this, 'push_post'));
 		add_action('admin_action_pushpull_pull', array(&$this, 'pull_post'));
