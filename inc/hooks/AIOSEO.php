@@ -36,8 +36,10 @@ class AIOSEO {
 	 * @return void
 	 */
 	public function add_hooks() {
-		add_filter('pushpull_default_export_all-in-one-seo-pack', array(&$this, 'export'), 10, 2);
-		add_action('pushpull_default_import_all-in-one-seo-pack', array(&$this, 'import'), 10, 1);
+		if (is_plugin_active('generateblocks/plugin.php')) {
+			add_filter('pushpull_default_export_all-in-one-seo-pack', array(&$this, 'export'), 10, 2);
+			add_action('pushpull_default_import_all-in-one-seo-pack', array(&$this, 'import'), 10, 1);
+		}
 	}
 
     /**

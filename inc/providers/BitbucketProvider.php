@@ -149,11 +149,9 @@ class BitbucketProvider extends GitProvider implements GitProviderInterface {
     /**
      * List repository hierarchy.
      * For Bitbucket we can't easily get the repository contents, so we will download the archive and extract it.
-     *
-     * @param string $repoName Repository name.
-     * @return array Repository details.
+     *     * @return array Repository details.
      */
-    public function listRepository(string $repoName): array {
+    public function listRepository(): array {
         $this->app->write_log("Fetching remote repo contents.");
 
         $archiveContent = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/archive.zip?sha=' . $this->branch() );

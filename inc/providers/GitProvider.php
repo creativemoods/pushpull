@@ -31,7 +31,7 @@ class GitProvider {
      * @return string
      */
     protected function url() {
-        return get_option($this->app::URL_OPTION_KEY);
+        return get_option($this->app::HOST_OPTION_KEY);
     }
 
     /**

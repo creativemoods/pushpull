@@ -8,7 +8,7 @@ import { store as noticesStore } from '@wordpress/notices';
 import PropTypes from 'prop-types';
 import { addQueryArgs } from '@wordpress/url';
 import Stack from '@mui/material/Stack';
-import { Button as MUIButton, FormHelperText, Select as MUISelect, MenuItem } from '@mui/material';
+import { Button as MUIButton, FormHelperText, Select as MUISelect, MenuItem, Grid2 } from '@mui/material';
 
 const SettingsPane = (props) => {
 	const { selectedPostTypes, setSelectedPostTypes } = props;
@@ -21,7 +21,9 @@ const SettingsPane = (props) => {
 	const [branch, setBranch] = useState('');
 	const [branches, setBranches] = useState([]);
 	const [postTypes, setPostTypes] = useState({});
-	const [testColor, setTestColor] = useState('primary');
+	const [tables, setTables] = useState([]);
+	const [selectedTables, setSelectedTables] = useState([]);
+    const [testColor, setTestColor] = useState('primary');
 
 	useEffect( () => {
 		apiFetch({
@@ -33,6 +35,7 @@ const SettingsPane = (props) => {
 			setRepository(data['repository']);
 			setBranch(data['branch']);
 			setSelectedPostTypes(data['posttypes']);
+			setSelectedTables(data['tables']);
 		}).catch((error) => {
 			console.error(error);
 		});
@@ -40,6 +43,13 @@ const SettingsPane = (props) => {
 			path: '/pushpull/v1/posttypes',
 		}).then((data) => {
 			setPostTypes(data);
+		}).catch((error) => {
+			console.error(error);
+		});
+		apiFetch({
+			path: '/pushpull/v1/tables',
+		}).then((data) => {
+			setTables(data);
 		}).catch((error) => {
 			console.error(error);
 		});
@@ -83,6 +93,25 @@ const SettingsPane = (props) => {
 		}
 	};
 
+	const setCheckedTable = (t, v) => {
+		var arr = [...selectedTables];
+		if (v) {
+			// Add t
+			var index = arr.indexOf(t);
+			if (index === -1) {
+				arr.push(t);
+				setSelectedTables(arr);
+			}
+		} else {
+			// Remove t
+			var index = arr.indexOf(t);
+			if (index !== -1) {
+				arr.splice(index, 1);
+				setSelectedTables(arr);
+			}
+		}
+	};
+
 	const handleSubmit = (event) => {
 		event.preventDefault();
 		apiFetch({
@@ -95,6 +124,7 @@ const SettingsPane = (props) => {
 				'branch': branch,
 				'repository': repository,
 				'posttypes': selectedPostTypes,
+				'tables': selectedTables,
 			},
 		}).then((data) => {
 			createSuccessNotice(__('Settings saved.'), {
@@ -180,17 +210,37 @@ const SettingsPane = (props) => {
 					</MUISelect>
 					<FormHelperText>{__( 'The branch to commit to.', 'pushpull' )}</FormHelperText>
 				</Stack>
-				{Object.entries(postTypes).map(([k, v]) => (<CheckboxControl
+			</CardBody>
+		</Card>
+		<Card>
+			<CardBody>
+				<h2>{ __( 'Post types', 'pushpull' ) }</h2>
+				<Grid2 container rowSpacing={2} columnSpacing={2}>
+				{Object.entries(postTypes).map(([k, v]) => (<Grid2 size={3} key={k}><CheckboxControl
 					__nextHasNoMarginBottom
 					label={v}
 					key={k}
 					//help="Manage {v} post type ?"
 					checked={ selectedPostTypes.includes(k) }
 					onChange={ (v) => setCheckedPostType(k, v) }
-					/>))}
-				<Button variant="primary" type="submit">
+					/></Grid2>))}
+				</Grid2>
+				<h2>{ __( 'Custom tables', 'pushpull' ) }</h2>
+				<Grid2 container rowSpacing={2} columnSpacing={2}>
+				{Object.entries(tables).map(([plugin, tables]) => Object.entries(tables).map(([table, v]) => (<Grid2 size={3} key={plugin+"-"+table}><CheckboxControl
+					__nextHasNoMarginBottom
+					label={plugin+" / "+table}
+					key={plugin+"-"+table}
+					//help="Manage {v} post type ?"
+					checked={ selectedTables.includes(plugin+"-"+table) }
+					onChange={ (v) => setCheckedTable(plugin+"-"+table, v) }
+					/></Grid2>
+				)))}
+				</Grid2>
+				<p>&nbsp;</p>
+				<MUIButton variant="contained" type="submit">
 					{ __( 'Save', 'pushpull' ) }
-				</Button>
+				</MUIButton>
 			</CardBody>
 		</Card>
 	</form>

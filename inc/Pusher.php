@@ -53,6 +53,44 @@ class Pusher {
 	}
 
 	/**
+	 * Push a table row
+	 *
+	 * @param string $plugin the name of the plugin that owns the table.
+	 * @param string $table the name of the table.
+	 * @param int $rowid the row id.
+	 *
+	 * @return integer|WP_Error
+	 */
+	public function pushTableRow($plugin, $table, $name) {
+		// pushpull deployscript special case
+		if ($plugin === "pushpull" && $table === "deployscript") {
+			$this->app->write_log(__( 'Starting deployscript export to Git.', 'pushpull' ));
+			$localdeployscript = get_option('pushpull_deployscript');
+			$this->app->state()->saveFile('_ppconfig/deployscript', $localdeployscript);
+			$this->app->state()->createCommit("Updated PushPull deploy script", ['_ppconfig/deployscript' => md5($localdeployscript)]);
+			$this->app->write_log(__( 'End deployscript export to Git.', 'pushpull' ));
+			return true;
+		}
+		if (has_filter('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name')) {
+			$localrow = apply_filters('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name', $name);
+			if ($localrow) {
+				$this->app->write_log(__( 'Starting table row export to Git.', 'pushpull' ));
+
+				$pushres = $this->create_tablerow_commit($plugin, $table, $localrow);
+				if ( is_wp_error( $pushres ) ) {
+					$this->app->write_log($pushres);
+					return $pushres;
+				}
+	
+				$this->app->write_log(__( 'End table row export to Git.', 'pushpull' ));
+				return true;
+			} else {
+				return new WP_Error( '404', esc_html__( 'Row not found', 'pushpull' ), array( 'status' => 404 ) );
+			}
+		}
+	}
+
+	/**
 	 * Push a post and all its images and featured image
 	 *
 	 * @param WP_Post $post Post to push.
@@ -61,16 +99,14 @@ class Pusher {
 	 */
 	public function push( WP_Post $post ) {
 		$this->app->write_log(__( 'Starting export to Git.', 'pushpull' ));
+		$changes = [];
+
 		// Handle post images
 		$imageids = $this->extract_imageids($post);
 		foreach ($imageids as $imageid) {
 			if ($imageid['id']) {
 				$image = get_post($imageid['id']);
-				$pushres = $this->create_commit($image);
-				if ( is_wp_error( $pushres ) ) {
-					$this->app->write_log($pushres);
-					return $pushres;
-				}
+				$changes = $changes + $this->create_post_commit_changes($image);
 			}
 		}
 
@@ -81,24 +117,15 @@ class Pusher {
 			if (!$image) {
 				$this->app->write_log("Unable to get featured image ".$meta['_thumbnail_id'][0]);
 			} else {
-				$pushres = $this->create_commit($image);
-				if ( is_wp_error( $pushres ) ) {
-					$this->app->write_log($pushres);
-					return $pushres;
-				}
+				$changes = $changes + $this->create_post_commit_changes($image);
 			}
 		}
 
 		// Handle post
-		$pushres = $this->create_commit($post);
-		if ( is_wp_error( $pushres ) ) {
-			$this->app->write_log($pushres);
-			return $pushres;
-		}
+		$changes = $changes + $this->create_post_commit_changes($post);
 
+		$this->app->state()->createCommit("Updated file: _".$post->post_type."/".$post->post_name, $changes);
 		$this->app->write_log(__( 'End export to Git.', 'pushpull' ));
-		// Invalidate cache
-		//delete_transient('pushpull_remote_repo_files');
 
 		return true;
 	}
@@ -121,6 +148,27 @@ class Pusher {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$the_attachment = $wpdb->get_col($wpdb->prepare("SELECT ID FROM $wpdb->posts WHERE guid LIKE %s;", '%'.$image_url ));
 		return empty($the_attachment) ? null : $the_attachment[0];
+	}
+
+	/**
+	 * Create an export of a table row for storing in a file on Git
+	 *
+	 * @param string $plugin the name of the plugin that owns the table.
+	 * @param string $table the name of the table.
+	 * @return array $row the row data.
+	 *
+	 */
+	public function create_tablerow_export(string $plugin, string $table, array $row) {
+		$newvalue = [];
+
+		if (has_filter('pushpull_tableexport_' . $plugin . '_' . $table)) {
+			$newvalue = apply_filters('pushpull_tableexport_' . $plugin . '_' . $table, $row);
+		} elseif (has_filter('pushpull_default_tableexport_' . $plugin . '_' . $table)) {
+			// Call our default filter hook for this table
+			$newvalue = apply_filters('pushpull_default_tableexport_' . $plugin . '_' . $table, $row);
+		}
+
+		return $newvalue;
 	}
 
 	/**
@@ -383,45 +431,48 @@ class Pusher {
 	}
 
 	/**
-	 * Create a commit and push it to Git.
+	 * Create changes for a commit.
 	 * If $post is an attachment, it will include all related media into the commit
 	 *
 	 * @param WP_Post $post
 	 * @return mixed
 	 */
-	protected function create_commit(WP_Post $post) {
+	protected function create_post_commit_changes(WP_Post $post) {
 		$content = $this->create_post_export($post);
-		$files = [];
+		$changes = [];
 		if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
 			// This is an attachment that references a file in uploads, we need to add it
 			$fn = wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'][0];
 			$wpfsd = new WP_Filesystem_Direct( false );
 			$fc = $wpfsd->get_contents ( $fn );
-			$files[] = [
-				'action' => 'tbd', // Will be filled in later in GitLabProvider
-				'file_path' => "_media/".$content['meta']['_wp_attached_file'][0],
-				'content' => base64_encode($fc),
-				'encoding' => "base64",
-			];
+			$name = "_media/".$content['meta']['_wp_attached_file'][0];
+			$hash = $this->app->state()->saveFile($name, base64_encode($fc));
+			$changes[$name] = $hash;
 		}
+		$name = "_".$post->post_type."/".$post->post_name;
+		$hash = $this->app->state()->saveFile($name, wp_json_encode($content));
+		$changes[$name] = $hash;
 
-		$user = get_userdata(get_current_user_id());
-		$wrap = [
-			'branch' => 'tbd', // Will be filled in later in the provider
-			'commit_message' => "PushPull Git export single post",
-			'actions' => array_merge([[
-				'action' => 'tbd', // Will be filled in later in GitLabProvider
-				'file_path' => "_".$post->post_type."/".$post->post_name,
-				'content' => wp_json_encode($content),
-			]], $files),
-			'author_email' => $user->user_email,
-			'author_name' => $user->display_name,
-		];
+		return $changes;
+	}
 
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-		$res = $gitProvider->commit($wrap);
+	/**
+	 * Create a tablerow commit and push it to Git.
+	 *
+	 * @param array $row
+	 * @return mixed
+	 */
+	// TODO apply same changes as with create_post_commit_changes
+	 protected function create_tablerow_commit(string $plugin, string $table, array $row) {
+		list($keyname, $content) = $this->create_tablerow_export($plugin, $table, $row);
 
-		return $res;
+		// Escape slashes in keyname (TODO in create_commit and in other providers)
+		$keyname = str_replace("/", "@@SLASH@@", $keyname);
+
+		$name = "_".$plugin."#".$table."/".$keyname;
+		$hash = $this->app->state()->saveFile($name, wp_json_encode($content));
+		$this->app->state()->createCommit("Updated file: $name", [$name => $hash]);
+
+		return true;
 	}
 }

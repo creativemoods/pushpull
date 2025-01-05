@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.0.67
+* Version:           0.1.0
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -27,11 +27,15 @@ use CreativeMoods\PushPull\CLI;
 use CreativeMoods\PushPull\Utils;
 use CreativeMoods\PushPull\Pusher;
 use CreativeMoods\PushPull\Repository;
+use CreativeMoods\PushPull\WPFileStateManager;
+use CreativeMoods\PushPull\hooks\Core;
 use CreativeMoods\PushPull\hooks\GenerateBlocks;
 use CreativeMoods\PushPull\hooks\RealMediaLibrary;
 use CreativeMoods\PushPull\hooks\Polylang;
 use CreativeMoods\PushPull\hooks\PPTest;
 use CreativeMoods\PushPull\hooks\AIOSEO;
+use CreativeMoods\PushPull\hooks\Redirection;
+use CreativeMoods\PushPull\hooks\WooCommerce;
 use WP_CLI;
 
 require __DIR__ . '/vendor/autoload.php';
@@ -47,7 +51,8 @@ add_action( 'plugins_loaded', array( new PushPull, 'boot' ) );
 class PushPull {
 	const PROVIDER_OPTION_KEY = 'pushpull_provider';
 	const POST_TYPES_OPTION_KEY = 'pushpull_post_types';
-	const URL_OPTION_KEY  = 'pushpull_host';
+	const TABLES_OPTION_KEY = 'pushpull_tables';
+	const HOST_OPTION_KEY  = 'pushpull_host';
 	const REPO_OPTION_KEY  = 'pushpull_repository';
 	const TOKEN_OPTION_KEY = 'pushpull_oauth_token';
 	const BRANCH_OPTION_KEY = 'pushpull_branch';
@@ -79,7 +84,14 @@ class PushPull {
 	* @var Admin
 	*/
 	public $admin;
-	
+
+	/**
+	 * local git clone
+	 *
+	 * @var WPFileStateManager
+	 */
+	protected $state;
+
 	/**
 	* CLI object.
 	*
@@ -174,26 +186,18 @@ class PushPull {
 		add_filter('post_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);
 		add_filter('page_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);
 
+		// Wordpress core tables
+		$core = new Core($this);
+		$core->add_hooks();
+
 		// Register all default hooks for 3rd party plugins
-		if (is_plugin_active('generateblocks/plugin.php')) {
-			$gb = new GenerateBlocks($this);
-			$gb->add_hooks();
-		}
-		if (is_plugin_active('real-media-library-lite/index.php')) {
-			$rml = new RealMediaLibrary($this);
-			$rml->add_hooks();
-		}
-		if (is_plugin_active('polylang/polylang.php')) {
-			$pll = new Polylang($this);
-			$pll->add_hooks();
-		}
-		if (is_plugin_active('pptest/pptest.php')) {
-			$ppt = new PPTest($this);
-			$ppt->add_hooks();
-		}
-		if (is_plugin_active('all-in-one-seo-pack/all_in_one_seo_pack.php')) {
-			$aioseo = new AIOSEO($this);
-			$aioseo->add_hooks();
+		foreach (glob(__DIR__ . '/hooks/*.php') as $file) {
+			$hook_class = basename($file, '.php');
+			$class_name = "CreativeMoods\\PushPull\\hooks\\$hook_class";
+			if (class_exists($class_name)) {
+				$instance = new $class_name($this);
+				$instance->add_hooks();
+			}
 		}
 	}
 
@@ -376,6 +380,19 @@ class PushPull {
 		}
 		
 		return $this->deleter;
+	}
+	
+	/**
+	* Lazy-load State.
+	*
+	* @return WPFileStateManager
+	*/
+	public function state() {
+		if ( ! $this->state ) {
+			$this->state = new WPFileStateManager( $this, 'main' );
+		}
+		
+		return $this->state;
 	}
 	
 	/**

@@ -35,6 +35,20 @@ class Admin {
 		require_once plugin_dir_path( __FILE__ ) . '../templates/app.php';
 	}
 
+	function pp_admin_bar_item($wp_admin_bar) {
+		// Add a new top-level menu item
+		$wp_admin_bar->add_node([
+			'id'    => 'pp-status',
+			// TODO display icon correctly
+			'title' => '<span class="dashicons-before dashicons-cloud-saved"></span> PushPull Status',
+			'href'  => admin_url('admin.php?page=pushpull'),
+			'meta'  => [
+				'class' => '', // Optional CSS class
+				'title' => 'Go to PushPull', // Tooltip text
+			],
+		]);
+	}
+
 	/**
 	 * Enqueue scripts and style
 	 */
@@ -73,5 +87,6 @@ class Admin {
 	public function add_admin_menu() {
 		add_menu_page( __( 'PushPull', 'pushpull'), __( 'PushPull', 'pushpull'), 'manage_options', 'pushpull', array( $this, 'pushpull_admin_page' ), 'dashicons-cloud-saved', '85' );
 		add_action( 'admin_enqueue_scripts', array( $this, 'pushpull_admin_enqueue_scripts' ) );
+		add_action('admin_bar_menu', array(&$this, 'pp_admin_bar_item'), 100);
 	}
 }

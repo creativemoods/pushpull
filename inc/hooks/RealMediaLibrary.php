@@ -36,8 +36,10 @@ class RealMediaLibrary {
 	 * @return void
 	 */
 	public function add_hooks() {
-		add_filter('pushpull_default_export_real-media-library-lite', array(&$this, 'export'), 10, 2);
-		add_action('pushpull_default_import_real-media-library-lite', array(&$this, 'import'), 10, 1);
+		if (is_plugin_active('real-media-library-lite/index.php')) {
+			add_filter('pushpull_default_export_real-media-library-lite', array(&$this, 'export'), 10, 2);
+			add_action('pushpull_default_import_real-media-library-lite', array(&$this, 'import'), 10, 1);
+		}
 	}
 
     /**

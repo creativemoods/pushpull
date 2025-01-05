@@ -8,6 +8,9 @@ namespace CreativeMoods\PushPull;
 
 use WP_REST_Request;
 use CreativeMoods\PushPull\providers\GitProviderFactory;
+use CreativeMoods\PushPull\hooks\Core;
+use CreativeMoods\PushPull\hooks\Redirection;
+use CreativeMoods\PushPull\hooks\WooCommerce;
 
 /**
  * Class Rest
@@ -48,6 +51,13 @@ class Rest {
 		register_rest_route('pushpull/v1', '/posttypes/', array(
 			'methods' => 'GET',
 			'callback' => array( $this, 'get_post_types'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/tables/', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'get_tables'),
 			'permission_callback' => function () {
 				return current_user_can( 'administrator' );
 			}
@@ -94,13 +104,6 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
-		register_rest_route('pushpull/v1', '/repo/sync', array(
-			'methods' => 'POST',
-			'callback' => array( $this, 'sync'),
-			'permission_callback' => function () {
-				return current_user_can( 'administrator' );
-			}
-		));
 		register_rest_route('pushpull/v1', '/pull/', array(
 			'methods' => 'POST',
 			'callback' => array( $this, 'pull'),
@@ -122,9 +125,51 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
-		register_rest_route('pushpull/v1', '/delete/', array(
+		register_rest_route('pushpull/v1', '/deletelocal/', array(
 			'methods' => 'POST',
-			'callback' => array( $this, 'delete'),
+			'callback' => array( $this, 'deletelocal'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/deleteremote/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'deleteremote'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/sync/localcommits', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'getlocalcommits'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/sync/remotecommits', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'getremotecommits'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/sync/status', array(
+			'methods' => 'GET',
+			'callback' => array( $this, 'getsyncstatus'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/sync/push', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'repopush'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/sync/pull', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'repopull'),
 			'permission_callback' => function () {
 				return current_user_can( 'administrator' );
 			}
@@ -162,13 +207,43 @@ class Rest {
 		$params = $data->get_query_params();
 		$params['post_type'] = sanitize_text_field($params['post_type']);
 		$params['post_name'] = sanitize_text_field($params['post_name']);
-		// Local
-		$post = $this->app->utils()->getLocalPostByName($params['post_type'], $params['post_name']);
-		$local = $this->app->pusher()->create_post_export($post);
-		// Remote
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-		$remote = $gitProvider->getRemotePostByName($params['post_type'], $params['post_name']);
+		// PushPull deployscript special case
+		if ($params['post_type'] === "pushpull#deployscript") {
+			$local = get_option('pushpull_deployscript');
+			$remote = $this->app->state()->getFile('_ppconfig/deployscript');
+		} else if (strpos($params['post_type'], '#') !== false) {
+			// This is a table
+			list($plugin, $table) = explode('#', $params['post_type']);
+			// Local
+			$local = [];
+			if (has_filter('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name')) {
+				$row = apply_filters('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name', $params['post_name']);
+				if ($row) {
+					$local = $this->app->pusher()->create_tablerow_export($plugin, $table, $row)[1];
+				}
+			}
+			// Remote
+			$remote = $this->app->state()->getFile("_".$plugin.'#'.$table."/".str_replace("/", "@@SLASH@@", $params['post_name']));
+			$remote = json_decode($remote, true);
+			if (!$remote) {
+				$remote = [];
+			}
+		} else {
+			// This is a post type
+			// Local
+			$post = $this->app->utils()->getLocalPostByName($params['post_type'], $params['post_name']);
+			if ($post) {
+				$local = $this->app->pusher()->create_post_export($post);
+			} else {
+				$local = [];
+			}
+			// Remote
+			$remote = $this->app->state()->getFile("_".$params['post_type']."/".$params['post_name']);
+			$remote = json_decode($remote, true);
+			if (!$remote) {
+				$remote = [];
+			}
+		}
 
 		return ['local' => wp_json_encode($local, JSON_PRETTY_PRINT), 'remote' => wp_json_encode($remote, JSON_PRETTY_PRINT)];
 	}
@@ -202,6 +277,29 @@ class Rest {
 	}
 
 	/**
+	 * Gets a list of all registered tables.
+	 *
+	 * @return string[] — An array of table names.
+	 */
+	public function get_tables() {
+		$tables = [];
+
+		$core = new Core($this->app);
+		$tables['core'] = $core->add_tables();
+
+		foreach (glob(__DIR__ . '/hooks/*.php') as $file) {
+			$hook_class = basename($file, '.php');
+			$class_name = "CreativeMoods\\PushPull\\hooks\\$hook_class";
+			if (class_exists($class_name) && method_exists($class_name, 'add_tables')) {
+				$instance = new $class_name($this->app);
+				$tables[strtolower($hook_class)] = $instance->add_tables();
+			}
+		}
+
+		return $tables;
+	}
+
+	/**
 	 * Get a list of branches for a provider, url, token and repository.
 	 *
 	 * @param WP_REST_Request $data
@@ -226,7 +324,15 @@ class Rest {
 	 * @return array — The current settings.
 	 */
 	public function get_settings() {
-		return ['provider' => get_option('pushpull_provider', 'github'), 'posttypes' => get_option('pushpull_post_types', []), 'oauth-token' => get_option('pushpull_oauth_token'), 'host' => get_option('pushpull_host'), 'repository' => get_option('pushpull_repository'), 'branch' => get_option('pushpull_branch', 'main')];
+		return [
+			'provider' => get_option($this->app::PROVIDER_OPTION_KEY, 'github'),
+			'posttypes' => get_option($this->app::POST_TYPES_OPTION_KEY, []),
+			'tables' => get_option($this->app::TABLES_OPTION_KEY, []),
+			'oauth-token' => get_option($this->app::TOKEN_OPTION_KEY, ''),
+			'host' => get_option($this->app::HOST_OPTION_KEY, ''),
+			'repository' => get_option($this->app::REPO_OPTION_KEY, ''),
+			'branch' => get_option($this->app::BRANCH_OPTION_KEY, 'main'),
+		];
 	}
 
 	/**
@@ -244,31 +350,31 @@ class Rest {
 		if (!in_array($params['provider'], array_map(function($v) { return $v['id']; }, $this->app->utils()->getProviders()))) {
 			return new \WP_Error('invalid_provider', __('The provided provider is not valid.', 'pushpull'));
 		}
-		update_option('pushpull_provider', $params['provider']);
+		update_option($this->app::PROVIDER_OPTION_KEY, $params['provider']);
 
 		$params['host'] = sanitize_text_field($params['host']);
 		if (!filter_var($params['host'], FILTER_VALIDATE_URL)) {
 			return new \WP_Error('invalid_host', __('The provided url is not a valid URL.', 'pushpull'));
 		}
-		update_option('pushpull_host', $params['host']);
+		update_option($this->app::HOST_OPTION_KEY, $params['host']);
 
 		$params['repository'] = sanitize_text_field($params['repository']);
 		if (!preg_match('/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/', $params['repository'])) {
 			return new \WP_Error('invalid_repository', __('The provided repository is not valid. It should contain a slash and be properly formatted.', 'pushpull'));
 		}
-		update_option('pushpull_repository', $params['repository']);
+		update_option($this->app::REPO_OPTION_KEY, $params['repository']);
 
 		$params['oauth-token'] = sanitize_text_field($params['oauth-token']);
-		update_option('pushpull_oauth_token', $params['oauth-token']);
+		update_option($this->app::TOKEN_OPTION_KEY, $params['oauth-token']);
 
 		$params['branch'] = sanitize_text_field($params['branch']);
-		update_option('pushpull_branch', $params['branch']);
+		update_option($this->app::BRANCH_OPTION_KEY, $params['branch']);
 
 		$params['posttypes'] = array_map('sanitize_text_field', $params['posttypes']);
-		update_option('pushpull_post_types', $params['posttypes']);
+		update_option($this->app::POST_TYPES_OPTION_KEY, $params['posttypes']);
 
-		// Invalidate cache
-		delete_transient('pushpull_remote_repo_files');
+		$params['tables'] = array_map('sanitize_text_field', $params['tables']);
+		update_option($this->app::TABLES_OPTION_KEY, $params['tables']);
 
 		return $this->get_settings();
 	}
@@ -288,7 +394,7 @@ class Rest {
 	 * @return string
 	 */
 	public function get_remote_repo() {
-		return wp_json_encode($this->app->repository()->remote_tree(), JSON_PRETTY_PRINT);
+		return wp_json_encode($this->app->state()->listFiles(), JSON_PRETTY_PRINT);
 	}
 
 	/**
@@ -310,8 +416,14 @@ class Rest {
 		$params = $data->get_json_params();
 		$params['posttype'] = sanitize_text_field($params['posttype']);
 		$params['postname'] = sanitize_text_field($params['postname']);
-		// verify that the post exists
-		$id = $this->app->puller()->pull($params['posttype'], $params['postname']);
+		if (strpos($params['posttype'], '#') !== false) {
+			list($plugin, $table) = explode('#', $params['posttype']);
+			$id = $this->app->puller()->pull_tablerow($plugin, $table, $params['postname']);
+		} else {
+			// verify that the post exists
+			$id = $this->app->puller()->pull($params['posttype'], $params['postname']);
+		}
+
 		return is_wp_error($id) ? $id : ['id' => $id];
 	}
 
@@ -323,19 +435,47 @@ class Rest {
 	 */
 	public function push(WP_REST_Request $data) {
 		$params = $data->get_json_params();
-		$params['posttype'] = sanitize_text_field($params['posttype']);
-		$params['postname'] = sanitize_text_field($params['postname']);
-		$id = $this->app->pusher()->pushByName($params['posttype'], $params['postname']);
+		$posttype = sanitize_text_field($params['posttype']);
+		$postname = sanitize_text_field($params['postname']);
+		if (strpos($posttype, '#' ) !== false) {
+			// table row
+			$plugin = explode('#', $posttype)[0];
+			$table = explode('#', $posttype)[1];
+			$id = $this->app->pusher()->pushTableRow($plugin, $table, $postname);
+		} else {
+			// post type
+			$id = $this->app->pusher()->pushByName($posttype, $postname);
+		}
+
 		return is_wp_error($id) ? $id : ['id' => $id];
 	}
 
 	/**
-	 * Deletes a post.
+	 * Deletes a post locally.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return WP_Error|bool|array
+	 */
+	public function deletelocal(WP_REST_Request $data) {
+		$params = $data->get_json_params();
+		$params['posttype'] = sanitize_text_field($params['posttype']);
+		$params['postname'] = sanitize_text_field($params['postname']);
+		$localpost = $this->app->utils()->getLocalPostByName($params['posttype'], $params['postname']);
+		if ($localpost !== null) {
+			$this->app->write_log(__( 'Deleting local post.', 'pushpull' ));
+			return wp_delete_post($localpost->ID, true);
+		}
+
+		return false;
+	}
+
+	/**
+	 * Deletes a post remotely.
 	 *
 	 * @param WP_REST_Request $data
 	 * @return WP_Error|array
 	 */
-	public function delete(WP_REST_Request $data) {
+	public function deleteremote(WP_REST_Request $data) {
 		$params = $data->get_json_params();
 		$params['posttype'] = sanitize_text_field($params['posttype']);
 		$params['postname'] = sanitize_text_field($params['postname']);
@@ -344,14 +484,180 @@ class Rest {
 	}
 
 	/**
-	 * Sync repo.
+	 * Get local commits.
 	 *
 	 * @param WP_REST_Request $data
 	 * @return WP_Error|array
 	 */
-	public function sync(WP_REST_Request $data) {
-		// Invalidate cache
-		delete_transient('pushpull_remote_repo_files');
+	public function getlocalcommits(WP_REST_Request $data) {
+		// Get local commits
+		$localcommits = $this->app->state()->getCommitLog();
+
+		return $localcommits;
+	}
+
+	/**
+	 * Get remote commits.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return WP_Error|array
+	 */
+	public function getremotecommits(WP_REST_Request $data) {
+		// Get remote commits
+		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+		$remotecommits = $gitProvider->getRepositoryCommits();
+
+		return $remotecommits;
+	}
+
+	/**
+	 * Get sync status.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return WP_Error|array
+	 */
+	public function getsyncstatus(WP_REST_Request $data) {
+		$res = [];
+		$res['localLatestCommitHash'] = $this->app->state()->getLatestCommitHash();
+		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+		$res['remoteLatestCommitHash'] = $gitProvider->getLatestCommitHash();
+		if ($res['localLatestCommitHash'] === null) {
+			// Local repository is empty
+			$res['status'] = 'localempty';
+			return $res;
+		}
+		if ($res['remoteLatestCommitHash'] === null) {
+			// Remote repository is empty
+			$res['status'] = 'remoteempty';
+			return $res;
+		}
+		if ($res['localLatestCommitHash'] === $res['remoteLatestCommitHash']) {
+			// Both repositories are at the same level
+			$res['status'] = 'synced';
+			return $res;
+		}
+		$remotecommits = $gitProvider->getRepositoryCommits();
+		$localcommits = $this->app->state()->getCommitLog();
+		if ($res['localLatestCommitHash'] !== $res['remoteLatestCommitHash']) {
+			$remoteHasLocalLatestCommitHash = $this->app->utils()->findObjectByProperty($remotecommits, 'id', $res, 'localLatestCommitHash');
+			$localHasRemoteLatestCommitHash = $this->app->utils()->findObjectByProperty($localcommits, 'id', $res, 'remoteLatestCommitHash');
+			// Repositories have diverged
+			if ($remoteHasLocalLatestCommitHash && $localHasRemoteLatestCommitHash) {
+				$res['status'] = 'conflict';
+				return $res;
+			}
+			// Remote repository is ahead of local
+			if ($remoteHasLocalLatestCommitHash) {
+				$res['status'] = 'needpull';
+				return $res;
+			}
+			// Local repository is ahead of remote
+			if ($localHasRemoteLatestCommitHash) {
+				$res['status'] = 'needpush';
+				return $res;
+			}
+			$res['status'] = 'conflict';
+			return $res;
+		}
+		// We shouldn't get to here
+		$this->app->write_log("Error: getSyncStatus reached end of function.");
+		$res['status'] = 'error';
+		return $res;
+	}
+
+	/**
+	 * Push changes to repo.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return WP_Error|array
+	 */
+	public function repopush(WP_REST_Request $data) {
+		$localLatestCommitHash = $this->app->state()->getLatestCommitHash();
+		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+		$remoteLatestCommitHash = $gitProvider->getLatestCommitHash();
+
+		// Get list of commits from the commit log
+		$commits = $this->app->state()->getCommitLog();
+
+		// Get commits from $remoteLatestCommitHash to $localLatestCommitHash
+		// TODO this will not work when there's no commit in the remote repository
+		$commits = $this->app->utils()->getElementsBetweenIds($commits, $remoteLatestCommitHash, $localLatestCommitHash);
+
+		$actions = [];
+		foreach ($commits as $commit) {
+			foreach ($commit['changes'] as $filePath => $hash) {
+				$actions[] = [
+					'action' => 'tbd',
+					'file_path' => $filePath,
+					'content' => $this->app->state()->getFile($filePath),
+				];
+			}
+			$user = get_userdata(get_current_user_id());
+			$wrap = [
+				'branch' => 'tbd', // Will be filled in later in the provider
+				'commit_message' => $commit['message'],
+				'actions' => $actions,
+				'author_email' => $user->user_email,
+				'author_name' => $user->display_name,
+			];
+
+			$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+			$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+			$res = $gitProvider->commit($wrap);
+			$this->app->state()->updateCommitId($commit['id'], $res->id);
+		}
+
+		return ['result' => 'success'];
+	}
+
+	/**
+	 * Pull changes from repo.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return WP_Error|array
+	 */
+	public function repopull(WP_REST_Request $data) {
+		if ($this->app->state()->getLatestCommitHash()) {
+			// If we have a local commit hash, we use it to get the missing commits
+			$this->app->write_log('Getting diff from latest commit hash: '.$this->app->state()->getLatestCommitHash());
+			$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+			$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+			$localLatestCommitHash = $this->app->state()->getLatestCommitHash();
+			$remoteLatestCommitHash = $gitProvider->getLatestCommitHash();
+			$commits = $gitProvider->getRepositoryCommits();
+			$commits = $this->app->utils()->getElementsBetweenIds($commits, $localLatestCommitHash, $remoteLatestCommitHash);
+			foreach ($commits as $commit) {
+				$files = $gitProvider->getCommitFiles($commit->id);
+				foreach ($files as $file) {
+					list($type, $name) = explode('/', $file);
+					$content = $gitProvider->getRemotePostByName(ltrim($type, '_'), $name);
+					$this->app->state()->saveFile($file, $content);
+				}
+				$this->app->write_log($commit);
+			}
+			$this->app->state()->importcommits($commits, false);
+		} else {
+			// Otherwise, we need to get the remote hashes and initialize our local state with the latest commit hash from remote
+			$this->app->write_log('Getting remote hashes');
+			$provider = get_option($this->app::PROVIDER_OPTION_KEY);
+			$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
+			$remotehashes = $gitProvider->getRemoteHashes();
+			if (is_wp_error($remotehashes)) {
+				return $remotehashes;
+			}
+			// Initialize the state but don't create commits
+			$repofiles = $gitProvider->initializeRepository();
+			// Save state
+			$this->app->state()->saveState($repofiles);
+
+			// Get all remote commits and push them onto the local commit log
+			$commits = $gitProvider->getRepositoryCommits();
+			$this->app->state()->importcommits($commits, true);
+		}
+		$this->app->state()->saveLatestCommitHash($gitProvider->getLatestCommitHash());
 
 		return ['result' => 'success'];
 	}
@@ -362,12 +668,9 @@ class Rest {
 	 * @return string — The current deploy script.
 	 */
 	public function get_deployscript() {
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-		$deployscript = $gitProvider->getRemotePostByName('ppconfig', 'deployscript');
-		// TODO necessary ?
-		update_option('pushpull_deployscript', $deployscript);
-		return ['deployscript' => $deployscript];
+		$deployscript = get_option('pushpull_deployscript');
+
+		return ['deployscript' => $deployscript ? $deployscript : ""];
 	}
 
 	/**
@@ -378,13 +681,8 @@ class Rest {
 	 */
 	public function set_deployscript(WP_REST_Request $data) {
 		$params = $data->get_json_params();
-		$params['deployscript'] = sanitize_text_field($params['deployscript']);
-
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-		$gitProvider->setDeployScript($params['deployscript']);
-
-		update_option('pushpull_deployscript', $params['deployscript']);
+		update_option('pushpull_deployscript', sanitize_text_field($params['deployscript']));
+//		$this->app->state()->saveFile('_ppconfig/deployscript', sanitize_text_field($params['deployscript']));
 
 		return true;
 	}
@@ -396,8 +694,10 @@ class Rest {
 	 * @return bool — The result.
 	 */
 	public function deploy(WP_REST_Request $data) {
-		$deployscript = get_option('pushpull_deployscript', '');
-		eval($deployscript);
+		$deployscript = get_option('pushpull_deployscript');
+		if ($deployscript) {
+			eval($deployscript);
+		}
 
 		return true;
 	}

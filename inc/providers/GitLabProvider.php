@@ -2,8 +2,10 @@
 
 namespace CreativeMoods\PushPull\providers;
 
+use CreativeMoods\PushPull\WPFileStateManager;
 use WP_Error;
 use stdClass;
+use WP;
 
 class GitLabProvider extends GitProvider implements GitProviderInterface {
 	/**
@@ -85,7 +87,8 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 				if ( isset( $matches[1] ) ) {
 					$next_page = $this->call( $method, $matches[1], $body );
 					if ( ! is_wp_error( $next_page ) ) {
-						$body = array_merge( $body, $next_page );
+						//$body = array_merge( $body, $next_page );
+						$body = $body + $next_page;
 					}
 				}
 			}
@@ -105,7 +108,6 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 */
 	protected function git_exists( $name ) {
 		$res = $this->head($this->url() . '/projects/' . urlencode($this->repository()) . '/repository/files/' . urlencode($name) . "?ref=" . $this->branch());
-		//$this->app->write_log($res);
 		return array_key_exists('response', $res) && array_key_exists('code', $res['response']) && $res['response']['code'] === 200;
 	}
 
@@ -158,13 +160,12 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	}
 
 	/**
-     * List repository hierarchy.
+     * Initialize the repository.
      * For Gitlab we can't easily get the repository contents, so we will download the archive and extract it.
      *
-     * @param string $repoName Repository name.
      * @return array Repository details.
      */
-    public function listRepository(string $repoName): array {
+    public function initializeRepository(): array {
         $this->app->write_log("Fetching remote repo contents.");
 
 		// https://www.ramielcreations.com/using-streams-in-wordpress-http-requests
@@ -175,7 +176,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 			'headers' => array(
 				'PRIVATE-TOKEN' => $this->token(),
 			),
-			'timeout' => 30,
+			'timeout' => 60,
 			'stream' => true,
 			'filename' => $tempArchive,
 		);
@@ -196,17 +197,111 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
             }
             $filePath = $file->getPathname();
             $relativePath = str_replace($extractedDir, '', $filePath);
-            $hash = hash_file('sha256', $filePath);
-            $repoFiles[] = [
-                'path' => $relativePath,
-                'checksum' => $hash
-            ];
+			$contents = file_get_contents($filePath);
+            $hash = md5($contents);
+            $repoFiles[$relativePath] = [
+				/* TODO added for compat */
+				'path' => $relativePath,
+				'checksum' => $hash,
+				/* end added for compat */
+				'hash' => $hash,
+				'updated_at' => time(),
+				'status' => 'active',
+			];
+	
+			// Save the file to a transient but don't create a commit since we're initializing the state
+			$this->app->state()->saveFile($relativePath, $contents);
         }
         wp_delete_file($tempArchive);
         array_map('unlink', glob("$extractedDir/*.*"));
         $zip->close();
 
         return $repoFiles;
+    }
+
+	/**
+     * Get remote repository hashes.
+     *
+     * @return array|WP_Error
+     */
+    public function getRemoteHashes(): array|WP_Error {
+		// First check if the repository exists
+		$repo = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()));
+		if ( is_wp_error( $repo ) ) {
+			$this->app->write_log($repo);
+			return $repo;
+		}
+		// Then check if the branch exists
+		$branch = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/branches/' . $this->branch());
+		if ( is_wp_error( $branch ) ) {
+			$this->app->write_log($branch);
+			return $branch;
+		}
+		// If we now get an error it means the repository is empty
+		$tree = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/tree?ref=' . $this->branch() . '&recursive=true' );
+		if ( is_wp_error( $tree ) ) {
+			return [];
+		}
+
+		$hashes = [];
+		foreach ($tree as $item) {
+			if ($item->type === 'blob') {
+				$hashes[$item->path] = $item->id;
+			}
+        }
+
+		return $hashes;
+    }
+
+	/**
+	 * Get repository commits.
+	 * 
+	 * @return array|WP_Error
+	 */
+	public function getRepositoryCommits(): array|WP_Error {
+		$commits = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits?all=true&ref_name=' . $this->branch() );
+
+		if ( is_wp_error( $commits ) ) {
+			$this->app->write_log($commits);
+			return $commits;
+		}
+
+		return $commits;
+	}
+
+	/**
+	 * Get commit details
+     * @param string $commit Commit ID.
+	 *
+	 * @return array|WP_Error
+	 */
+	public function getCommitFiles(string $commit): array|WP_Error {
+		$diffs = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits/' . $commit . '/diff');
+
+		if ( is_wp_error( $diffs ) ) {
+			$this->app->write_log($diffs);
+			return $diffs;
+		}
+
+		return array_map(function($item) {
+			return $item->new_path;
+		}, $diffs);
+	}
+
+	/**
+	 * Get the latest commit hash of the repository.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function getLatestCommitHash(): string|WP_Error {
+		$res = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/branches/' . $this->branch() );
+
+		if ( is_wp_error( $res ) ) {
+			$this->app->write_log($res);
+			return $res;
+		}
+
+        return $res->commit->id;
     }
 
 	/**
@@ -220,8 +315,6 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 			$wrap['actions'][$key]['action'] = $this->git_exists($action['file_path']) ? 'update' : 'create';
 		}
 		$wrap['branch'] = $this->branch();
-		// TODO Check if $wrap was really updated
-		//$this->app->write_log($wrap);
 		$res = $this->call( 'POST', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits', $wrap );
 
 		return $res;

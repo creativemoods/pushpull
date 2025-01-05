@@ -45,14 +45,13 @@ class Deleter {
 		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
 
 		// Get attachment from Git
+		// TODO replace slashes
 		$done = $gitProvider->deleteRemotePostByName($type, $name);
 		if (!$done || is_wp_error($done)) {
 			return new WP_Error( '404', esc_html__( 'Post not found', 'pushpull' ), array( 'status' => 404 ) );
 		}
 
 		$this->app->write_log(__( 'End deletion.', 'pushpull' ));
-		// Invalidate cache
-		delete_transient('pushpull_remote_repo_files');
 
 		return true;
 	}

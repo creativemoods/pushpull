@@ -80,9 +80,10 @@ const DeployPane = (props) => {
 					</MUIButton>
 					<FormHelperText>{__( 'Deploy configuration and contents.', 'pushpull' )}</FormHelperText>
 				</Stack>
-				<Button variant="primary" type="submit">
+				<p>&nbsp;</p>
+				<MUIButton variant="contained" color='primary' type="submit">
 					{ __( 'Save', 'pushpull' ) }
-				</Button>
+				</MUIButton>
 			</CardBody>
 		</Card>
 	</form>

@@ -36,11 +36,13 @@ class PPTest {
 	 * @return void
 	 */
 	public function add_hooks() {
-		add_filter('pushpull_default_term_taxname', array(&$this, 'term_taxname'), 10, 2);
-		add_filter('pushpull_default_meta_custom_meta_key_simple_managed', array(&$this, 'meta_custom_meta_key_simple_managed'), 10, 2);
-		add_filter('pushpull_default_meta_custom_meta_key_multiple_managed', array(&$this, 'meta_custom_meta_key_multiple_managed'), 10, 2);
-		add_filter('pushpull_default_export_pptest', array(&$this, 'export'), 10, 2);
-		add_action('pushpull_default_import_pptest', array(&$this, 'import'), 10, 1);
+		if (is_plugin_active('pptest/pptest.php')) {
+			add_filter('pushpull_default_term_taxname', array(&$this, 'term_taxname'), 10, 2);
+			add_filter('pushpull_default_meta_custom_meta_key_simple_managed', array(&$this, 'meta_custom_meta_key_simple_managed'), 10, 2);
+			add_filter('pushpull_default_meta_custom_meta_key_multiple_managed', array(&$this, 'meta_custom_meta_key_multiple_managed'), 10, 2);
+			add_filter('pushpull_default_export_pptest', array(&$this, 'export'), 10, 2);
+			add_action('pushpull_default_import_pptest', array(&$this, 'import'), 10, 1);
+		}
 	}
 
     /**

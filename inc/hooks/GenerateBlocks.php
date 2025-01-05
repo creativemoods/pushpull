@@ -36,13 +36,15 @@ class GenerateBlocks {
 	 * @return void
 	 */
 	public function add_hooks() {
-		add_filter('pushpull_default_meta__generateblocks_reusable_blocks', array(&$this, 'meta__generateblocks_reusable_blocks'), 10, 2);
-		add_filter('pushpull_default_meta__generateblocks_dynamic_css_version', array(&$this, 'meta__generateblocks_dynamic_css_version'), 10, 2);
-		add_filter('pushpull_default_meta_generateblocks_patterns_tree', array(&$this, 'meta_generateblocks_patterns_tree'), 10, 2);
-		add_filter('pushpull_default_meta__generate_element_display_conditions', array(&$this, 'meta__generate_element_display_conditions'), 10, 2);
-		add_filter('pushpull_default_meta__generate_element_exclude_conditions', array(&$this, 'meta__generate_element_display_conditions'), 10, 2);
-		add_filter('pushpull_default_export_generateblocks', array(&$this, 'export'), 10, 2);
-		add_action('pushpull_default_import_generateblocks', array(&$this, 'import'), 10, 1);
+		if (is_plugin_active('generateblocks/plugin.php')) {
+			add_filter('pushpull_default_meta__generateblocks_reusable_blocks', array(&$this, 'meta__generateblocks_reusable_blocks'), 10, 2);
+			add_filter('pushpull_default_meta__generateblocks_dynamic_css_version', array(&$this, 'meta__generateblocks_dynamic_css_version'), 10, 2);
+			add_filter('pushpull_default_meta_generateblocks_patterns_tree', array(&$this, 'meta_generateblocks_patterns_tree'), 10, 2);
+			add_filter('pushpull_default_meta__generate_element_display_conditions', array(&$this, 'meta__generate_element_display_conditions'), 10, 2);
+			add_filter('pushpull_default_meta__generate_element_exclude_conditions', array(&$this, 'meta__generate_element_display_conditions'), 10, 2);
+			add_filter('pushpull_default_export_generateblocks', array(&$this, 'export'), 10, 2);
+			add_action('pushpull_default_import_generateblocks', array(&$this, 'import'), 10, 1);
+		}
 	}
 
     /**

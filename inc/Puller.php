@@ -40,11 +40,13 @@ class Puller {
 		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
 
 		// Get attachment from Git
-		$imagepost = $gitProvider->getRemotePostByName('attachment', $image);
+		$imagepost = $this->app->state()->getFile("_attachment/".$image);
+		$imagepost = json_decode($imagepost);
 		// Find local filename
 		$fn = wp_upload_dir()['path']."/".$imagepost->meta->_wp_attached_file[0];
 		// Get binary contents from Git
-		$media = $gitProvider->getRemotePostByName('media', $imagepost->meta->_wp_attached_file[0]);
+		$media = $this->app->state()->getFile("_media/".$imagepost->meta->_wp_attached_file[0]);
+		$media = base64_decode($media); // TODO necessary?
 		// Write binary contents to local file in uploads/
 		$wpfsd = new \WP_Filesystem_Direct( false );
 		// TODO check result
@@ -122,6 +124,71 @@ class Puller {
 	}
 
 	/**
+	 * Pull a table row.
+	 *
+	 * @param string $type the type of post.
+	 * @param string $name the name of the post.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function pull_tablerow( $plugin, $table, $name ) {
+		global $wpdb;
+
+		$this->app->write_log(
+			sprintf(
+				/* translators: 1: name of post */
+				__( 'Starting pull from Git for %1$s.', 'pushpull' ),
+				$name,
+			)
+		);
+
+		$row = $this->app->state()->getFile("_".$plugin.'#'.$table."/".str_replace("/", "@@SLASH@@", $name));
+		$row = json_decode($row, true);
+
+		// Check if local exists already
+		if (has_filter('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name')) {
+			$localrow = apply_filters('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name', $name);
+			if ($localrow) {
+				$this->app->write_log(__( 'Table row already exists locally. Deleting.', 'pushpull' ));
+				// TODO faire un hook pour la suppression!
+				$wpdb->delete($wpdb->prefix . $table, ['id' => $localrow['id']]);
+			}
+		}
+
+		// Perform custom import manipulations
+		$initialrow = $row;
+		if (has_filter('pushpull_default_tableimport_'.$plugin.'_'.$table.'_filter')) {
+			$row = apply_filters('pushpull_default_tableimport_'.$plugin.'_'.$table.'_filter', (array)$row);
+		}
+
+		// Insert
+		$table_name = $wpdb->prefix . $table;
+		$columns = array_keys((array)$row);
+		$values = array_values((array)$row);
+		$format = array_fill(0, count($values), '%s');
+		$wpdb->insert($table_name, array_combine($columns, $values), $format);
+		$id = $wpdb->insert_id;
+
+		if (has_action('pushpull_default_tableimport_'.$plugin.'_'.$table.'_action')) {
+			// We call the 3rd party filter hook if it exists
+			do_action('pushpull_default_tableimport_'.$plugin.'_'.$table.'_action', $id, (array)$initialrow, (array)$row);
+		} else {
+			// Call our default filter hook for this 3rd party plugin
+			do_action('pushpull_tableimport_'.$plugin.'_'.$table.'_action', $id, (array)$initialrow, (array)$row);
+		}
+
+		$this->app->write_log(
+			sprintf(
+				/* translators: 1: id of post */
+				__( 'End import from Git with id %1$s.', 'pushpull' ),
+				$id,
+			)
+		);
+
+		return $id;
+	}
+
+	/**
 	 * Pull a post.
 	 *
 	 * @param string $type the type of post.
@@ -138,10 +205,9 @@ class Puller {
 			)
 		);
 
-		// TODO Est-ce qu'on peut éviter d'utiliser la factory plusieurs fois ?
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-		$post = $gitProvider->getRemotePostByName($type, $name);
+		$post = $this->app->state()->getFile("_".$type."/".$name);
+		$post = json_decode($post);
+
 		// TODO We need to add wp_slash otherwise \\ will be deleted -> too many slashes ?
 		$post->post_content = str_replace("@@DOMAIN@@", get_home_url(), wp_slash($post->post_content));
 

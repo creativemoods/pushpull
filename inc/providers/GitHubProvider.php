@@ -138,10 +138,9 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
     /**
      * List repository hierarchy.
      *
-     * @param string $repoName Repository name.
      * @return array Repository details.
      */
-    public function listRepository(string $repoName): array {
+    public function listRepository(): array {
 		// TODO Change to use a local pull from the repository
 /*        $this->app->write_log("Fetching remote repo contents.");
 

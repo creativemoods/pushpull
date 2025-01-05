@@ -6,6 +6,7 @@
 
 namespace CreativeMoods\PushPull\providers;
 
+use CreativeMoods\PushPull\WPFileStateManager;
 use WP_Error;
 use stdClass;
 
@@ -16,10 +17,16 @@ interface GitProviderInterface {
     /**
      * List repository hierarchy.
      *
-     * @param string $repoName Repository name.
      * @return array Repository details.
      */
-    public function listRepository(string $repoName): array;
+    public function initializeRepository(): array;
+
+    /**
+     * Get remote hashes.
+     *
+     * @return array|WP_Error
+     */
+    public function getRemoteHashes(): array|WP_Error;
 
 	/**
 	 * Get a post by type and name.
@@ -73,4 +80,26 @@ interface GitProviderInterface {
 	 * @return bool|WP_Error
 	 */
 	public function setDeployScript(string $deployscript): bool|WP_Error;
+
+	/**
+	 * Get the latest commit hash of the repository.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function getLatestCommitHash():string|WP_Error;
+
+	/**
+	 * Get repository commits.
+	 * 
+	 * @return array|WP_Error
+	 */
+	public function getRepositoryCommits(): array|WP_Error;
+
+	/**
+	 * Get commit details
+     * @param string $commit Commit ID.
+	 *
+	 * @return array|WP_Error
+	 */
+	public function getCommitFiles(string $commit): array|WP_Error;
 }

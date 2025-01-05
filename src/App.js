@@ -1,8 +1,8 @@
 import React from 'react';
 import Notices from './components/Notices';
 import SettingsPane from './components/SettingsPane';
-import DiffPane from './components/DiffPane';
 import RepositoryPane from './components/RepositoryPane';
+import SyncPane from './components/SyncPane';
 import DeployPane from './components/DeployPane';
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from 'react';
@@ -38,31 +38,21 @@ function a11yProps(index) {
 // TODO Move to Typescript
 const App = () => {
 	const [tab, setTab] = useState('settings');
-	const [curPost, setCurPost] = useState("");
-	const [curPostType, setCurPostType] = useState("");
 	const [selectedPostTypes, setSelectedPostTypes] = useState([]);
 	
 	const onSelect = ( event, tabName ) => {
 		setTab(tabName);
 	};
 	
-	const handleSync = (event) => {
-		apiFetch({
-			path: '/pushpull/v1/repo/sync',
-			method: 'POST',
-			data: {},
-		}).then((data) => {
-			console.log("synced");
-		}).catch((error) => {
-			console.error(error);
-		});
-	};
-
 	useEffect( () => {
 		apiFetch({
 			path: '/pushpull/v1/settings',
 		}).then((data) => {
-			setSelectedPostTypes(['Please select a post type', ...data['posttypes']]);
+			if (!selectedPostTypes.includes('Please select a post type')) {
+				setSelectedPostTypes(['Please select a post type', ...data['posttypes']]);
+			} else {
+				setSelectedPostTypes(data['posttypes']);
+			}
 		}).catch((error) => {
 			console.error(error);
 		});
@@ -76,26 +66,19 @@ const App = () => {
 		<Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
 		<Tabs value={tab} onChange={onSelect} aria-label="Main tabs">
 			<Tab label="Settings" value='settings' {...a11yProps('settings')} />
-			<Tab label="Diff viewer" value='diff' {...a11yProps('diff')} />
 			<Tab label="Repository" value='repo' {...a11yProps('repo')} />
+			<Tab label="Sync" value='sync' {...a11yProps('sync')} />
 			<Tab label="Deploy" value='deploy' {...a11yProps('deploy')} />
 		</Tabs>
-		<MUIButton
-						variant="contained"
-						onClick={handleSync}
-						color={'primary'}
-					>
-						{ __( 'Sync', 'pushpull' ) }
-			</MUIButton>
 		</Box>
 		<CustomTabPanel value={tab} index='settings'>
 		<SettingsPane selectedPostTypes={selectedPostTypes} setSelectedPostTypes={setSelectedPostTypes} />
 		</CustomTabPanel>
-		<CustomTabPanel value={tab} index='diff'>
-		{tab === "diff" && <DiffPane curPost={curPost} setCurPost={setCurPost} curPostType={curPostType} setCurPostType={setCurPostType} selectedPostTypes={selectedPostTypes} />}
-		</CustomTabPanel>
 		<CustomTabPanel value={tab} index='repo'>
-		{tab === "repo" && <RepositoryPane setTab={setTab} setCurPost={setCurPost} setCurPostType={setCurPostType} />}
+		{tab === "repo" && <RepositoryPane />}
+		</CustomTabPanel>
+		<CustomTabPanel value={tab} index='sync'>
+		{tab === "sync" && <SyncPane />}
 		</CustomTabPanel>
 		<CustomTabPanel value={tab} index='deploy'>
 		{tab === "deploy" && <DeployPane />}
