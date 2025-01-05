@@ -96,7 +96,14 @@ class Redirection {
 	public function get_redirection_items_by_name(string $name): array|bool {
 		global $wpdb;
 
-		$row = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}redirection_items WHERE url = '{$name}'");
+		$query = $wpdb->prepare(
+			"SELECT * FROM {$wpdb->prefix}redirection_items WHERE url = %s",
+			$name
+		);
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$results = $wpdb->get_results($query);
+		$row = !empty($results) ? $results[0] : null;
+
 		if ($row) {
 			return (array) $row;
 		}
