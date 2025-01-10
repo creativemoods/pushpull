@@ -62,15 +62,6 @@ class Pusher {
 	 * @return integer|WP_Error
 	 */
 	public function pushTableRow($plugin, $table, $name) {
-		// pushpull deployscript special case
-		if ($plugin === "pushpull" && $table === "deployscript") {
-			$this->app->write_log(__( 'Starting deployscript export to Git.', 'pushpull' ));
-			$localdeployscript = get_option('pushpull_deployscript');
-			$this->app->state()->saveFile('_ppconfig/deployscript', $localdeployscript);
-			$this->app->state()->createCommit("Updated PushPull deploy script", ['_ppconfig/deployscript' => md5($localdeployscript)]);
-			$this->app->write_log(__( 'End deployscript export to Git.', 'pushpull' ));
-			return true;
-		}
 		if (has_filter('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name')) {
 			$localrow = apply_filters('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name', $name);
 			if ($localrow) {

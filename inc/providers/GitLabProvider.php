@@ -197,6 +197,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
             }
             $filePath = $file->getPathname();
             $relativePath = str_replace($extractedDir, '', $filePath);
+			/* phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents */
 			$contents = file_get_contents($filePath);
             $hash = md5($contents);
             $repoFiles[$relativePath] = [
@@ -336,30 +337,5 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 		}
 
 		return $branches;
-	}
-
-	/**
-	 * Commit deploy script.
-	 *
-	 * @param string $deployscript
-	 * @return bool|WP_Error
-	 */
-	public function setDeployScript(string $deployscript): bool|WP_Error {
-		$user = get_userdata(get_current_user_id());
-		$wrap = [
-			'branch' => 'tbd', // Will be filled in later in the provider
-			'commit_message' => "PushPull Git export deploy script",
-			'actions' => [[
-				'action' => 'tbd', // Will be filled in later in GitLabProvider
-				'file_path' => "_ppconfig/deployscript",
-				'content' => $deployscript,
-			]],
-			'author_email' => $user->user_email,
-			'author_name' => $user->display_name,
-		];
-		$res = $this->commit($wrap);
-
-		// TODO
-		return true;
 	}
 }

@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.1.1
+* Version:           0.1.2
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -40,6 +40,10 @@ use WP_CLI;
 
 require __DIR__ . '/vendor/autoload.php';
 
+// Register activation and deactivation hooks
+register_activation_hook( __FILE__, array( 'CreativeMoods\\PushPull\\PushPull', 'activate' ) );
+register_uninstall_hook( __FILE__, array( 'CreativeMoods\\PushPull\\PushPull', 'uninstall' ) );
+
 add_action( 'plugins_loaded', array( new PushPull, 'boot' ) );
 
 /**
@@ -56,6 +60,9 @@ class PushPull {
 	const REPO_OPTION_KEY  = 'pushpull_repository';
 	const TOKEN_OPTION_KEY = 'pushpull_oauth_token';
 	const BRANCH_OPTION_KEY = 'pushpull_branch';
+	const PP_DEPLOY_TABLE = 'pushpull_deploy';
+	const PP_DEPLOY_VERSION_OPTION_KEY = 'pushpull_deploy_version';
+	const PP_DEPLOY_VERSION = '1.0';
 
 	/**
 	* Object name.
@@ -164,7 +171,75 @@ class PushPull {
 			WP_CLI::add_command( 'pushpull', $this->cli() );
 		}
 	}
+
+	/**
+	 * Activation hook.
+	 *
+	 * @return void
+	 */
+	static public function activate() {
+		global $wpdb;
+
+		// Define the table name
+		$table_name = $wpdb->prefix . self::PP_DEPLOY_TABLE;
+
+		// Check if the table already exists
+		if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+			// Include the WordPress file for dbDelta function
+			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+			// Define the SQL for creating the table
+			$charset_collate = $wpdb->get_charset_collate();
+			$sql = "CREATE TABLE $table_name (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				deployorder INT(11) NOT NULL,
+				type VARCHAR(20) NOT NULL,
+				name VARCHAR(191) NOT NULL,
+				value LONGTEXT NOT NULL,
+				PRIMARY KEY (id),
+				UNIQUE KEY uniq_name (name),
+				INDEX idx_name (name),
+				INDEX idx_deployorder (deployorder)
+			) $charset_collate;";
+
+// TODO "option_set", "option_add", "option_merge", "custom", "lang_add", "rest_request", "folder_create", "category_create", "pushpull_pull", "pushpull_pullall", "menu_create", "row_insert", "rewrite_rules_flush", "email_send"
+
+			// Execute the query to create the table
+			dbDelta($sql);
+
+			add_option( self::PP_DEPLOY_VERSION_OPTION_KEY, self::PP_DEPLOY_VERSION );
+		}
+
+/*		$installed_ver = get_option( self::PP_DEPLOY_VERSION_OPTION_KEY );
+		if ( $installed_ver != self::PP_DEPLOY_VERSION ) {
+			$charset_collate = $wpdb->get_charset_collate();
+			$sql = "CREATE TABLE $table_name (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				name VARCHAR(255) NOT NULL,
+				newcol VARCHAR(255) NOT NULL,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+				PRIMARY KEY (id)
+			) $charset_collate;";
+			// Execute the query to create the table
+			dbDelta($sql);
+
+			add_option( self::PP_DEPLOY_VERSION_OPTION_KEY, self::PP_DEPLOY_VERSION );
+		}*/
+	}
+
+	/**
+	 * Uninstallation hook.
+	 *
+	 * @return void
+	 */
+	static public function uninstall() {
+		global $wpdb;
+
+		$table_name = $wpdb->prefix . self::PP_DEPLOY_TABLE;
 	
+		$wpdb->query( "DROP TABLE IF EXISTS $table_name" );
+	}
+
 	/**
 	* Attaches the plugin's hooks into WordPress.
 	*/
@@ -193,12 +268,19 @@ class PushPull {
 		// Register all default hooks for 3rd party plugins
 		foreach (glob(__DIR__ . '/hooks/*.php') as $file) {
 			$hook_class = basename($file, '.php');
+			if ($hook_class == '_PushPull') {
+				continue;
+			}
 			$class_name = "CreativeMoods\\PushPull\\hooks\\$hook_class";
 			if (class_exists($class_name)) {
 				$instance = new $class_name($this);
 				$instance->add_hooks();
 			}
 		}
+
+		// Manually register myself TODO why doesn't it work in the loop above ?
+		$instance = new \CreativeMoods\PushPull\hooks\_PushPull($this);
+		$instance->add_hooks();
 	}
 
 	public function push_post()

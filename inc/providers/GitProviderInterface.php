@@ -74,14 +74,6 @@ interface GitProviderInterface {
     public function getBranches(string $url, string $token, string $repository): array|WP_Error;
 
 	/**
-	 * Commit deploy script.
-	 *
-	 * @param string $deployscript
-	 * @return bool|WP_Error
-	 */
-	public function setDeployScript(string $deployscript): bool|WP_Error;
-
-	/**
 	 * Get the latest commit hash of the repository.
 	 *
 	 * @return string|WP_Error

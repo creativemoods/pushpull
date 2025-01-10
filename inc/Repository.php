@@ -68,9 +68,6 @@ class Repository {
 			}
 		}
 
-		// PushPull deploy script special case
-		$localdeployscript = get_option('pushpull_deployscript');
-		$localres['pushpull#deployscript']['Deploy Script'] = ['localchecksum' => md5($localdeployscript), 'remotechecksum' => null];
 		return $localres;
 	}
 
@@ -88,11 +85,7 @@ class Repository {
 			preg_match('/_(.+?)\/(.+)/', $remotefile, $matches);
 			$posttype = $matches[1];
 			$postname = str_replace('@@SLASH@@', '/', $matches[2]);
-			if ($posttype === 'ppconfig' && $postname === 'deployscript') {
-				// Special case for pushpull#deployscript
-				$deployscript = $this->app->state()->getFile('_ppconfig/deployscript');
-				$localres['pushpull#deployscript']['Deploy Script']['remotechecksum'] = md5($deployscript);
-			} else if (strpos($posttype, '#' ) !== false) {
+			if (strpos($posttype, '#' ) !== false) {
 				// This is a table row
 				$plugin = explode('#', $posttype)[0];
 				$table = explode('#', $posttype)[1];

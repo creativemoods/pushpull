@@ -174,21 +174,37 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
-		register_rest_route('pushpull/v1', '/deployscript/', array(
+
+		// Manage deploy items
+		register_rest_route('pushpull/v1', '/deploy/', array(
 			'methods' => 'GET',
-			'callback' => array( $this, 'get_deployscript'),
-			'permission_callback' => function () {
-				return current_user_can( 'administrator' );
-			}
-		));
-		register_rest_route('pushpull/v1', '/deployscript/', array(
-			'methods' => 'POST',
-			'callback' => array( $this, 'set_deployscript'),
+			'callback' => array( $this, 'get_deployitems'),
 			'permission_callback' => function () {
 				return current_user_can( 'administrator' );
 			}
 		));
 		register_rest_route('pushpull/v1', '/deploy/', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'update_deployitem'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/deploy/create', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'create_deployitem'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/deploy/', array(
+			'methods' => 'DELETE',
+			'callback' => array( $this, 'delete_deployitem'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
+		register_rest_route('pushpull/v1', '/deploy/deploy', array(
 			'methods' => 'POST',
 			'callback' => array( $this, 'deploy'),
 			'permission_callback' => function () {
@@ -207,11 +223,7 @@ class Rest {
 		$params = $data->get_query_params();
 		$params['post_type'] = sanitize_text_field($params['post_type']);
 		$params['post_name'] = sanitize_text_field($params['post_name']);
-		// PushPull deployscript special case
-		if ($params['post_type'] === "pushpull#deployscript") {
-			$local = get_option('pushpull_deployscript');
-			$remote = $this->app->state()->getFile('_ppconfig/deployscript');
-		} else if (strpos($params['post_type'], '#') !== false) {
+		if (strpos($params['post_type'], '#') !== false) {
 			// This is a table
 			list($plugin, $table) = explode('#', $params['post_type']);
 			// Local
@@ -224,8 +236,12 @@ class Rest {
 			}
 			// Remote
 			$remote = $this->app->state()->getFile("_".$plugin.'#'.$table."/".str_replace("/", "@@SLASH@@", $params['post_name']));
-			$remote = json_decode($remote, true);
-			if (!$remote) {
+			if ($remote) {
+				$remote = json_decode($remote, true);
+				if (!$remote) {
+					$remote = [];
+				}
+			} else {
 				$remote = [];
 			}
 		} else {
@@ -479,8 +495,9 @@ class Rest {
 		$params = $data->get_json_params();
 		$params['posttype'] = sanitize_text_field($params['posttype']);
 		$params['postname'] = sanitize_text_field($params['postname']);
-		$done = $this->app->deleter()->deleteByName($params['posttype'], $params['postname']);
-		return is_wp_error($done) ? $done : ['done' => $done];
+		$done = $this->app->state()->deleteFile("_".$params['posttype']."/".$params['postname']);
+
+		return $done ? $done : ['done' => $done];
 	}
 
 	/**
@@ -662,29 +679,103 @@ class Rest {
 		return ['result' => 'success'];
 	}
 
-	/**
-	 * Returns the current deploy script.
-	 *
-	 * @return string — The current deploy script.
-	 */
-	public function get_deployscript() {
-		$deployscript = get_option('pushpull_deployscript');
+	// Manage deploy items
 
-		return ['deployscript' => $deployscript ? $deployscript : ""];
+	/**
+	 * Returns the deploy items.
+	 *
+	 * @return array — The deploy items.
+	 */
+	public function get_deployitems() {
+		global $wpdb;
+
+		// Define the table name
+		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+
+		$results = $wpdb->get_results("SELECT * FROM $table_name", ARRAY_A);
+
+		return $results;
 	}
 
 	/**
-	 * Saves the deploy script.
+	 * Creates a deploy item.
 	 *
-	 * @param WP_REST_Request $data
-	 * @return bool — The results.
+	 * @return int|false
 	 */
-	public function set_deployscript(WP_REST_Request $data) {
-		$params = $data->get_json_params();
-		update_option('pushpull_deployscript', sanitize_text_field($params['deployscript']));
-//		$this->app->state()->saveFile('_ppconfig/deployscript', sanitize_text_field($params['deployscript']));
+	public function create_deployitem(WP_REST_Request $data):int|false {
+		global $wpdb;
 
-		return true;
+		$params = $data->get_json_params();
+		$params['deployorder'] = sanitize_text_field($params['deployorder']);
+		$params['name'] = sanitize_text_field($params['name']);
+		$params['type'] = sanitize_text_field($params['type']);
+		$params['value'] = sanitize_text_field($params['value']);
+
+		// Define the table name
+		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+
+		$wpdb->insert(
+			$table_name,
+			[
+				'deployorder' => $params['deployorder'],
+				'name' => $params['name'],
+				'type' => $params['type'],
+				'value' => $params['value'],
+			],
+		);
+		$lastid = $wpdb->insert_id;
+
+		return $lastid;
+	}
+
+	/**
+	 * Updates a deploy item.
+	 *
+	 * @return int|false
+	 */
+	public function update_deployitem(WP_REST_Request $data):int|false {
+		global $wpdb;
+
+		$params = $data->get_json_params();
+		$params['id'] = sanitize_text_field($params['id']);
+		$params['deployorder'] = sanitize_text_field($params['deployorder']);
+		$params['name'] = sanitize_text_field($params['name']);
+		$params['type'] = sanitize_text_field($params['type']);
+		$params['value'] = sanitize_text_field($params['value']);
+
+		// Define the table name
+		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+
+		return $wpdb->update(
+			$table_name,
+			[
+				'deployorder' => $params['deployorder'],
+				'name' => $params['name'],
+				'type' => $params['type'],
+				'value' => $params['value'],
+			],
+			['id' => $params['id']]
+		);
+	}
+
+	/**
+	 * Deletes a deploy item.
+	 *
+	 * @return int|false
+	 */
+	public function delete_deployitem(WP_REST_Request $data):int|false {
+		global $wpdb;
+
+		$params = $data->get_json_params();
+		$params['id'] = sanitize_text_field($params['id']);
+
+		// Define the table name
+		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+
+		return $wpdb->delete(
+			$table_name,
+			['id' => $params['id']]
+		);
 	}
 
 	/**
@@ -694,11 +785,23 @@ class Rest {
 	 * @return bool — The result.
 	 */
 	public function deploy(WP_REST_Request $data) {
-		$deployscript = get_option('pushpull_deployscript');
-		if ($deployscript) {
-			eval($deployscript);
-		}
+		global $wpdb;
 
-		return true;
+		$params = $data->get_json_params();
+		$params['id'] = sanitize_text_field($params['id']);
+
+		// Define the table name
+		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+
+		$query = $wpdb->prepare(
+			"SELECT * FROM {$table_name} WHERE id = %d",
+			$params['id']
+		);
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
+		$deployitem = $wpdb->get_row($query);
+		if ($deployitem->type === 'option_set') {
+			return update_option($deployitem->name, $deployitem->value);
+		}
 	}
 }

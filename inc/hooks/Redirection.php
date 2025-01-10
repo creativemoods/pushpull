@@ -79,7 +79,14 @@ class Redirection {
 	public function get_redirection_groups_by_name(string $name): array|bool {
 		global $wpdb;
 
-		$row = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}redirection_groups WHERE name = '{$name}'");
+		$query = $wpdb->prepare(
+			"SELECT * FROM {$wpdb->prefix}redirection_groups WHERE name = %s",
+			$name
+		);
+
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
+		$row = $wpdb->get_row($query);
 		if ($row) {
 			return (array) $row;
 		}
@@ -100,10 +107,10 @@ class Redirection {
 			"SELECT * FROM {$wpdb->prefix}redirection_items WHERE url = %s",
 			$name
 		);
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
-		$results = $wpdb->get_results($query);
-		$row = !empty($results) ? $results[0] : null;
 
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
+		$row = $wpdb->get_row($query);
 		if ($row) {
 			return (array) $row;
 		}
@@ -125,8 +132,16 @@ class Redirection {
 
 		// Remove ID from data
 		$data = $this->app->utils()->array_without_keys($data, ['id']);
+
 		// Replace group_id with group name
-		$group = $wpdb->get_row("SELECT name FROM {$wpdb->prefix}redirection_groups WHERE id = {$data['group_id']}");
+		$query = $wpdb->prepare(
+			"SELECT name FROM {$wpdb->prefix}redirection_groups WHERE id = %d",
+			$data['group_id']
+		);
+
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
+		$group = $wpdb->get_row($query);
 		if ($group) {
 			$data['group_id'] = $group->name;
 		}
@@ -145,7 +160,14 @@ class Redirection {
 		global $wpdb;
 
 		// Replace group name with group_id
-		$group = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}redirection_groups WHERE name = {$data['group_id']}");
+		$query = $wpdb->prepare(
+			"SELECT id FROM {$wpdb->prefix}redirection_groups WHERE name = %s",
+			$data['group_id']
+		);
+
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
+		$group = $wpdb->get_row($query);
 		if ($group) {
 			$data['group_id'] = $group->id;
 		}

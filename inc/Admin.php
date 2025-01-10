@@ -39,8 +39,7 @@ class Admin {
 		// Add a new top-level menu item
 		$wp_admin_bar->add_node([
 			'id'    => 'pp-status',
-			// TODO display icon correctly
-			'title' => '<span class="dashicons-before dashicons-cloud-saved"></span> PushPull Status',
+			'title' => '<div class="ab-icon dashicons-cloud-saved"></div> PushPull Status',
 			'href'  => admin_url('admin.php?page=pushpull'),
 			'meta'  => [
 				'class' => '', // Optional CSS class
