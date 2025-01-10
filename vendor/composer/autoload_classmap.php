@@ -24,6 +24,7 @@ return array(
     'CreativeMoods\\PushPull\\hooks\\RealMediaLibrary' => $baseDir . '/inc/hooks/RealMediaLibrary.php',
     'CreativeMoods\\PushPull\\hooks\\Redirection' => $baseDir . '/inc/hooks/Redirection.php',
     'CreativeMoods\\PushPull\\hooks\\WooCommerce' => $baseDir . '/inc/hooks/WooCommerce.php',
+    'CreativeMoods\\PushPull\\hooks\\_PushPull' => $baseDir . '/inc/hooks/_PushPull.php',
     'CreativeMoods\\PushPull\\providers\\BitbucketProvider' => $baseDir . '/inc/providers/BitbucketProvider.php',
     'CreativeMoods\\PushPull\\providers\\GitHubProvider' => $baseDir . '/inc/providers/GitHubProvider.php',
     'CreativeMoods\\PushPull\\providers\\GitLabProvider' => $baseDir . '/inc/providers/GitLabProvider.php',

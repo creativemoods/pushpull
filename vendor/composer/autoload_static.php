@@ -39,6 +39,7 @@ class ComposerStaticInit493fc6768438ce8bcc87dab9316a2a69
         'CreativeMoods\\PushPull\\hooks\\RealMediaLibrary' => __DIR__ . '/../..' . '/inc/hooks/RealMediaLibrary.php',
         'CreativeMoods\\PushPull\\hooks\\Redirection' => __DIR__ . '/../..' . '/inc/hooks/Redirection.php',
         'CreativeMoods\\PushPull\\hooks\\WooCommerce' => __DIR__ . '/../..' . '/inc/hooks/WooCommerce.php',
+        'CreativeMoods\\PushPull\\hooks\\_PushPull' => __DIR__ . '/../..' . '/inc/hooks/_PushPull.php',
         'CreativeMoods\\PushPull\\providers\\BitbucketProvider' => __DIR__ . '/../..' . '/inc/providers/BitbucketProvider.php',
         'CreativeMoods\\PushPull\\providers\\GitHubProvider' => __DIR__ . '/../..' . '/inc/providers/GitHubProvider.php',
         'CreativeMoods\\PushPull\\providers\\GitLabProvider' => __DIR__ . '/../..' . '/inc/providers/GitLabProvider.php',
