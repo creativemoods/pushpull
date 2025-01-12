@@ -159,7 +159,7 @@ const SyncPane = () => {
     },
     {
       field: 'title',
-      headerName: 'Title',
+      headerName: 'Message',
       width: 140,
       editable: false,
     },

@@ -63,7 +63,7 @@ class Repository {
 				$tablerow = $this->app->pusher()->create_tablerow_export($plugin, $table, $row);
 				if ($tablerow) {
 					list($keyname, $content) = $tablerow;
-					$localres[$plugin.'#'.$table][$keyname] = ['localchecksum' => md5(wp_json_encode($content)), 'remotechecksum' => null];
+					$localres[$plugin.'@'.$table][$keyname] = ['localchecksum' => md5(wp_json_encode($content)), 'remotechecksum' => null];
 				}
 			}
 		}
@@ -85,10 +85,10 @@ class Repository {
 			preg_match('/_(.+?)\/(.+)/', $remotefile, $matches);
 			$posttype = $matches[1];
 			$postname = str_replace('@@SLASH@@', '/', $matches[2]);
-			if (strpos($posttype, '#' ) !== false) {
+			if (strpos($posttype, '@' ) !== false) {
 				// This is a table row
-				$plugin = explode('#', $posttype)[0];
-				$table = explode('#', $posttype)[1];
+				$plugin = explode('@', $posttype)[0];
+				$table = explode('@', $posttype)[1];
 				if (in_array($plugin.'-'.$table, get_option($this->app::TABLES_OPTION_KEY))) {
 					if (array_key_exists($posttype, $localres) && array_key_exists($postname, $localres[$posttype])) {
 						$localres[$posttype][$postname]['remotechecksum'] = $filestate['hash'];

@@ -206,26 +206,53 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @return stdClass|WP_Error
 	 */
     public function commit(array $wrap): stdClass|WP_Error {
-		// Doesn't seem we can commit multiple files in one go, so we will have to loop
-		foreach ($wrap['actions'] as $action) {
-			$fileData = [
-				'message' => $wrap['commit_message'],
-				'content' => base64_encode($action['content']),
-				'branch' => $this->branch(),
-				'committer' => ['name' => $wrap['author_name'], 'email' => $wrap['author_email']],
-				'sha' => $this->git_exists($action['file_path']),
-			];
-
-			$endpoint = $this->url() . '/repos/' . $this->repository() . '/contents/' . $action['file_path'];
-			$response = $this->call('PUT', $endpoint, $fileData);
-
-			if (is_wp_error($response)) {
-				return $response;
+		// Create a blob for each $wrap action
+		foreach ($wrap['actions'] as $key => $action) {
+			$wrap['actions'][$key]['sha'] = $this->git_exists($action['file_path']);
+			if ($wrap['actions'][$key]['sha'] === null) {
+				$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/blobs', ['encoding' => 'utf-8', 'content' => $action['content']] );
+				if (is_wp_error($res)) {
+					$this->app->write_log($res);
+					return $res;
+				}
+				$wrap['actions'][$key]['sha'] = $res->sha;
 			}
 		}
 
-		// TODO last only
-		return $response;
+		// Create a tree referencing the blobs
+		$tree = [];
+		foreach ($wrap['actions'] as $action) {
+			$tree[] = [
+				'path' => $action['file_path'],
+				'mode' => '100644',
+				'type' => 'blob',
+				'sha' => $action['sha'],
+			];
+		}
+		$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/trees', ['tree' => $tree] );
+		if ( is_wp_error( $res ) ) {
+			$this->app->write_log($res);
+			return $res;
+		}
+
+		// Create a commit referencing the tree
+		$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/commits', ['message' => $wrap['commit_message'], 'tree' => $res->sha, 'parents' => [$this->getLatestCommitHash()]] );
+		if ( is_wp_error( $res ) ) {
+			$this->app->write_log($res);
+			return $res;
+		}
+
+		// Update the branch reference
+		$res = $this->call( 'PATCH', $this->url() . '/repos/' . $this->repository() . '/git/refs/heads/' . $this->branch(), ['sha' => $res->sha] );
+		if ( is_wp_error( $res ) ) {
+			$this->app->write_log($res);
+			return $res;
+		}
+
+		// Our code expects the commit id in id, not in sha
+		$res->id = $res->object->sha;
+
+		return $res;
 	}
 
 	/**
@@ -239,10 +266,169 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	public function getBranches(string $url, string $token, string $repository): array|WP_Error {
 		// TODO Need to override repo, url and token
         $branches = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/branches' );
+		$this->app->write_log($branches);
 		if (is_wp_error($branches)) {
 			return $branches;
 		}
 
 		return $branches;
 	}
+
+	/**
+	 * Get the latest commit hash of the repository.
+	 *
+	 * @return string|WP_Error
+	 */
+	public function getLatestCommitHash(): string|WP_Error {
+		$res = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/branches/' . $this->branch() );
+
+		if ( is_wp_error( $res ) ) {
+			$this->app->write_log($res);
+			return $res;
+		}
+
+        return $res->commit->sha;
+    }
+
+	/**
+     * Initialize the repository.
+     * For Gitlab we can't easily get the repository contents, so we will download the archive and extract it.
+     *
+     * @return array Repository details.
+     */
+    public function initializeRepository(): array {
+        $this->app->write_log("Fetching remote repo contents.");
+
+		// https://www.ramielcreations.com/using-streams-in-wordpress-http-requests
+		// TODO replicate in other providers
+        $tempArchive = tempnam(sys_get_temp_dir(), 'repo_archive_');
+		$args = array(
+			'method'  => 'GET',
+			'headers' => array(
+				'Authorization' => 'Bearer ' . $this->token(),
+				'Accept' => 'application/vnd.github+json',
+			),
+			'timeout' => 60,
+			'stream' => true,
+			'filename' => $tempArchive,
+		);
+		$response = wp_remote_request( $this->url() . '/repos/' . $this->repository() . '/zipball/' . $this->branch(), $args );
+
+        $zip = new \ZipArchive;
+        if ($zip->open($tempArchive) === TRUE) {
+            $zip->extractTo(sys_get_temp_dir()); // Extract to the system temp directory
+        } else {
+            throw new \Exception("Failed to unzip the archive.");
+        }
+        $repoFiles = [];
+        $extractedDir = sys_get_temp_dir() . '/' . $zip->getNameIndex(0); // Get the name of the first directory
+        $rii = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($extractedDir));
+        foreach ($rii as $file) {
+            if ($file->isDir()){
+                continue;
+            }
+            $filePath = $file->getPathname();
+            $relativePath = str_replace($extractedDir, '', $filePath);
+			/* phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents */
+			$contents = file_get_contents($filePath);
+            $hash = md5($contents);
+            $repoFiles[$relativePath] = [
+				/* TODO added for compat */
+				'path' => $relativePath,
+				'checksum' => $hash,
+				/* end added for compat */
+				'hash' => $hash,
+				'updated_at' => time(),
+				'status' => 'active',
+			];
+
+			// Save the file to a transient but don't create a commit since we're initializing the state
+			$this->app->state()->saveFile($relativePath, $contents);
+        }
+        wp_delete_file($tempArchive);
+        array_map('unlink', glob("$extractedDir/*.*"));
+        $zip->close();
+
+        return $repoFiles;
+    }
+
+	/**
+	 * Get repository commits.
+	 * 
+	 * @return array|WP_Error
+	 */
+	public function getRepositoryCommits(): array|WP_Error {
+		$commits = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/commits?sha=' . $this->branch() );
+
+		if ( is_wp_error( $commits ) ) {
+			$this->app->write_log($commits);
+			return $commits;
+		}
+
+		// Our code expects the commit id in id, not in sha
+		foreach ($commits as $commit) {
+			$commit->id = $commit->sha;
+			$commit->short_id = substr($commit->sha, 0, 7);
+			$commit->author_name = $commit->commit->author->name;
+			$commit->committed_date = $commit->commit->author->date;
+			$commit->title = $commit->commit->message;
+			$commit->message = $commit->commit->message;
+		}
+
+		return array_reverse($commits);
+	}
+
+	///////////////////////////////////// TODO
+	/**
+	 * Get commit details
+     * @param string $commit Commit ID.
+	 *
+	 * @return array|WP_Error
+	 */
+	public function getCommitFiles(string $commit): array|WP_Error {
+		$diffs = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits/' . $commit . '/diff');
+
+		if ( is_wp_error( $diffs ) ) {
+			$this->app->write_log($diffs);
+			return $diffs;
+		}
+
+		return array_map(function($item) {
+			return $item->new_path;
+		}, $diffs);
+	}
+
+	/**
+     * Get remote repository hashes.
+     *
+     * @return array|WP_Error
+     */
+    public function getRemoteHashes(): array|WP_Error {
+		// First check if the repository exists
+		$repo = $this->call( 'GET', $this->url() . '/repos/' . $this->repository());
+		if ( is_wp_error( $repo ) ) {
+			$this->app->write_log($repo);
+			return $repo;
+		}
+		// Then check if the branch exists
+		$branch = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/branches/' . $this->branch());
+		if ( is_wp_error( $branch ) ) {
+			$this->app->write_log($branch);
+			return $branch;
+		}
+		// If we now get an error it means the repository is empty
+		$tree = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/git/trees/' . $this->branch() . '?recursive=1' );
+		if ( is_wp_error( $tree ) ) {
+			return [];
+		}
+
+		$hashes = [];
+		foreach ($tree as $item) {
+			if ($item->type === 'blob') {
+				$hashes[$item->path] = $item->id;
+			}
+        }
+
+		return $hashes;
+    }
 }

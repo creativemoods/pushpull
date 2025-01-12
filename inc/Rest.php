@@ -223,9 +223,9 @@ class Rest {
 		$params = $data->get_query_params();
 		$params['post_type'] = sanitize_text_field($params['post_type']);
 		$params['post_name'] = sanitize_text_field($params['post_name']);
-		if (strpos($params['post_type'], '#') !== false) {
+		if (strpos($params['post_type'], '@') !== false) {
 			// This is a table
-			list($plugin, $table) = explode('#', $params['post_type']);
+			list($plugin, $table) = explode('@', $params['post_type']);
 			// Local
 			$local = [];
 			if (has_filter('pushpull_default_tableimport_'.$plugin.'_'.$table.'_get_by_name')) {
@@ -235,7 +235,7 @@ class Rest {
 				}
 			}
 			// Remote
-			$remote = $this->app->state()->getFile("_".$plugin.'#'.$table."/".str_replace("/", "@@SLASH@@", $params['post_name']));
+			$remote = $this->app->state()->getFile("_".$plugin.'@'.$table."/".str_replace("/", "@@SLASH@@", $params['post_name']));
 			if ($remote) {
 				$remote = json_decode($remote, true);
 				if (!$remote) {
@@ -432,8 +432,8 @@ class Rest {
 		$params = $data->get_json_params();
 		$params['posttype'] = sanitize_text_field($params['posttype']);
 		$params['postname'] = sanitize_text_field($params['postname']);
-		if (strpos($params['posttype'], '#') !== false) {
-			list($plugin, $table) = explode('#', $params['posttype']);
+		if (strpos($params['posttype'], '@') !== false) {
+			list($plugin, $table) = explode('@', $params['posttype']);
 			$id = $this->app->puller()->pull_tablerow($plugin, $table, $params['postname']);
 		} else {
 			// verify that the post exists
@@ -453,10 +453,10 @@ class Rest {
 		$params = $data->get_json_params();
 		$posttype = sanitize_text_field($params['posttype']);
 		$postname = sanitize_text_field($params['postname']);
-		if (strpos($posttype, '#' ) !== false) {
+		if (strpos($posttype, '@' ) !== false) {
 			// table row
-			$plugin = explode('#', $posttype)[0];
-			$table = explode('#', $posttype)[1];
+			$plugin = explode('@', $posttype)[0];
+			$table = explode('@', $posttype)[1];
 			$id = $this->app->pusher()->pushTableRow($plugin, $table, $postname);
 		} else {
 			// post type
@@ -601,7 +601,10 @@ class Rest {
 
 		// Get commits from $remoteLatestCommitHash to $localLatestCommitHash
 		// TODO this will not work when there's no commit in the remote repository
+		$this->app->write_log($remoteLatestCommitHash);
+		$this->app->write_log($localLatestCommitHash);
 		$commits = $this->app->utils()->getElementsBetweenIds($commits, $remoteLatestCommitHash, $localLatestCommitHash);
+		$this->app->write_log($commits);
 
 		$actions = [];
 		foreach ($commits as $commit) {
@@ -624,6 +627,10 @@ class Rest {
 			$provider = get_option($this->app::PROVIDER_OPTION_KEY);
 			$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
 			$res = $gitProvider->commit($wrap);
+			if (is_wp_error($res)) {
+				$this->app->write_log($res);
+				return $res;
+			}
 			$this->app->state()->updateCommitId($commit['id'], $res->id);
 		}
 

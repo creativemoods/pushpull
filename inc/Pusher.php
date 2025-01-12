@@ -460,7 +460,7 @@ class Pusher {
 		// Escape slashes in keyname (TODO in create_commit and in other providers)
 		$keyname = str_replace("/", "@@SLASH@@", $keyname);
 
-		$name = "_".$plugin."#".$table."/".$keyname;
+		$name = "_".$plugin."@".$table."/".$keyname;
 		$hash = $this->app->state()->saveFile($name, wp_json_encode($content));
 		$this->app->state()->createCommit("Updated file: $name", [$name => $hash]);
 

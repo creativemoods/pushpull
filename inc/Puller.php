@@ -142,7 +142,7 @@ class Puller {
 			)
 		);
 
-		$row = $this->app->state()->getFile("_".$plugin.'#'.$table."/".str_replace("/", "@@SLASH@@", $name));
+		$row = $this->app->state()->getFile("_".$plugin.'@'.$table."/".str_replace("/", "@@SLASH@@", $name));
 		$row = json_decode($row, true);
 
 		// Check if local exists already
