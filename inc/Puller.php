@@ -95,7 +95,7 @@ class Puller {
 	 * Pull all posts of a specific type.
 	 *
 	 * @param string $type
-	 * @return string|WP_Error
+	 * @return array|WP_Error
 	 */
 	public function pullall($type) {
 		$this->app->write_log(
@@ -107,6 +107,7 @@ class Puller {
 		);
 
 		$posts = $this->app->state()->listFiles();
+		$ids = [];
 		foreach ($posts as $post) {
 			// Check if this is the right type
 			if (strpos($post['path'], "_".$type."/") === false) {
@@ -119,10 +120,10 @@ class Puller {
 			if (strpos($type, '@') !== false) {
 				// table row
 				list($plugin, $table) = explode('@', $type);
-				$this->pull_tablerow($plugin, $table, $name);
+				$ids []= $this->pull_tablerow($plugin, $table, $name);
 			} else {
 				// post type
-				$this->pull($type, $name);
+				$ids []= $this->pull($type, $name);
 			}
 		}
 
@@ -133,6 +134,8 @@ class Puller {
 				$type,
 			)
 		);
+
+		return $ids;
 	}
 
 	/**

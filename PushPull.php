@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.1.7
+* Version:           0.1.8
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -147,6 +147,13 @@ class PushPull {
 	* @var Deleter
 	*/
 	protected $deleter;
+	
+	/**
+	* Deployer.
+	*
+	* @var Deployer
+	*/
+	protected $deployer;
 	
 	/**
 	* Export object.
@@ -464,6 +471,19 @@ class PushPull {
 		return $this->deleter;
 	}
 	
+	/**
+	* Lazy-load Deployer.
+	*
+	* @return Deployer
+	*/
+	public function deployer() {
+		if ( ! $this->deployer ) {
+			$this->deployer = new Deployer( $this );
+		}
+
+		return $this->deployer;
+	}
+
 	/**
 	* Lazy-load State.
 	*

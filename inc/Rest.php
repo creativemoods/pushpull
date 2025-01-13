@@ -713,24 +713,10 @@ class Rest {
 	 * @param WP_REST_Request $data
 	 * @return bool — The result.
 	 */
-	public function deploy(WP_REST_Request $data) {
-		global $wpdb;
-
+	public function deploy(WP_REST_Request $data):bool {
 		$params = $data->get_json_params();
 		$params['id'] = sanitize_text_field($params['id']);
 
-		// Define the table name
-		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
-
-		$query = $wpdb->prepare(
-			"SELECT * FROM {$table_name} WHERE id = %d",
-			$params['id']
-		);
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-		$deployitem = $wpdb->get_row($query);
-		if ($deployitem->type === 'option_set') {
-			return update_option($deployitem->name, $deployitem->value);
-		}
+		return $this->app->deployer()->deploy($params['id']);
 	}
 }
