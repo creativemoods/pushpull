@@ -46,7 +46,7 @@ class Puller {
 		$fn = wp_upload_dir()['path']."/".$imagepost->meta->_wp_attached_file[0];
 		// Get binary contents from Git
 		$media = $this->app->state()->getFile("_media/".$imagepost->meta->_wp_attached_file[0]);
-		$media = base64_decode($media); // TODO necessary?
+		$media = base64_decode($media);
 		// Write binary contents to local file in uploads/
 		$wpfsd = new \WP_Filesystem_Direct( false );
 		// TODO check result

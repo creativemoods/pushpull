@@ -180,13 +180,13 @@ const RepositoryPane = () => {
         if (direction === 'localtoremote') {
           return (
             <>
-              <Button variant="outlined" color="warning" size="small" onClick={onClickPull}>Commit changes to remote</Button>
+              <Button variant="outlined" color="warning" size="small" onClick={onClickPush}>Commit changes to remote</Button>
             </>
           );
         } else {
           return (
             <>
-              <Button variant="outlined" color="error" size="small" onClick={onClickPush}>Apply changes locally</Button>
+              <Button variant="outlined" color="error" size="small" onClick={onClickPull}>Apply changes locally</Button>
             </>
           );
         }

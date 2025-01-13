@@ -209,8 +209,11 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 				'updated_at' => time(),
 				'status' => 'active',
 			];
-	
+
 			// Save the file to a transient but don't create a commit since we're initializing the state
+			if (strpos($relativePath, '_media/') === 0) {
+				$contents = base64_encode($contents);
+			}
 			$this->app->state()->saveFile($relativePath, $contents);
         }
         wp_delete_file($tempArchive);
