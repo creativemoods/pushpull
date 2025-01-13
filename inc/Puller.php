@@ -106,12 +106,24 @@ class Puller {
 			)
 		);
 
-		// Get all files in remote repository in directory _$type
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-		$posts = $gitProvider->getRemotePostsByType($type);
+		$posts = $this->app->state()->listFiles();
 		foreach ($posts as $post) {
-			$this->pull($type, $post->name);
+			// Check if this is the right type
+			if (strpos($post['path'], "_".$type."/") === false) {
+				continue;
+			}
+			// It is. Let's extract post type and post name
+			// We can't ltrim because the name might start with __
+			if ($post['path'][0] == '_') $post['path'] = substr($post['path'],1);
+			list($type, $name) = explode("/", $post['path']);
+			if (strpos($type, '@') !== false) {
+				// table row
+				list($plugin, $table) = explode('@', $type);
+				$this->pull_tablerow($plugin, $table, $name);
+			} else {
+				// post type
+				$this->pull($type, $name);
+			}
 		}
 
 		$this->app->write_log(
