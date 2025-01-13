@@ -591,48 +591,7 @@ class Rest {
 	 * @return WP_Error|array
 	 */
 	public function repopush(WP_REST_Request $data) {
-		$localLatestCommitHash = $this->app->state()->getLatestCommitHash();
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-		$remoteLatestCommitHash = $gitProvider->getLatestCommitHash();
-
-		// Get list of commits from the commit log
-		$commits = $this->app->state()->getCommitLog();
-
-		// Get commits from $remoteLatestCommitHash to $localLatestCommitHash
-		// TODO this will not work when there's no commit in the remote repository
-		$this->app->write_log($remoteLatestCommitHash);
-		$this->app->write_log($localLatestCommitHash);
-		$commits = $this->app->utils()->getElementsBetweenIds($commits, $remoteLatestCommitHash, $localLatestCommitHash);
-		$this->app->write_log($commits);
-
-		$actions = [];
-		foreach ($commits as $commit) {
-			foreach ($commit['changes'] as $filePath => $hash) {
-				$actions[] = [
-					'action' => 'tbd',
-					'file_path' => $filePath,
-					'content' => $this->app->state()->getFile($filePath),
-				];
-			}
-			$user = get_userdata(get_current_user_id());
-			$wrap = [
-				'branch' => 'tbd', // Will be filled in later in the provider
-				'commit_message' => $commit['message'],
-				'actions' => $actions,
-				'author_email' => $user->user_email,
-				'author_name' => $user->display_name,
-			];
-
-			$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-			$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-			$res = $gitProvider->commit($wrap);
-			if (is_wp_error($res)) {
-				$this->app->write_log($res);
-				return $res;
-			}
-			$this->app->state()->updateCommitId($commit['id'], $res->id);
-		}
+		$this->app->repository()->repopush();
 
 		return ['result' => 'success'];
 	}
@@ -644,44 +603,7 @@ class Rest {
 	 * @return WP_Error|array
 	 */
 	public function repopull(WP_REST_Request $data) {
-		if ($this->app->state()->getLatestCommitHash()) {
-			// If we have a local commit hash, we use it to get the missing commits
-			$this->app->write_log('Getting diff from latest commit hash: '.$this->app->state()->getLatestCommitHash());
-			$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-			$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-			$localLatestCommitHash = $this->app->state()->getLatestCommitHash();
-			$remoteLatestCommitHash = $gitProvider->getLatestCommitHash();
-			$commits = $gitProvider->getRepositoryCommits();
-			$commits = $this->app->utils()->getElementsBetweenIds($commits, $localLatestCommitHash, $remoteLatestCommitHash);
-			foreach ($commits as $commit) {
-				$files = $gitProvider->getCommitFiles($commit->id);
-				foreach ($files as $file) {
-					list($type, $name) = explode('/', $file);
-					$content = $gitProvider->getRemotePostByName(ltrim($type, '_'), $name);
-					$this->app->state()->saveFile($file, $content);
-				}
-				$this->app->write_log($commit);
-			}
-			$this->app->state()->importcommits($commits, false);
-		} else {
-			// Otherwise, we need to get the remote hashes and initialize our local state with the latest commit hash from remote
-			$this->app->write_log('Getting remote hashes');
-			$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-			$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
-			$remotehashes = $gitProvider->getRemoteHashes();
-			if (is_wp_error($remotehashes)) {
-				return $remotehashes;
-			}
-			// Initialize the state but don't create commits
-			$repofiles = $gitProvider->initializeRepository();
-			// Save state
-			$this->app->state()->saveState($repofiles);
-
-			// Get all remote commits and push them onto the local commit log
-			$commits = $gitProvider->getRepositoryCommits();
-			$this->app->state()->importcommits($commits, true);
-		}
-		$this->app->state()->saveLatestCommitHash($gitProvider->getLatestCommitHash());
+		$this->app->repository()->repopull();
 
 		return ['result' => 'success'];
 	}
