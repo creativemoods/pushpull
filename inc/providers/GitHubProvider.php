@@ -423,9 +423,9 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		}
 
 		$hashes = [];
-		foreach ($tree as $item) {
+		foreach ($tree->tree as $item) {
 			if ($item->type === 'blob') {
-				$hashes[$item->path] = $item->id;
+				$hashes[$item->path] = $item->sha;
 			}
         }
 
