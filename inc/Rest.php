@@ -253,10 +253,14 @@ class Rest {
 			} else {
 				$local = [];
 			}
-			// Remote
+			// State
 			$remote = $this->app->state()->getFile("_".$params['post_type']."/".$params['post_name']);
-			$remote = json_decode($remote, true);
-			if (!$remote) {
+			if ($remote) {
+				$remote = json_decode($remote, true);
+				if (!$remote) {
+					$remote = [];
+				}
+			} else {
 				$remote = [];
 			}
 		}

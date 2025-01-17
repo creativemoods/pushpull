@@ -58,6 +58,20 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 			);
 		}
 
+		/* Check if result is paginated (recursive) */
+		if ( isset( $response['headers']['link'] ) ) {
+			if ( strpos( $response['headers']['link'], 'rel="next"' ) !== false ) {
+				preg_match( '/<(.*)>; rel="next"/', $response['headers']['link'], $matches );
+				if ( isset( $matches[1] ) ) {
+					$next_page = $this->call( $method, $matches[1], $body );
+					if ( ! is_wp_error( $next_page ) ) {
+						$body = array_merge( $body, $next_page );
+						//$body = $body + $next_page;
+					}
+				}
+			}
+		}
+
 		return $body;
 	}
 
@@ -206,6 +220,8 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @return stdClass|WP_Error
 	 */
     public function commit(array $wrap): stdClass|WP_Error {
+		$latestcommithash = $this->getLatestCommitHash();
+
 		// Create a blob for each $wrap action
 		foreach ($wrap['actions'] as $key => $action) {
 			$wrap['actions'][$key]['sha'] = $this->git_exists($action['file_path']);
@@ -219,6 +235,11 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 			}
 		}
 
+		// Get the current base tree
+		$res = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/git/commits/' . $latestcommithash );
+		$base_tree = $res->tree->sha;
+		$this->app->write_log($base_tree);
+
 		// Create a tree referencing the blobs
 		$tree = [];
 		foreach ($wrap['actions'] as $action) {
@@ -229,14 +250,14 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 				'sha' => $action['sha'],
 			];
 		}
-		$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/trees', ['tree' => $tree] );
+		$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/trees', ['base_tree' => $base_tree, 'tree' => $tree] );
 		if ( is_wp_error( $res ) ) {
 			$this->app->write_log($res);
 			return $res;
 		}
 
 		// Create a commit referencing the tree
-		$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/commits', ['message' => $wrap['commit_message'], 'tree' => $res->sha, 'parents' => [$this->getLatestCommitHash()]] );
+		$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/commits', ['message' => $wrap['commit_message'], 'tree' => $res->sha, 'parents' => [$latestcommithash]] );
 		if ( is_wp_error( $res ) ) {
 			$this->app->write_log($res);
 			return $res;
@@ -266,7 +287,6 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	public function getBranches(string $url, string $token, string $repository): array|WP_Error {
 		// TODO Need to override repo, url and token
         $branches = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/branches' );
-		$this->app->write_log($branches);
 		if (is_wp_error($branches)) {
 			return $branches;
 		}

@@ -187,7 +187,8 @@ class Pusher {
 			$parent = get_post($post->post_parent);
 			$data['post_parent'] = $parent ? $parent->post_type."/".$parent->post_name : null;
 		}
-		$data['author'] = get_userdata($post->post_author)->user_login;
+		$author = get_userdata($post->post_author);
+		$data['author'] = $author ? $author->user_login : get_userdata(get_current_user_id())->user_login;
 
 		// Meta
 		$data['meta'] = [];

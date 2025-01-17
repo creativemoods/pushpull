@@ -45,10 +45,7 @@ class Repository {
 
 		// Get commits from $remoteLatestCommitHash to $localLatestCommitHash
 		// TODO this will not work when there's no commit in the remote repository
-		$this->app->write_log($remoteLatestCommitHash);
-		$this->app->write_log($localLatestCommitHash);
 		$commits = $this->app->utils()->getElementsBetweenIds($commits, $remoteLatestCommitHash, $localLatestCommitHash);
-		$this->app->write_log($commits);
 
 		$actions = [];
 		foreach ($commits as $commit) {
@@ -104,7 +101,6 @@ class Repository {
 					$content = $gitProvider->getRemotePostByName(ltrim($type, '_'), $name);
 					$this->app->state()->saveFile($file, $content);
 				}
-				$this->app->write_log($commit);
 			}
 			$this->app->state()->importcommits($commits, false);
 		} else {

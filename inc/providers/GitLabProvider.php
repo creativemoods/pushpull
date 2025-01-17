@@ -87,8 +87,8 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 				if ( isset( $matches[1] ) ) {
 					$next_page = $this->call( $method, $matches[1], $body );
 					if ( ! is_wp_error( $next_page ) ) {
-						//$body = array_merge( $body, $next_page );
-						$body = $body + $next_page;
+						$body = array_merge( $body, $next_page );
+						//$body = $body + $next_page;
 					}
 				}
 			}
