@@ -9,8 +9,6 @@ namespace CreativeMoods\PushPull;
 use WP_REST_Request;
 use CreativeMoods\PushPull\providers\GitProviderFactory;
 use CreativeMoods\PushPull\hooks\Core;
-use CreativeMoods\PushPull\hooks\Redirection;
-use CreativeMoods\PushPull\hooks\WooCommerce;
 
 /**
  * Class Rest

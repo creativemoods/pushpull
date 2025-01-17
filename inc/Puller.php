@@ -6,7 +6,10 @@
  */
 
 namespace CreativeMoods\PushPull;
-use CreativeMoods\PushPull\providers\GitProviderFactory;
+
+if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
+	include( ABSPATH . 'wp-admin/includes/image.php' );
+}
 
 /**
  * Class Import
@@ -37,7 +40,6 @@ class Puller {
 	 */
 	protected function import_image($image) {
 		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-		$gitProvider = GitProviderFactory::createProvider($provider, $this->app);
 
 		// Get attachment from Git
 		$imagepost = $this->app->state()->getFile("_attachment/".$image);

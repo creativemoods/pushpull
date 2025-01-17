@@ -6,7 +6,6 @@
 
 namespace CreativeMoods\PushPull;
 
-use CreativeMoods\PushPull\providers\GitProviderFactory;
 use DOMElement;
 use WP_Error;
 use WP_Post;
