@@ -10,7 +10,8 @@ import apiFetch from '@wordpress/api-fetch';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
-import { Button as MUIButton } from '@mui/material';
+import Modal from '@mui/material/Modal';
+import CircularProgress from '@mui/material/CircularProgress';
 
 function CustomTabPanel(props) {
 	const { children, value, index, ...other } = props;
@@ -39,11 +40,12 @@ function a11yProps(index) {
 const App = () => {
 	const [tab, setTab] = useState('settings');
 	const [selectedPostTypes, setSelectedPostTypes] = useState([]);
-	
+	const [isModalOpen, setIsModalOpen] = useState(false);
+
 	const onSelect = ( event, tabName ) => {
 		setTab(tabName);
 	};
-	
+
 	useEffect( () => {
 		apiFetch({
 			path: '/pushpull/v1/settings',
@@ -57,33 +59,48 @@ const App = () => {
 			console.error(error);
 		});
 	}, [] );
-	
+
 	return (
 		<div>
-		<h1 className='app-title'>{ __( 'PushPull Settings', 'pushpull' ) }</h1>
-		<Notices/>
-		<Box sx={{ width: '100%' }}>
-		<Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-		<Tabs value={tab} onChange={onSelect} aria-label="Main tabs">
-			<Tab label="Settings" value='settings' {...a11yProps('settings')} />
-			<Tab label="Repository" value='repo' {...a11yProps('repo')} />
-			<Tab label="Sync" value='sync' {...a11yProps('sync')} />
-			<Tab label="Deploy" value='deploy' {...a11yProps('deploy')} />
-		</Tabs>
-		</Box>
-		<CustomTabPanel value={tab} index='settings'>
-		<SettingsPane selectedPostTypes={selectedPostTypes} setSelectedPostTypes={setSelectedPostTypes} />
-		</CustomTabPanel>
-		<CustomTabPanel value={tab} index='repo'>
-		{tab === "repo" && <RepositoryPane />}
-		</CustomTabPanel>
-		<CustomTabPanel value={tab} index='sync'>
-		{tab === "sync" && <SyncPane />}
-		</CustomTabPanel>
-		<CustomTabPanel value={tab} index='deploy'>
-		{tab === "deploy" && <DeployPane />}
-		</CustomTabPanel>
-		</Box>
+			<h1 className='app-title'>{ __( 'PushPull Settings', 'pushpull' ) }</h1>
+			<Notices/>
+			<Modal
+				open={isModalOpen}
+				onClose={() => setIsModalOpen(false)}
+				aria-labelledby="loading-modal"
+				aria-describedby="loading-modal-description"
+				>
+				<Box
+					display="flex"
+					justifyContent="center"
+					alignItems="center"
+					height="100vh"
+				>
+					<CircularProgress />
+				</Box>
+			</Modal>
+			<Box sx={{ width: '100%' }}>
+				<Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+					<Tabs value={tab} onChange={onSelect} aria-label="Main tabs">
+						<Tab label="Settings" value='settings' {...a11yProps('settings')} />
+						<Tab label="Repository" value='repo' {...a11yProps('repo')} />
+						<Tab label="Sync" value='sync' {...a11yProps('sync')} />
+						<Tab label="Deploy" value='deploy' {...a11yProps('deploy')} />
+					</Tabs>
+				</Box>
+				<CustomTabPanel value={tab} index='settings'>
+					<SettingsPane selectedPostTypes={selectedPostTypes} setSelectedPostTypes={setSelectedPostTypes} setIsModalOpen={setIsModalOpen} />
+				</CustomTabPanel>
+				<CustomTabPanel value={tab} index='repo'>
+					{tab === "repo" && <RepositoryPane />}
+				</CustomTabPanel>
+				<CustomTabPanel value={tab} index='sync'>
+					{tab === "sync" && <SyncPane setIsModalOpen={setIsModalOpen} />}
+				</CustomTabPanel>
+				<CustomTabPanel value={tab} index='deploy'>
+					{tab === "deploy" && <DeployPane />}
+				</CustomTabPanel>
+			</Box>
 		</div>
 	);
 }

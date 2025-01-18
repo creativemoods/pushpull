@@ -68,24 +68,28 @@ const StyledDataGrid = styled(DataGrid)(({ theme }) => ({
   },
 }));
 
-const SyncPane = () => {
+const SyncPane = (props) => {
+  const { setIsModalOpen } = props;
 	const {createSuccessNotice, createWarningNotice, createErrorNotice} = useDispatch( noticesStore );
 	const [localCommits, setLocalCommits] = useState([]);
 	const [remoteCommits, setRemoteCommits] = useState([]);
   const [status, setStatus] = useState({'localLatestCommitHash': null, 'remoteLatestCommitHash': null, 'status': 'unknown'});
 
   const onClickPull = (event) => {
+    setIsModalOpen(true);
     apiFetch({
       path: '/pushpull/v1/sync/pull',
       method: 'POST',
       data: {},
     }).then((data) => {
+      setIsModalOpen(false);
       createSuccessNotice(__('Repository pulled successfully.'), {
         isDismissible: true,
       });
       // Refresh the page to reflect the changes
       initializePane();
     }).catch((error) => {
+      setIsModalOpen(false);
       createErrorNotice(__('Error pulling repository: '+error.message), {
         isDismissible: true,
       });
@@ -94,16 +98,19 @@ const SyncPane = () => {
   };
 
   const onClickPush = (event) => {
+    setIsModalOpen(true);
     apiFetch({
       path: '/pushpull/v1/sync/push',
       method: 'POST',
       data: {},
     }).then((data) => {
+      setIsModalOpen(false);
       createSuccessNotice(__('Repository pushed successfully.'), {
         isDismissible: true,
       });
       initializePane();
     }).catch((error) => {
+      setIsModalOpen(false);
       createErrorNotice(__('Error pushing repository: '+error.message), {
         isDismissible: true,
       });

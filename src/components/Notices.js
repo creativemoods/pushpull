@@ -12,6 +12,12 @@ const Notices = () => {
         return null;
     }
 
+    notices.forEach( ( notice ) => {
+        setTimeout(() => {
+            removeNotice(notice.id);
+        }, 5000);
+    });
+
     return <NoticeList notices={ notices } onRemove={ removeNotice } />;
 };
 

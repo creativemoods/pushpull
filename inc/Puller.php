@@ -168,6 +168,7 @@ class Puller {
 			if ($localrow) {
 				$this->app->write_log(__( 'Table row already exists locally. Deleting.', 'pushpull' ));
 				// TODO faire un hook pour la suppression!
+		        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
 				$wpdb->delete($wpdb->prefix . $table, ['id' => $localrow['id']]);
 			}
 		}
@@ -183,6 +184,7 @@ class Puller {
 		$columns = array_keys((array)$row);
 		$values = array_values((array)$row);
 		$format = array_fill(0, count($values), '%s');
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
 		$wpdb->insert($table_name, array_combine($columns, $values), $format);
 		$id = $wpdb->insert_id;
 

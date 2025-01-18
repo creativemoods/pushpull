@@ -76,7 +76,8 @@ class _PushPull {
 		// Define the table name
 		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
 
-		$row = $wpdb->get_row("SELECT * FROM {$table_name} WHERE name = '{$name}'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM %s WHERE name = %s", $table_name, $name));
 		if ($row) {
 			return (array) $row;
 		}

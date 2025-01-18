@@ -394,6 +394,10 @@ class Rest {
 		$params['tables'] = array_map('sanitize_text_field', $params['tables']);
 		update_option($this->app::TABLES_OPTION_KEY, $params['tables']);
 
+		// Set whether the repo is public or not
+		$provider = GitProviderFactory::createProvider($params['provider'], $this->app);
+		set_transient($this->app::PP_PUBLIC_REPO, $provider->isPublic(), 60*60*24);
+
 		return $this->get_settings();
 	}
 
@@ -623,7 +627,8 @@ class Rest {
 		// Define the table name
 		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
 
-		$results = $wpdb->get_results("SELECT * FROM $table_name", ARRAY_A);
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$results = $wpdb->get_results($wpdb->prepare("SELECT * FROM %s", $table_name), ARRAY_A);
 
 		return $results;
 	}
@@ -645,6 +650,7 @@ class Rest {
 		// Define the table name
 		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
 
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
 		$wpdb->insert(
 			$table_name,
 			[
@@ -677,6 +683,7 @@ class Rest {
 		// Define the table name
 		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
 
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
 		return $wpdb->update(
 			$table_name,
 			[
@@ -703,6 +710,7 @@ class Rest {
 		// Define the table name
 		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
 
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
 		return $wpdb->delete(
 			$table_name,
 			['id' => $params['id']]

@@ -79,7 +79,8 @@ class WooCommerce {
 	public function get_wc_tax_rate_classes_by_name(string $name): array|bool {
 		global $wpdb;
 
-		$row = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}wc_tax_rate_classes WHERE name = '{$name}'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}wc_tax_rate_classes WHERE name = %s", $name));
 		if ($row) {
 			return (array) $row;
 		}
@@ -96,7 +97,8 @@ class WooCommerce {
 	public function get_woocommerce_tax_rates_by_name(string $name): array|bool {
 		global $wpdb;
 
-		$row = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_name = '{$name}'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_name = %s", $name));
 		if ($row) {
 			return (array) $row;
 		}
@@ -120,7 +122,8 @@ class WooCommerce {
 		$data = $this->app->utils()->array_without_keys($data, ['tax_rate_id']);
 		// Replace tax_rate_class with tax rate class name
 		if (is_int($data['tax_rate_class'])) {
-			$taxrateclass = $wpdb->get_row("SELECT name FROM {$wpdb->prefix}wc_tax_rate_classes WHERE tax_rate_class_id = {$data['tax_rate_class']}");
+	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+			$taxrateclass = $wpdb->get_row($wpdb->prepare("SELECT name FROM {$wpdb->prefix}wc_tax_rate_classes WHERE tax_rate_class_id = %d", $data['tax_rate_class']));
 			if ($taxrateclass) {
 				$data['tax_rate_class'] = $taxrateclass->name;
 			}
@@ -140,7 +143,8 @@ class WooCommerce {
 		global $wpdb;
 
 		// Replace tax rate class name with tax_rate_class
-		$taxrateclass = $wpdb->get_row("SELECT id FROM {$wpdb->prefix}wc_tax_rate_classes WHERE tax_rate_class_id = {$data['tax_rate_class']}");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$taxrateclass = $wpdb->get_row($wpdb->prepare("SELECT id FROM {$wpdb->prefix}wc_tax_rate_classes WHERE tax_rate_class_id = %d", $data['tax_rate_class']));
 		if ($taxrateclass) {
 			$data['tax_rate_class'] = $taxrateclass->tax_rate_class_id;
 		}

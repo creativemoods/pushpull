@@ -39,13 +39,8 @@ class Deployer {
 		// Define the table name
 		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
 
-		$query = $wpdb->prepare(
-			"SELECT * FROM {$table_name} WHERE id = %d",
-			$id
-		);
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-		$deployitem = $wpdb->get_row($query);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$deployitem = $wpdb->get_row($wpdb->prepare('SELECT * FROM %s WHERE id = %d', $table_name, $id));
 		if ($deployitem->type === 'option_set') {
 			return update_option($deployitem->name, $deployitem->value);
 		}

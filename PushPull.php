@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.1.11
+* Version:           0.1.12
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -53,6 +53,7 @@ class PushPull {
 	const REPO_OPTION_KEY  = 'pushpull_repository';
 	const TOKEN_OPTION_KEY = 'pushpull_oauth_token';
 	const BRANCH_OPTION_KEY = 'pushpull_branch';
+	const PP_PUBLIC_REPO = 'pushpull_public_repo';
 	const PP_DEPLOY_TABLE = 'pushpull_deploy';
 	const PP_DEPLOY_VERSION_OPTION_KEY = 'pushpull_deploy_version';
 	const PP_DEPLOY_VERSION = '1.0';
@@ -184,7 +185,8 @@ class PushPull {
 		$table_name = $wpdb->prefix . self::PP_DEPLOY_TABLE;
 
 		// Check if the table already exists
-		if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name)) != $table_name) {
 			// Include the WordPress file for dbDelta function
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
@@ -236,8 +238,9 @@ class PushPull {
 		global $wpdb;
 
 		$table_name = $wpdb->prefix . self::PP_DEPLOY_TABLE;
-	
-		$wpdb->query( "DROP TABLE IF EXISTS $table_name" );
+
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange */
+		$wpdb->query($wpdb->prepare("DROP TABLE IF EXISTS %s", $table_name));
 	}
 
 	/**
@@ -256,10 +259,10 @@ class PushPull {
 			return;
 		}*/
 
-		add_action('admin_action_pushpull_push', array(&$this, 'push_post'));
+		/*add_action('admin_action_pushpull_push', array(&$this, 'push_post'));
 		add_action('admin_action_pushpull_pull', array(&$this, 'pull_post'));
 		add_filter('post_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);
-		add_filter('page_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);
+		add_filter('page_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);*/
 
 		// Wordpress core tables
 		$core = new Core($this);
@@ -283,19 +286,12 @@ class PushPull {
 		$instance->add_hooks();
 	}
 
-	public function push_post()
+/*	public function push_post()
 	{
-		/*
-		* get Nonce value
-		*/
 		if (!isset($_REQUEST['nonce'])) {
 			wp_die(esc_html_e('Security check issue, Please try again.','pushpull'));
 		}
 		$nonce = sanitize_text_field(wp_unslash($_REQUEST['nonce']));
-		
-		/*
-		* get the original post id
-		*/
 		
 		if (isset($_GET['post'])) {
 			$post_id = intval($_GET['post']);
@@ -325,16 +321,10 @@ class PushPull {
 	
 	public function pull_post()
 	{
-		/*
-		* get Nonce value
-		*/
 		if (!isset($_REQUEST['nonce'])) {
 			wp_die(esc_html_e('Security check issue, Please try again.','pushpull'));
 		}
 		$nonce = sanitize_text_field(wp_unslash($_REQUEST['nonce']));
-		/*
-		* get the original post id
-		*/
 
 		if (isset($_GET['post'])) {
 			$post_id = intval($_GET['post']);
@@ -361,9 +351,6 @@ class PushPull {
 		}
 	}
 	
-	/*
-	* Add the duplicate link to action list for post_row_actions
-	*/
 	public function dt_duplicate_post_link($actions, $post)
 	{
 		// Skip acf-field-group post type
@@ -377,7 +364,7 @@ class PushPull {
 		}
 		
 		return $actions;
-	}
+	}*/
 	
 	/**
 	* Init i18n files

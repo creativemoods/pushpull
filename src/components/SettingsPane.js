@@ -11,8 +11,8 @@ import Stack from '@mui/material/Stack';
 import { Button as MUIButton, FormHelperText, Select as MUISelect, MenuItem, Grid2 } from '@mui/material';
 
 const SettingsPane = (props) => {
-	const { selectedPostTypes, setSelectedPostTypes } = props;
-	const {createSuccessNotice} = useDispatch( noticesStore );
+	const { selectedPostTypes, setSelectedPostTypes, setIsModalOpen } = props;
+	const {createSuccessNotice, createErrorNotice} = useDispatch( noticesStore );
 	const [providers, setProviders] = useState([]);
 	const [provider, setProvider] = useState('');
 	const [host, setHost] = useState('');
@@ -137,6 +137,7 @@ const SettingsPane = (props) => {
 	};
 
 	const handleTest = (event) => {
+		setIsModalOpen(true);
 		apiFetch({
 			path: addQueryArgs('/pushpull/v1/branches', {
 				'provider': provider,
@@ -145,10 +146,14 @@ const SettingsPane = (props) => {
 				'repository': repository,
 			}),
 			}).then((data) => {
+				setIsModalOpen(false);
 				setBranches(data);
 				setTestColor('success');
 		}).catch((error) => {
-			console.error(error);
+			setIsModalOpen(false);
+			createErrorNotice(error.message, {
+				isDismissible: true,
+			});
 			setTestColor('error');
 		});
 	};

@@ -79,14 +79,8 @@ class Redirection {
 	public function get_redirection_groups_by_name(string $name): array|bool {
 		global $wpdb;
 
-		$query = $wpdb->prepare(
-			"SELECT * FROM {$wpdb->prefix}redirection_groups WHERE name = %s",
-			$name
-		);
-
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-		$row = $wpdb->get_row($query);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}redirection_groups WHERE name = %s", $name));
 		if ($row) {
 			return (array) $row;
 		}
@@ -103,14 +97,8 @@ class Redirection {
 	public function get_redirection_items_by_name(string $name): array|bool {
 		global $wpdb;
 
-		$query = $wpdb->prepare(
-			"SELECT * FROM {$wpdb->prefix}redirection_items WHERE url = %s",
-			$name
-		);
-
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-		$row = $wpdb->get_row($query);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}redirection_items WHERE url = %s", $name));
 		if ($row) {
 			return (array) $row;
 		}
@@ -134,14 +122,8 @@ class Redirection {
 		$data = $this->app->utils()->array_without_keys($data, ['id']);
 
 		// Replace group_id with group name
-		$query = $wpdb->prepare(
-			"SELECT name FROM {$wpdb->prefix}redirection_groups WHERE id = %d",
-			$data['group_id']
-		);
-
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-		$group = $wpdb->get_row($query);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$group = $wpdb->get_row($wpdb->prepare("SELECT name FROM {$wpdb->prefix}redirection_groups WHERE id = %d", $data['group_id']));
 		if ($group) {
 			$data['group_id'] = $group->name;
 		}
@@ -160,14 +142,8 @@ class Redirection {
 		global $wpdb;
 
 		// Replace group name with group_id
-		$query = $wpdb->prepare(
-			"SELECT id FROM {$wpdb->prefix}redirection_groups WHERE name = %s",
-			$data['group_id']
-		);
-
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching */
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-		$group = $wpdb->get_row($query);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$group = $wpdb->get_row($wpdb->prepare("SELECT id FROM {$wpdb->prefix}redirection_groups WHERE name = %s", $data['group_id']));
 		if ($group) {
 			$data['group_id'] = $group->id;
 		}

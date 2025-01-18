@@ -51,10 +51,8 @@ class AIOSEO {
      */
     public function export(array $data, WP_Post $post) {
 		global $wpdb;
-		$aioseo_data = $wpdb->get_row($wpdb->prepare(
-			"SELECT * FROM {$wpdb->prefix}aioseo_posts WHERE post_id = %d",
-			$post->ID
-		), ARRAY_A);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$aioseo_data = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}aioseo_posts WHERE post_id = %d", $post->ID), ARRAY_A);
 
 		if ($aioseo_data) {
 			// Remove id and post_id and dates that change regularly
@@ -78,10 +76,8 @@ class AIOSEO {
 			$aioseo_data = (array) $post->aioseo;
 			$aioseo_data['post_id'] = $post->ID;
 
-			$wpdb->replace(
-				"{$wpdb->prefix}aioseo_posts",
-				$aioseo_data
-			);
+	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+			$wpdb->replace("{$wpdb->prefix}aioseo_posts", $aioseo_data);
 		}
     }
 }

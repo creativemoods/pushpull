@@ -341,4 +341,19 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 
 		return $branches;
 	}
+
+	/**
+	 * Is repo public ?
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function isPublic(): bool|WP_Error {
+		$repo = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()));
+		if ( is_wp_error( $repo ) ) {
+			$this->app->write_log($repo);
+			return false;
+		}
+
+		return $repo->visibility === "public";
+	}
 }

@@ -71,7 +71,8 @@ class Core {
     public function tableexport_core_users(array $data) {
 		global $wpdb;
 		// Get all usermeta for this user
-		$metadata = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}usermeta WHERE user_id = {$data['ID']}", ARRAY_A);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$metadata = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}usermeta WHERE user_id = %d", $data['ID']), ARRAY_A);
 		foreach ($metadata as $i => $meta) {
 			$data['metadata'][$meta['meta_key']] = $meta['meta_value'];
 		}
@@ -93,14 +94,16 @@ class Core {
     public function tableexport_core_comments(array $data) {
 		global $wpdb;
 		// Get all usermeta for this comment
-		$metadata = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}commentmeta WHERE comment_id = {$data['comment_ID']}", ARRAY_A);
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$metadata = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}commentmeta WHERE comment_id = %d", $data['comment_ID']), ARRAY_A);
 		foreach ($metadata as $i => $meta) {
 			$data['metadata'][$meta['meta_key']] = $meta['meta_value'];
 		}
 
 		// Replace user_id with user_login
 		if (is_numeric($data['user_id']) && $data['user_id'] > 0) {
-			$user = $wpdb->get_row("SELECT user_login FROM {$wpdb->prefix}users WHERE ID = {$data['user_id']}");
+	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+			$user = $wpdb->get_row($wpdb->prepare("SELECT user_login FROM {$wpdb->prefix}users WHERE ID = %d", $data['user_id']));
 			if ($user) {
 				$data['user_id'] = $user->user_login;
 			}
@@ -141,7 +144,8 @@ class Core {
 	public function get_core_users_by_name(string $name): array|bool {
 		global $wpdb;
 
-		$row = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}users WHERE user_login = '{$name}'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}users WHERE user_login = %s", $name));
 		if ($row) {
 			return (array) $row;
 		}
@@ -161,7 +165,8 @@ class Core {
 		list($post_type, $post_name, $commentauthor, $commentdate) = explode('/', $name);
 		$post = $this->app->utils()->getLocalPostByName($post_type, $post_name);
 		$author = get_user_by('login', $commentauthor);
-		$row = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}comments WHERE comment_post_ID = '{$post->ID}' AND user_id = '{$author->ID}' AND comment_date = '{$commentdate}'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}comments WHERE comment_post_ID = %d AND user_id = %d AND comment_date = %s", $post->ID, $author->ID, $commentdate));
 		if ($row) {
 			return (array) $row;
 		}
@@ -220,6 +225,7 @@ class Core {
 
 		foreach ($initialrow['metadata'] as $key => $value) {
 			// Insert metadata
+	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
 			$wpdb->insert($wpdb->prefix . 'usermeta', [
 				'user_id' => $localid,
 				'meta_key' => $key,
@@ -242,6 +248,7 @@ class Core {
 
 		foreach ($initialrow['metadata'] as $key => $value) {
 			// Insert metadata
+	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
 			$wpdb->insert($wpdb->prefix . 'commentmeta', [
 				'comment_id' => $localid,
 				'meta_key' => $key,

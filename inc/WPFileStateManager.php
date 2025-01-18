@@ -34,7 +34,8 @@ class WPFileStateManager {
     public function getCommitLog() {
         global $wpdb;
 
-        $commitlog = $wpdb->get_var("SELECT option_value FROM $wpdb->options WHERE option_name = '_transient_" . self::COMMIT_LOG_TRANSIENT . "'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+        $commitlog = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM $wpdb->options WHERE option_name = %s", '_transient_' . self::COMMIT_LOG_TRANSIENT));
 
         return $commitlog ? maybe_unserialize($commitlog) : [];
     }
@@ -46,7 +47,8 @@ class WPFileStateManager {
     public function getLatestCommitHash(): string|null {
         global $wpdb;
 
-        $latestCommitHash = $wpdb->get_var("SELECT option_value FROM $wpdb->options WHERE option_name = '_transient_" . self::LATEST_COMMIT_HASH_TRANSIENT . "'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+        $latestCommitHash = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM $wpdb->options WHERE option_name = %s", '_transient_' . self::LATEST_COMMIT_HASH_TRANSIENT));
 
         return $latestCommitHash ?: null;
     }
@@ -81,7 +83,7 @@ class WPFileStateManager {
         // Release the lock
         $this->releaseLock();
 
-        $this->app->write_log("Persisted ". json_encode($commitlog[count($commitlog) - 1]));
+        $this->app->write_log("Persisted ". wp_json_encode($commitlog[count($commitlog) - 1]));
     }
 
     /**
@@ -112,7 +114,7 @@ class WPFileStateManager {
         }
 
         // Persist commit log
-        $this->app->write_log("Persisting ". json_encode($commitlog));
+        $this->app->write_log("Persisting ". wp_json_encode($commitlog));
         $this->saveCommitLog($commitlog);
 
         // Release the lock
@@ -135,7 +137,8 @@ class WPFileStateManager {
     private function getState() {
         global $wpdb;
 
-        $state = $wpdb->get_var("SELECT option_value FROM $wpdb->options WHERE option_name = '_transient_" . self::FILE_STATE_TRANSIENT . "'");
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+        $state = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM $wpdb->options WHERE option_name = %s", '_transient_' . self::FILE_STATE_TRANSIENT));
 
         return $state ? maybe_unserialize($state) : [];
     }
@@ -176,6 +179,7 @@ class WPFileStateManager {
     private function getLock() {
         global $wpdb;
 
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
         $lock = $wpdb->get_var("SELECT option_value FROM $wpdb->options WHERE option_name = 'wp_file_state_manager_lock'");
         if ($lock) {
             $this->app->write_log(getmypid() . ' waiting for lock by pid: ' . $lock);

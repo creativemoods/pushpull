@@ -94,4 +94,11 @@ interface GitProviderInterface {
 	 * @return array|WP_Error
 	 */
 	public function getCommitFiles(string $commit): array|WP_Error;
+
+	/**
+	 * Is repo public ?
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function isPublic(): bool|WP_Error;
 }
