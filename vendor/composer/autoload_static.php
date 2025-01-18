@@ -25,6 +25,7 @@ class ComposerStaticInit493fc6768438ce8bcc87dab9316a2a69
         'CreativeMoods\\PushPull\\Admin' => __DIR__ . '/../..' . '/inc/Admin.php',
         'CreativeMoods\\PushPull\\CLI' => __DIR__ . '/../..' . '/inc/CLI.php',
         'CreativeMoods\\PushPull\\Deleter' => __DIR__ . '/../..' . '/inc/Deleter.php',
+        'CreativeMoods\\PushPull\\Deployer' => __DIR__ . '/../..' . '/inc/Deployer.php',
         'CreativeMoods\\PushPull\\Puller' => __DIR__ . '/../..' . '/inc/Puller.php',
         'CreativeMoods\\PushPull\\Pusher' => __DIR__ . '/../..' . '/inc/Pusher.php',
         'CreativeMoods\\PushPull\\Repository' => __DIR__ . '/../..' . '/inc/Repository.php',

@@ -10,6 +10,7 @@ return array(
     'CreativeMoods\\PushPull\\Admin' => $baseDir . '/inc/Admin.php',
     'CreativeMoods\\PushPull\\CLI' => $baseDir . '/inc/CLI.php',
     'CreativeMoods\\PushPull\\Deleter' => $baseDir . '/inc/Deleter.php',
+    'CreativeMoods\\PushPull\\Deployer' => $baseDir . '/inc/Deployer.php',
     'CreativeMoods\\PushPull\\Puller' => $baseDir . '/inc/Puller.php',
     'CreativeMoods\\PushPull\\Pusher' => $baseDir . '/inc/Pusher.php',
     'CreativeMoods\\PushPull\\Repository' => $baseDir . '/inc/Repository.php',
