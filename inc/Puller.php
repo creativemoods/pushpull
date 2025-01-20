@@ -1,6 +1,6 @@
 <?php
 /**
- * GitHub Import Manager
+ * Puller
  *
  * @package PushPull
  */
@@ -39,8 +39,6 @@ class Puller {
 	 * @return integer|\WP_Error
 	 */
 	protected function import_image($image) {
-		$provider = get_option($this->app::PROVIDER_OPTION_KEY);
-
 		// Get attachment from Git
 		$imagepost = $this->app->state()->getFile("_attachment/".$image);
 		$imagepost = json_decode($imagepost);
@@ -50,9 +48,9 @@ class Puller {
 		$media = $this->app->state()->getFile("_media/".$imagepost->meta->_wp_attached_file[0]);
 		$media = base64_decode($media);
 		// Write binary contents to local file in uploads/
-		$wpfsd = new \WP_Filesystem_Direct( false );
-		// TODO check result
-		$wpfsd->put_contents ( $fn, $media );
+		if ( ! file_put_contents( $fn, $media ) ) {
+			return new \WP_Error( 'file_write_error', __( 'Failed to write media file.', 'pushpull' ) );
+		}
 		// Create attachment
 		$foundimage = $this->app->utils()->getLocalPostByName('attachment', $image);
 		if ($foundimage !== null) {

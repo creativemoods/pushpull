@@ -146,51 +146,6 @@ class BitbucketProvider extends GitProvider implements GitProviderInterface {
 		return true;
 	}
 
-    /**
-     * List repository hierarchy.
-     * For Bitbucket we can't easily get the repository contents, so we will download the archive and extract it.
-     *     * @return array Repository details.
-     */
-    public function listRepository(): array {
-        $this->app->write_log("Fetching remote repo contents.");
-
-        $archiveContent = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/archive.zip?sha=' . $this->branch() );
-        if ($archiveContent === false) {
-            throw new \Exception("Failed to download repository archive.");
-        }
-        $tempArchive = tempnam(sys_get_temp_dir(), 'repo_archive_');
-        $wpfsd = new \WP_Filesystem_Direct( false );
-        // TODO check result
-        $wpfsd->put_contents ( $tempArchive, $archiveContent );
-        $zip = new \ZipArchive;
-        if ($zip->open($tempArchive) === TRUE) {
-            $zip->extractTo(sys_get_temp_dir()); // Extract to the system temp directory
-        } else {
-            throw new \Exception("Failed to unzip the archive.");
-        }
-        $repoFiles = [];
-        $extractedDir = sys_get_temp_dir() . '/' . $zip->getNameIndex(0); // Get the name of the first directory
-        $rii = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($extractedDir));
-        foreach ($rii as $file) {
-            if ($file->isDir()){
-                continue;
-            }
-            $filePath = $file->getPathname();
-            $relativePath = str_replace($extractedDir, '', $filePath);
-            $hash = hash_file('sha256', $filePath);
-            $repoFiles[] = [
-                'path' => $relativePath,
-                'checksum' => $hash
-            ];
-        }
-        wp_delete_file($tempArchive);
-        array_map('unlink', glob("$extractedDir/*.*"));
-        $wpfsd->rmdir($extractedDir);
-        $zip->close();
-
-        return $repoFiles;
-    }
-
 	/**
 	 * Commit a post and its dependencies.
 	 *
