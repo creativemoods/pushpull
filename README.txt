@@ -4,7 +4,7 @@ Tags: git, version control, collaboration, publishing, devops
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.16
+Stable tag: 0.1.17
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,6 +16,8 @@ PushPull DevOps plugin for Wordpress
 Store your content in Git and manage your Wordpress instances the DevOps way!
 
 PushPull allows you to store your contents (pages, posts, custom post types, forms, menus, configuration, blocks, patterns, etc.) into Git. This way, it is possible to deploy Wordpress the DevOps way, without manually changing content in production.
+
+This free and open source version of PushPull only allows connections to public repositories and lacks advanced conflict resolution when pulling commits from the remote repository.
 
 ### PushPull allows you to ###
 
@@ -78,14 +80,11 @@ Create a token with the following permissions: api, read_api, read_user, create_
 
 1. Choose either the GitHub or GitLab provider
 2. The API URL will be set automatically
-3. Insert the token created in the previous step in the OAUTH TOKEN field (TODO Rename)
+3. Insert the token created in the previous step in the TOKEN field
 4. Specify you Git repository in the PROJECT field, in the form username/repository (this field must contain a slash)
-5. Click on the TEST button. If your configuration is correct, the TEST button will turn green and the branch drop-down list will contain the list of branches available in your repository. Choose the branch that contains your contents and click on Save
+5. Click on the TEST button. If your configuration is correct, the TEST button will turn green and the branch drop-down list will contain the list of branches available in your repository. Choose the branch that contains your contents.
 6. Check which Worpdress post types you wish to manage with PushPull. We recommend starting with the default settings.
-
-== Frequently Asked Questions ==
-* How can I ?
-test test test
+7. Press Save to save your configuration
 
 ## Contributing ##
 

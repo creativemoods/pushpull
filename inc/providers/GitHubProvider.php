@@ -266,11 +266,59 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @param string $repository
 	 * @return array|WP_Error
 	 */
-	public function getBranches(string $url, string $token, string $repository): array|WP_Error {
-		// TODO Need to override repo, url and token. We need to test what's provided not what's saved
-        $branches = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/branches' );
-		if (is_wp_error($branches)) {
-			return $branches;
+	public function getBranches(string $url, string $repository, string $token): array|WP_Error {
+		$repoendpoint = $url . '/repos/' . $repository;
+		$branchesendpoint = $repoendpoint . '/branches';
+
+		$response = wp_remote_request($branchesendpoint, [
+			'method'  => 'GET',
+			'headers' => array(
+				'Authorization' => 'Bearer '.$token,
+				'X-GitHub-Api-Version' => '2022-11-28',
+				'Accept' => 'application/vnd.github+json',
+			),
+			'timeout' => 30,
+		]);
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		$status = $response['response']['code'];
+		$branches = json_decode($response['body']);
+		if (json_last_error() != JSON_ERROR_NONE) {
+			return new WP_Error('404', 'Error connecting to remote git repository');
+		}
+
+		/* If not HTTP 2xx or 3xx */
+		if ( '2' !== substr( $status, 0, 1 ) && '3' !== substr( $status, 0, 1 ) ) {
+			return new WP_Error(
+				strtolower( str_replace( ' ', '_', $status ) ),
+				sprintf(
+					/* translators: 1: method, 2: endpoint, 3: error */
+					__( 'Method %1$s to endpoint %2$s failed with error: %3$s', 'pushpull' ),
+					'GET',
+					$branchesendpoint,
+					$status.": ".$response['response']['message']
+				)
+			);
+		}
+
+		// TODO Manage pagination
+
+		// Check if repository is public
+		$response = wp_remote_request($repoendpoint, [
+			'method'  => 'GET',
+			'headers' => array(
+				'Authorization' => 'Bearer '.$token,
+				'X-GitHub-Api-Version' => '2022-11-28',
+				'Accept' => 'application/vnd.github+json',
+			),
+			'timeout' => 30,
+		]);
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		if ($response->private) {
+			return new WP_Error('404', 'Connection to private repositories is not supported with this version of PushPull');
 		}
 
 		return $branches;

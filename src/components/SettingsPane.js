@@ -185,8 +185,8 @@ const SettingsPane = (props) => {
 					disabled={ provider && providers.length > 0 ? providers.find((p) => p.id === provider).disabledurl : true }
 				/>
 				<TextControl
-					label={ __( 'Oauth Token', 'pushpull' ) }
-					help={ __( 'A personal oauth token with public_repo scope.', 'pushpull' ) }
+					label={ __( 'Token', 'pushpull' ) }
+					help={ __( 'A personal token with public_repo scope.', 'pushpull' ) }
 					value={oauthToken}
 					onChange={setOauthToken}
 				/>
