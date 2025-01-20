@@ -34,7 +34,7 @@ class Redirection {
 	 * @return void
 	 */
 	public function add_hooks() {
-		if (is_plugin_active('redirection/redirection.php')) {
+		if (\is_plugin_active('redirection/redirection.php')) {
 			add_filter('pushpull_default_tableexport_redirection_redirection_groups', array(&$this, 'tableexport_redirection_groups'), 10, 2);
 			add_filter('pushpull_default_tableexport_redirection_redirection_items', array(&$this, 'tableexport_redirection_items'), 10, 2);
 			add_filter('pushpull_default_tableimport_redirection_redirection_groups_get_by_name', array(&$this, 'get_redirection_groups_by_name'), 10, 2);
@@ -49,7 +49,7 @@ class Redirection {
 	 * @return void
 	 */
 	public function add_tables() {
-		return is_plugin_active('redirection/redirection.php') ? [
+		return \is_plugin_active('redirection/redirection.php') ? [
 			'redirection_groups' => 'redirection_groups',
 			'redirection_items' => 'redirection_items',
 		] : [];

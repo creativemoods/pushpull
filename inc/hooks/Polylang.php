@@ -36,7 +36,7 @@ class Polylang {
 	 * @return void
 	 */
 	public function add_hooks() {
-		if (is_plugin_active('polylang/polylang.php')) {
+		if (\is_plugin_active('polylang/polylang.php')) {
 			add_filter('pushpull_default_term_post_translations', array(&$this, 'term_post_translations'), 10, 2);
 			add_filter('pushpull_default_term_language', array(&$this, 'term_language'), 10, 2);
 			add_action('pushpull_default_import_polylang', array(&$this, 'import'), 10, 1);

@@ -34,7 +34,7 @@ class WooCommerce {
 	 * @return void
 	 */
 	public function add_hooks() {
-		if (is_plugin_active('woocommerce/woocommerce.php')) {
+		if (\is_plugin_active('woocommerce/woocommerce.php')) {
 			add_filter('pushpull_default_tableexport_woocommerce_wc_tax_rate_classes', array(&$this, 'tableexport_wc_tax_rate_classes'), 10, 2);
 			add_filter('pushpull_default_tableexport_woocommerce_woocommerce_tax_rates', array(&$this, 'tableexport_woocommerce_tax_rates'), 10, 2);
 			add_filter('pushpull_default_tableimport_woocommerce_wc_tax_rate_classes_get_by_name', array(&$this, 'get_wc_tax_rate_classes_by_name'), 10, 2);
@@ -49,7 +49,7 @@ class WooCommerce {
 	 * @return void
 	 */
 	public function add_tables() {
-		return is_plugin_active('woocommerce/woocommerce.php') ? [
+		return \is_plugin_active('woocommerce/woocommerce.php') ? [
 			'wc_tax_rate_classes' => 'wc_tax_rate_classes',
 			'woocommerce_tax_rates' => 'woocommerce_tax_rates',
 		] : [];

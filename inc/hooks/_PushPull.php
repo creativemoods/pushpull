@@ -44,7 +44,7 @@ class _PushPull {
 	 * @return void
 	 */
 	public function add_tables() {
-		return is_plugin_active('pushpull/PushPull.php') ? [
+		return \is_plugin_active('pushpull/PushPull.php') ? [
 			'pushpull_deploy' => 'pushpull_deploy',
 		] : [];
 	}

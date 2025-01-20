@@ -36,7 +36,7 @@ class GenerateBlocks {
 	 * @return void
 	 */
 	public function add_hooks() {
-		if (is_plugin_active('generateblocks/plugin.php')) {
+		if (\is_plugin_active('generateblocks/plugin.php')) {
 			add_filter('pushpull_default_meta__generateblocks_reusable_blocks', array(&$this, 'meta__generateblocks_reusable_blocks'), 10, 2);
 			add_filter('pushpull_default_meta__generateblocks_dynamic_css_version', array(&$this, 'meta__generateblocks_dynamic_css_version'), 10, 2);
 			add_filter('pushpull_default_meta_generateblocks_patterns_tree', array(&$this, 'meta_generateblocks_patterns_tree'), 10, 2);

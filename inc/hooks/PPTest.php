@@ -36,7 +36,7 @@ class PPTest {
 	 * @return void
 	 */
 	public function add_hooks() {
-		if (is_plugin_active('pptest/pptest.php')) {
+		if (\is_plugin_active('pptest/pptest.php')) {
 			add_filter('pushpull_default_term_taxname', array(&$this, 'term_taxname'), 10, 2);
 			add_filter('pushpull_default_meta_custom_meta_key_simple_managed', array(&$this, 'meta_custom_meta_key_simple_managed'), 10, 2);
 			add_filter('pushpull_default_meta_custom_meta_key_multiple_managed', array(&$this, 'meta_custom_meta_key_multiple_managed'), 10, 2);
