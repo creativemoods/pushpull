@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.1.17
+* Version:           0.1.18
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -204,7 +204,7 @@ class PushPull {
 				INDEX idx_deployorder (deployorder)
 			) $charset_collate;";
 
-// TODO "option_set", "option_add", "option_merge", "custom", "lang_add", "rest_request", "folder_create", "category_create", "pushpull_pull", "pushpull_pullall", "menu_create", "row_insert", "rewrite_rules_flush", "email_send"
+// TODO "option_set_from_postname", "option_set", "option_add", "option_merge", "custom", "lang_add", "rest_request", "folder_create", "category_create", "pushpull_pull", "pushpull_pullall", "menu_create", "row_insert", "rewrite_rules_flush", "email_send"
 
 			// Execute the query to create the table
 			dbDelta($sql);

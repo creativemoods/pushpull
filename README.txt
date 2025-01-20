@@ -4,7 +4,7 @@ Tags: git, version control, collaboration, publishing, devops
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.17
+Stable tag: 0.1.18
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,7 +74,7 @@ Create a Fine-grained personal access token. This token should only give access 
 
 ### With GitLab ###
 
-Create a token with the following permissions: api, read_api, read_user, create_runner, manage_runner, k8s_proxy, read_repository, write_repository, read_registry, write_registry, ai_features (TODO refine)
+Create a token with api permission.
 
 ### PushPull configuration ###
 
