@@ -6,6 +6,10 @@
 
 namespace CreativeMoods\PushPull\hooks;
 
+if (!function_exists('is_plugin_active')) {
+    require_once ABSPATH . 'wp-admin/includes/plugin.php';
+}
+
 use CreativeMoods\PushPull\PushPull;
 use stdClass;
 use WP_Post;
