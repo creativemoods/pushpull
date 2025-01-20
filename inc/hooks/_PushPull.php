@@ -78,10 +78,10 @@ class _PushPull {
 		global $wpdb;
 
 		// Define the table name
-		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+		$table_name = esc_sql($wpdb->prefix . $this->app::PP_DEPLOY_TABLE);
 
-        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
-		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM %s WHERE name = %s", $table_name, $name));
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared */
+		$row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table_name} WHERE name = %s", $name));
 		if ($row) {
 			return (array) $row;
 		}

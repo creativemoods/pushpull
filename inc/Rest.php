@@ -347,7 +347,7 @@ class Rest {
 			'posttypes' => get_option($this->app::POST_TYPES_OPTION_KEY, []),
 			'tables' => get_option($this->app::TABLES_OPTION_KEY, []),
 			'oauth-token' => get_option($this->app::TOKEN_OPTION_KEY, ''),
-			'host' => get_option($this->app::HOST_OPTION_KEY, ''),
+			'host' => get_option($this->app::HOST_OPTION_KEY, 'https://api.github.com'),
 			'repository' => get_option($this->app::REPO_OPTION_KEY, ''),
 			'branch' => get_option($this->app::BRANCH_OPTION_KEY, 'main'),
 		];
@@ -625,10 +625,10 @@ class Rest {
 		global $wpdb;
 
 		// Define the table name
-		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+		$table_name = esc_sql($wpdb->prefix . $this->app::PP_DEPLOY_TABLE);
 
-		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
-		$results = $wpdb->get_results($wpdb->prepare("SELECT * FROM %s", $table_name), ARRAY_A);
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared */
+		$results = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table_name}"), ARRAY_A);
 
 		return $results;
 	}
