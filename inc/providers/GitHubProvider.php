@@ -17,7 +17,6 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 */
 	protected function call( $method, $endpoint, $body = array(), $checkPublicRepo = true ) {
 		if ( $checkPublicRepo && ! $t = get_transient($this->app::PP_PUBLIC_REPO)) {
-			$this->app->write_log($t);
 			return new WP_Error('404', 'Connection to private repositories is not supported with this version of PushPull');
 		};
 		$args = array(
@@ -36,7 +35,6 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		}
 
 		$response = wp_remote_request( $endpoint, $args );
-		//$this->app->write_log($response);
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
@@ -159,25 +157,6 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
      * @return array Repository details.
      */
     public function listRepository(): array {
-		// TODO Change to use a local pull from the repository
-/*        $this->app->write_log("Fetching remote repo contents.");
-
-        $archiveContent = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/git/trees/' . $this->branch() . '?recursive=1' );
-        if ($archiveContent === false) {
-            throw new \Exception("Failed to download repository archive.");
-        }
-        $repoFiles = [];
-		$this->app->write_log($archiveContent);
-        foreach ($archiveContent->tree as $file) {
-            if ($file->type === 'blob') {
-                $repoFiles[] = [
-                    'path' => $file->path,
-                    'checksum' => $file->sha
-                ];
-            }
-        }
-
-        return $repoFiles;*/
         $this->app->write_log("Fetching remote repo contents.");
 
         $archiveContent = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/zipball/' . $this->branch() );
@@ -242,7 +221,6 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		// Get the current base tree
 		$res = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/git/commits/' . $latestcommithash );
 		$base_tree = $res->tree->sha;
-		$this->app->write_log($base_tree);
 
 		// Create a tree referencing the blobs
 		$tree = [];
@@ -289,7 +267,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @return array|WP_Error
 	 */
 	public function getBranches(string $url, string $token, string $repository): array|WP_Error {
-		// TODO Need to override repo, url and token
+		// TODO Need to override repo, url and token. We need to test what's provided not what's saved
         $branches = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/branches' );
 		if (is_wp_error($branches)) {
 			return $branches;
@@ -402,6 +380,21 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		return array_reverse($commits);
 	}
 
+	/**
+	 * Is repo public ?
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function isPublic(): bool|WP_Error {
+		$repo = $this->call( 'GET', $this->url() . '/repos/' . $this->repository(), array(), false);
+		if ( is_wp_error( $repo ) ) {
+			$this->app->write_log($repo);
+			return false;
+		}
+
+		return $repo->private === false;
+	}
+
 	///////////////////////////////////// TODO
 	/**
 	 * Get commit details
@@ -455,19 +448,4 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 
 		return $hashes;
     }
-
-	/**
-	 * Is repo public ?
-	 *
-	 * @return bool|WP_Error
-	 */
-	public function isPublic(): bool|WP_Error {
-		$repo = $this->call( 'GET', $this->url() . '/repos/' . $this->repository(), array(), false);
-		if ( is_wp_error( $repo ) ) {
-			$this->app->write_log($repo);
-			return false;
-		}
-
-		return $repo->private === false;
-	}
 }

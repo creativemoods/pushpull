@@ -194,8 +194,6 @@ class WPFileStateManager {
      * @return void|WP_error
      */
     private function acquireLock() {
-        global $wpdb;
-
         if ($this->getLock()) {
             $startTime = time();
             $timeout = 5; // Timeout after 5 seconds

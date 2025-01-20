@@ -225,12 +225,9 @@ class Core {
 
 		foreach ($initialrow['metadata'] as $key => $value) {
 			// Insert metadata
-	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-			$wpdb->insert($wpdb->prefix . 'usermeta', [
-				'user_id' => $localid,
-				'meta_key' => $key,
-				'meta_value' => $value
-			]);
+	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value */
+			$wpdb->insert($wpdb->prefix . 'usermeta', ['user_id' => $localid, 'meta_key' => $key, 'meta_value' => $value]);
+			// TODO
 			$wpdb->insert_id;
 		}
     }
@@ -248,12 +245,9 @@ class Core {
 
 		foreach ($initialrow['metadata'] as $key => $value) {
 			// Insert metadata
-	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
-			$wpdb->insert($wpdb->prefix . 'commentmeta', [
-				'comment_id' => $localid,
-				'meta_key' => $key,
-				'meta_value' => $value
-			]);
+	        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value */
+			$wpdb->insert($wpdb->prefix . 'commentmeta', ['comment_id' => $localid, 'meta_key' => $key, 'meta_value' => $value]);
+			// TODO
 			$wpdb->insert_id;
 		}
     }

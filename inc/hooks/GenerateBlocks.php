@@ -189,7 +189,7 @@ class GenerateBlocks {
 
     /**
      * Manipulate data on export
-	 * Warning! You need to work on $data, not on $post because $data contains previously modified data while $post down not.
+	 * Warning! You need to work on $data, not on $post because $data contains previously modified data while $post does not.
      *
      * @param array $data
      * @param WP_Post $post

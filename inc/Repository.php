@@ -155,9 +155,10 @@ class Repository {
 		foreach(get_option($this->app::TABLES_OPTION_KEY, []) as $plugintable) {
 			$plugin = explode('-', $plugintable)[0];
 			$table = explode('-', $plugintable)[1];
-			$localres[$table] = [];
-		    /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
-			$rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}%s", $table), ARRAY_A);
+			$localres[$table] = []; // TODO
+			$tablename = esc_sql($table);
+		    /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared */
+			$rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$wpdb->prefix}{$tablename}"), ARRAY_A);
 			foreach ($rows as $i => $row) {
 				$tablerow = $this->app->pusher()->create_tablerow_export($plugin, $table, $row);
 				if ($tablerow) {

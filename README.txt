@@ -4,7 +4,7 @@ Tags: git, version control, collaboration, publishing, devops
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.12
+Stable tag: 0.1.13
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,7 +15,7 @@ PushPull DevOps plugin for Wordpress
 
 Store your content in Git and manage your Wordpress instances the DevOps way!
 
-PushPull allows you to store your contents (pages, posts, custom post types, forms, menus, configuration, blocks, patterns, etc.) into Git. This way, it is possible to deploy Wordpress the DevOps way, without manually changing content in production. More info in the blog series: 
+PushPull allows you to store your contents (pages, posts, custom post types, forms, menus, configuration, blocks, patterns, etc.) into Git. This way, it is possible to deploy Wordpress the DevOps way, without manually changing content in production.
 
 ### PushPull allows you to ###
 
@@ -58,7 +58,7 @@ Install the plugin and activate it via WordPress\'s plugin settings page.
 
   1. `cd wp-content/plugins`
   2. `git clone https://github.com/creativemoods/pushpull.git`
-  3. `cd wordpress-github-sync && composer install`
+  3. `cd wordpress-pushpull && composer install`
   4. Activate the plugin in Wordpress\' Dashboard > Plugins > Installed Plugins
 
 ## Configuration ##
@@ -89,6 +89,6 @@ test test test
 
 ## Contributing ##
 
-Found a bug? Want to take a stab at [one of the open issues](https://github.com/mAAdhaTTah/wordpress-github-sync/issues)? We'd love your help!
+Found a bug? Want to take a stab at [one of the open issues](https://github.com/creativemoods/pushpull/issues)? We'd love your help!
 
 See [the contributing documentation](CONTRIBUTING.md) for details.
