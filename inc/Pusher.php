@@ -428,12 +428,14 @@ class Pusher {
 	 * @return mixed
 	 */
 	protected function create_post_commit_changes(WP_Post $post) {
+		global $wp_filesystem;
+
 		$content = $this->create_post_export($post);
 		$changes = [];
 		if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
 			// This is an attachment that references a file in uploads, we need to add it
 			$fn = wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'][0];
-			$fc = file_get_contents($fn);
+			$fc = $wp_filesystem->get_contents($fn);
 			$name = "_media/".$content['meta']['_wp_attached_file'][0];
 			$hash = $this->app->state()->saveFile($name, base64_encode($fc));
 			$changes[$name] = $hash;

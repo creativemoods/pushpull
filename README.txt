@@ -4,7 +4,7 @@ Tags: git, version control, collaboration, publishing, devops
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.19
+Stable tag: 0.1.20
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 

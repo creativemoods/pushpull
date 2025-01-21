@@ -11,6 +11,10 @@ if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
 	include( ABSPATH . 'wp-admin/includes/image.php' );
 }
 
+if (!function_exists('WP_Filesystem')) {
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+}
+
 /**
  * Class Import
  */
@@ -39,6 +43,8 @@ class Puller {
 	 * @return integer|\WP_Error
 	 */
 	protected function import_image($image) {
+		global $wp_filesystem;
+
 		// Get attachment from Git
 		$imagepost = $this->app->state()->getFile("_attachment/".$image);
 		$imagepost = json_decode($imagepost);
@@ -48,7 +54,7 @@ class Puller {
 		$media = $this->app->state()->getFile("_media/".$imagepost->meta->_wp_attached_file[0]);
 		$media = base64_decode($media);
 		// Write binary contents to local file in uploads/
-		if ( ! file_put_contents( $fn, $media ) ) {
+		if ( ! $wp_filesystem->put_contents($fn, $media, FS_CHMOD_FILE) ) {
 			return new \WP_Error( 'file_write_error', __( 'Failed to write media file.', 'pushpull' ) );
 		}
 		// Create attachment
