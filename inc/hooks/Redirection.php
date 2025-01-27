@@ -6,10 +6,6 @@
 
 namespace CreativeMoods\PushPull\hooks;
 
-/*if (!function_exists('is_plugin_active')) {
-    require_once ABSPATH . 'wp-admin/includes/plugin.php';
-}*/
-
 use CreativeMoods\PushPull\PushPull;
 
 /**
@@ -38,6 +34,10 @@ class Redirection {
 	 * @return void
 	 */
 	public function add_hooks() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		if (\is_plugin_active('redirection/redirection.php')) {
 			add_filter('pushpull_default_tableexport_redirection_redirection_groups', array(&$this, 'tableexport_redirection_groups'), 10, 2);
 			add_filter('pushpull_default_tableexport_redirection_redirection_items', array(&$this, 'tableexport_redirection_items'), 10, 2);
@@ -53,6 +53,10 @@ class Redirection {
 	 * @return void
 	 */
 	public function add_tables() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		return \is_plugin_active('redirection/redirection.php') ? [
 			'redirection_groups' => 'redirection_groups',
 			'redirection_items' => 'redirection_items',

@@ -684,7 +684,7 @@ class Rest {
 		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
 
 		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
-		return $wpdb->update(
+		$res = $wpdb->update(
 			$table_name,
 			[
 				'deployorder' => $params['deployorder'],
@@ -692,8 +692,13 @@ class Rest {
 				'type' => $params['type'],
 				'value' => $params['value'],
 			],
-			['id' => $params['id']]
+			['id' => $params['id']],
+			['%d', '%s', '%s', '%s'],
+			['%d']
 		);
+		// TODO check if the update was successful $res === false
+
+		return $res;
 	}
 
 	/**

@@ -41,8 +41,18 @@ class Deployer {
 
         /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared */
 		$deployitem = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table_name} WHERE id = %d", $id));
-		if ($deployitem->type === 'option_set') {
-			return update_option($deployitem->name, $deployitem->value);
+		switch ($deployitem->type) {
+			case 'option_set':
+				return update_option($deployitem->name, $deployitem->value);
+			case 'option_setidfromname':
+				$post = $this->app->utils()->getLocalPostByName('page', $deployitem->value);
+				if ($post) {
+					return update_option($deployitem->name, $post->ID);
+				} else {
+					return false;
+				}
+			default:
+				return false;
 		}
 
 		return false;

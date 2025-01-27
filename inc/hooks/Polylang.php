@@ -6,10 +6,6 @@
 
 namespace CreativeMoods\PushPull\hooks;
 
-/*if (!function_exists('is_plugin_active')) {
-    require_once ABSPATH . 'wp-admin/includes/plugin.php';
-}*/
-
 use CreativeMoods\PushPull\PushPull;
 use stdClass;
 use WP_Post;
@@ -40,6 +36,10 @@ class Polylang {
 	 * @return void
 	 */
 	public function add_hooks() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		if (\is_plugin_active('polylang/polylang.php')) {
 			add_filter('pushpull_default_term_post_translations', array(&$this, 'term_post_translations'), 10, 2);
 			add_filter('pushpull_default_term_language', array(&$this, 'term_language'), 10, 2);

@@ -6,10 +6,6 @@
 
 namespace CreativeMoods\PushPull\hooks;
 
-/*if (!function_exists('is_plugin_active')) {
-    require_once ABSPATH . 'wp-admin/includes/plugin.php';
-}*/
-
 use CreativeMoods\PushPull\PushPull;
 
 /**
@@ -48,6 +44,10 @@ class _PushPull {
 	 * @return void
 	 */
 	public function add_tables() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		return \is_plugin_active('pushpull/PushPull.php') ? [
 			'pushpull_deploy' => 'pushpull_deploy',
 		] : [];

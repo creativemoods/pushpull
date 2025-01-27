@@ -78,6 +78,10 @@ class Puller {
 			];
 			$attachid = wp_insert_attachment($attachment, $fn, 0);
 			// Regenerate attachment metadata
+			// We might be in REST context where image.php is not loaded
+			if (!function_exists('wp_generate_attachment_metadata')) {
+				require_once ABSPATH . 'wp-admin/includes/image.php';
+			}
 			$data = wp_generate_attachment_metadata($attachid, $fn);
 			wp_update_attachment_metadata($attachid, $data);
 			// TODO Quid de postimage->meta['_wp_attachment_image_alt'] ?

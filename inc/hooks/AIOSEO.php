@@ -6,10 +6,6 @@
 
 namespace CreativeMoods\PushPull\hooks;
 
-/*if (!function_exists('is_plugin_active')) {
-    require_once ABSPATH . 'wp-admin/includes/plugin.php';
-}*/
-
 use CreativeMoods\PushPull\PushPull;
 use stdClass;
 use WP_Post;
@@ -40,6 +36,10 @@ class AIOSEO {
 	 * @return void
 	 */
 	public function add_hooks() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		if (\is_plugin_active('generateblocks/plugin.php')) {
 			add_filter('pushpull_default_export_all-in-one-seo-pack', array(&$this, 'export'), 10, 2);
 			add_action('pushpull_default_import_all-in-one-seo-pack', array(&$this, 'import'), 10, 1);

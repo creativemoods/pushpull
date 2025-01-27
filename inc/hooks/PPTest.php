@@ -6,10 +6,6 @@
 
 namespace CreativeMoods\PushPull\hooks;
 
-/*if (!function_exists('is_plugin_active')) {
-    require_once ABSPATH . 'wp-admin/includes/plugin.php';
-}*/
-
 use CreativeMoods\PushPull\PushPull;
 use stdClass;
 use WP_Post;
@@ -40,6 +36,10 @@ class PPTest {
 	 * @return void
 	 */
 	public function add_hooks() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		if (\is_plugin_active('pptest/pptest.php')) {
 			add_filter('pushpull_default_term_taxname', array(&$this, 'term_taxname'), 10, 2);
 			add_filter('pushpull_default_meta_custom_meta_key_simple_managed', array(&$this, 'meta_custom_meta_key_simple_managed'), 10, 2);

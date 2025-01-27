@@ -104,7 +104,7 @@ class Repository {
 						// TODO test this and test both with gitlab
 						$this->app->state()->saveFile($file, $content);
 					} else {
-						$this->app->state()->saveFile($file, json_encode($content));
+						$this->app->state()->saveFile($file, wp_json_encode($content));
 					}
 				}
 			}

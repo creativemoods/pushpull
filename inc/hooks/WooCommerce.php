@@ -6,10 +6,6 @@
 
 namespace CreativeMoods\PushPull\hooks;
 
-/*if (!function_exists('is_plugin_active')) {
-    require_once ABSPATH . 'wp-admin/includes/plugin.php';
-}*/
-
 use CreativeMoods\PushPull\PushPull;
 
 /**
@@ -38,6 +34,10 @@ class WooCommerce {
 	 * @return void
 	 */
 	public function add_hooks() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		if (\is_plugin_active('woocommerce/woocommerce.php')) {
 			add_filter('pushpull_default_tableexport_woocommerce_wc_tax_rate_classes', array(&$this, 'tableexport_wc_tax_rate_classes'), 10, 2);
 			add_filter('pushpull_default_tableexport_woocommerce_woocommerce_tax_rates', array(&$this, 'tableexport_woocommerce_tax_rates'), 10, 2);
@@ -53,6 +53,10 @@ class WooCommerce {
 	 * @return void
 	 */
 	public function add_tables() {
+		// We might be in REST context where plugin.php is not loaded
+		if (!function_exists('is_plugin_active')) {
+    		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		return \is_plugin_active('woocommerce/woocommerce.php') ? [
 			'wc_tax_rate_classes' => 'wc_tax_rate_classes',
 			'woocommerce_tax_rates' => 'woocommerce_tax_rates',

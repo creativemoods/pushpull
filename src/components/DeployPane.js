@@ -231,7 +231,8 @@ const DeployPane = (props) => {
 		  editable: true,
 		  type: 'singleSelect',
 //		  valueOptions: ['option_set', 'option_add', 'option_merge', 'custom', 'lang_add', 'rest_request', 'folder_create', 'category_create', 'pushpull_pull', 'pushpull_pullall', 'menu_create', 'row_insert', 'rewrite_rules_flush', 'email_send'],
-		  valueOptions: ['option_set'],
+		  // Warning max 20 chars
+		  valueOptions: ['option_set', 'option_setidfromname'],
 	    },
 		{
 		  field: 'name',
