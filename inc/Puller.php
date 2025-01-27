@@ -7,14 +7,6 @@
 
 namespace CreativeMoods\PushPull;
 
-if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
-	include( ABSPATH . 'wp-admin/includes/image.php' );
-}
-
-if (!function_exists('WP_Filesystem')) {
-    require_once ABSPATH . 'wp-admin/includes/file.php';
-}
-
 /**
  * Class Import
  */

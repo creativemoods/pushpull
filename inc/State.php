@@ -5,10 +5,12 @@ namespace CreativeMoods\PushPull;
 use WP;
 use WP_Error;
 
-class WPFileStateManager {
+class State {
     const FILE_STATE_TRANSIENT          = 'pushpull_local_clone';
     const COMMIT_LOG_TRANSIENT          = 'pushpull_repo_commit_log';
     const LATEST_COMMIT_HASH_TRANSIENT  = 'pushpull_latest_commit_hash';
+    const STATE_LOCK                    = 'pushpull_state_lock';
+    const FILE_CONTENT_TRANSIENT_PREFIX = 'pushpull_file_content_';
     const EXPIRATION = 0; // Transients do not expire (set 0 for persistent).
 
 	/**
@@ -180,7 +182,7 @@ class WPFileStateManager {
         global $wpdb;
 
         /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
-        $lock = $wpdb->get_var("SELECT option_value FROM $wpdb->options WHERE option_name = 'wp_file_state_manager_lock'");
+        $lock = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM $wpdb->options WHERE option_name = %s", self::STATE_LOCK));
         if ($lock) {
             $this->app->write_log(getmypid() . ' waiting for lock by pid: ' . $lock);
         }
@@ -201,13 +203,15 @@ class WPFileStateManager {
             // Wait until lock is released
             while ($this->getLock()) {
                 if (time() - $startTime > $timeout) {
+                    // Delete lock here otherwise it will be stuck forever
+                    $this->releaseLock();
                     return new WP_Error('lock_timeout', 'Lock timeout');
                 }
                 usleep(100000); // Sleep for 100ms
             }
         }
         $this->app->write_log('Setting lock with process ID: ' . getmypid());
-        update_option('wp_file_state_manager_lock', getmypid());
+        update_option(self::STATE_LOCK, getmypid());
 
         return;
     }
@@ -220,7 +224,7 @@ class WPFileStateManager {
     private function releaseLock():void {
         // Release the lock
         $this->app->write_log('Releasing lock with process ID: ' . getmypid());
-        delete_option('wp_file_state_manager_lock');
+        delete_option(self::STATE_LOCK);
 
         return;
     }
@@ -234,6 +238,8 @@ class WPFileStateManager {
      * @return string|WP_Error The hash of the file content.
      */
     public function saveFile($filePath, $content): string|WP_Error {
+        $this->app->write_log("SaveFile: ".$filePath);
+        $this->app->write_log(substr($content, 0, 50));
         // Lock transient to ensure exclusive execution
         $lock = $this->acquireLock();
         if (is_wp_error($lock)) {
@@ -317,7 +323,7 @@ class WPFileStateManager {
      * @return string
      */
     private function getFileContentTransientKey($filePath) {
-        return 'wp_file_content_' . md5($filePath);
+        return self::FILE_CONTENT_TRANSIENT_PREFIX . md5($filePath);
     }
 
     /**

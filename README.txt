@@ -4,7 +4,7 @@ Tags: git, version control, collaboration, publishing, devops
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.20
+Stable tag: 0.1.21
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -91,3 +91,22 @@ Create a token with api permission.
 Found a bug? Want to take a stab at [one of the open issues](https://github.com/creativemoods/pushpull/issues)? We'd love your help!
 
 See [the contributing documentation](CONTRIBUTING.md) for details.
+
+== External services ==
+
+This plugin connects to a Git repository (either github.com or gitlab.com, depending on your configuration) and stores the contents of your Wordpress instance (pages, posts, custom post types, etc. as well as configuration) in this repository.
+
+Contents are pushed to or pulled from this Git repository each time you click on the "PUSH LOCAL COMMITS" or "PULL REMOTE COMMITS" buttons in the "SYNC" tab (or call the equivalent API endpoint).
+The plugin sends / retrieves the following information via HTTPS API calls:
+1. Your access token and the name of your account and project
+2. The contents you chose to sync (this could be the contents of a Wordpress page or post, the contents of a Wordpress option or the row of Wordpress table)
+
+This version of PushPull only works with public git repositories. This means that any information synced to the configured Git repository will be public.
+Do not store sensitive information as it will be made available publicly.
+A Git repository doesn't delete any information. If you accidentally publish sensitive information, it is not sufficient to delete it and sync the deletion.
+You also need to rotate any credential that may have been made public and / or delete the entire Git repository.
+
+Gitlab terms of use: https://about.gitlab.com/terms/
+Gitlab privacy policy: https://about.gitlab.com/privacy/
+Github terms of use: https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
+Github privacy policy: https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement

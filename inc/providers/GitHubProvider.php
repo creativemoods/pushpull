@@ -107,12 +107,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 			return $data;
 		}
 
-		if ($type === "media") {
-			// TODO Solve this stupid thing
-			return base64_decode(base64_decode($data->content));
-		} else {
-			return json_decode(base64_decode($data->content));
-		}
+		return $data;
 	}
 
 	/**
@@ -398,7 +393,6 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		return $repo->private === false;
 	}
 
-	///////////////////////////////////// TODO
 	/**
 	 * Get commit details
      * @param string $commit Commit ID.
@@ -406,7 +400,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @return array|WP_Error
 	 */
 	public function getCommitFiles(string $commit): array|WP_Error {
-		$diffs = $this->call( 'GET', $this->url() . '/projects/' . urlencode($this->repository()) . '/repository/commits/' . $commit . '/diff');
+		$diffs = $this->call( 'GET', $this->url() . '/repos/' . $this->repository() . '/commits/' . $commit);
 
 		if ( is_wp_error( $diffs ) ) {
 			$this->app->write_log($diffs);
@@ -414,8 +408,8 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		}
 
 		return array_map(function($item) {
-			return $item->new_path;
-		}, $diffs);
+			return $item->filename;
+		}, $diffs->files);
 	}
 
 	/**

@@ -2,7 +2,7 @@
     "name": "creativemoods/pushpull",
     "description": "Push Pull DevOps plugin for Wordpress",
     "keywords": ["wordpress", "plugin"],
-    "homepage": "https://creativemoods.pt",
+    "homepage": "https://creativemoods.pt/pushpull",
     "type": "wordpress-plugin",
     "autoload": {
         "psr-4": {
@@ -12,7 +12,7 @@
     "authors": [
         {
             "name": "Creative Moods",
-            "homepage": "https://creativemoods.pt"
+            "homepage": "https://creativemoods.pt/pushpull"
         }
     ],
     "require": {

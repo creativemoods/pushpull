@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.1.20
+* Version:           0.1.21
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -27,7 +27,7 @@ use CreativeMoods\PushPull\CLI;
 use CreativeMoods\PushPull\Utils;
 use CreativeMoods\PushPull\Pusher;
 use CreativeMoods\PushPull\Repository;
-use CreativeMoods\PushPull\WPFileStateManager;
+use CreativeMoods\PushPull\State;
 use CreativeMoods\PushPull\hooks\Core;
 use WP_CLI;
 
@@ -89,7 +89,7 @@ class PushPull {
 	/**
 	 * local git clone
 	 *
-	 * @var WPFileStateManager
+	 * @var State
 	 */
 	protected $state;
 
@@ -467,11 +467,11 @@ class PushPull {
 	/**
 	* Lazy-load State.
 	*
-	* @return WPFileStateManager
+	* @return State
 	*/
 	public function state() {
 		if ( ! $this->state ) {
-			$this->state = new WPFileStateManager( $this, 'main' );
+			$this->state = new State( $this, 'main' );
 		}
 		
 		return $this->state;

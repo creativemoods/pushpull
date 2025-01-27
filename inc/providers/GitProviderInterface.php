@@ -6,7 +6,6 @@
 
 namespace CreativeMoods\PushPull\providers;
 
-use CreativeMoods\PushPull\WPFileStateManager;
 use WP_Error;
 use stdClass;
 

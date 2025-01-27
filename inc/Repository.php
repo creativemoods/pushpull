@@ -99,7 +99,13 @@ class Repository {
 				foreach ($files as $file) {
 					list($type, $name) = explode('/', $file);
 					$content = $gitProvider->getRemotePostByName(ltrim($type, '_'), $name);
-					$this->app->state()->saveFile($file, $content);
+					$content = json_decode(base64_decode($content->content));
+					if ($type === '_media') {
+						// TODO test this and test both with gitlab
+						$this->app->state()->saveFile($file, $content);
+					} else {
+						$this->app->state()->saveFile($file, json_encode($content));
+					}
 				}
 			}
 			$this->app->state()->importcommits($commits, false);
