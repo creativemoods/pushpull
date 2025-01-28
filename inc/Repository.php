@@ -144,14 +144,24 @@ class Repository {
 		$localres['media'] = [];
 		foreach (get_post_types() as $posttype) {
 			if (in_array($posttype, get_option($this->app::POST_TYPES_OPTION_KEY))) {
-				$posts = get_posts(['numberposts' => -1, 'post_type' => 'any', 'post_type' => $posttype]);
+				$posts = get_posts(['numberposts' => -1, 'post_type' => $posttype]);
 				$localres[$posttype] = [];
 				foreach ($posts as $post) {
-					$content = $this->app->pusher()->create_post_export($post);
-					$localres[$posttype][$post->post_name] = ['localchecksum' => md5(wp_json_encode($content)), 'remotechecksum' => null];
-					// Also add media
-					if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
-						$localres['media'][$content['meta']['_wp_attached_file']] = ['localchecksum' => md5(wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file']), 'remotechecksum' => null];
+					if ($posttype === "attachment") {
+						$content = $this->app->pusher()->create_post_export($post);
+						$localres[$posttype][$post->post_name] = ['localchecksum' => md5(wp_json_encode($content)), 'remotechecksum' => null];
+						// Also add media
+						if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
+							// TODO Is it always 0 or can there be multiple files ?
+//							$localres['media'][$content['meta']['_wp_attached_file'][0]] = ['localchecksum' => md5(wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file'][0]), 'remotechecksum' => null];
+						}
+					} else {
+						$content = $this->app->pusher()->create_post_export($post);
+						$localres[$posttype][$post->post_name] = ['localchecksum' => md5(wp_json_encode($content)), 'remotechecksum' => null];
+						// Also add media
+						if (array_key_exists('meta', $content) && array_key_exists('_wp_attached_file', $content['meta'])) {
+//							$localres['media'][$content['meta']['_wp_attached_file']] = ['localchecksum' => md5(wp_upload_dir()['path']."/".$content['meta']['_wp_attached_file']), 'remotechecksum' => null];
+						}
 					}
 				}
 			}

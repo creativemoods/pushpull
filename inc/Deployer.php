@@ -46,11 +46,18 @@ class Deployer {
 				return update_option($deployitem->name, $deployitem->value);
 			case 'option_setidfromname':
 				$post = $this->app->utils()->getLocalPostByName('page', $deployitem->value);
+				if (!$post) {
+					// TODO not clean
+					$post = $this->app->utils()->getLocalPostByName('attachment', $deployitem->value);
+				}
+				$this->app->write_log($post);
 				if ($post) {
 					return update_option($deployitem->name, $post->ID);
 				} else {
 					return false;
 				}
+			case 'option_setserialized':
+				update_option($deployitem->name, maybe_unserialize($deployitem->value));
 			default:
 				return false;
 		}

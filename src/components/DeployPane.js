@@ -232,7 +232,7 @@ const DeployPane = (props) => {
 		  type: 'singleSelect',
 //		  valueOptions: ['option_set', 'option_add', 'option_merge', 'custom', 'lang_add', 'rest_request', 'folder_create', 'category_create', 'pushpull_pull', 'pushpull_pullall', 'menu_create', 'row_insert', 'rewrite_rules_flush', 'email_send'],
 		  // Warning max 20 chars
-		  valueOptions: ['option_set', 'option_setidfromname'],
+		  valueOptions: ['option_set', 'option_setidfromname', 'option_setserialized', 'flush_rewrite_rules'],
 	    },
 		{
 		  field: 'name',
