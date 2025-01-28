@@ -195,7 +195,7 @@ class PushPull {
 			$sql = "CREATE TABLE $table_name (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				deployorder INT(11) NOT NULL,
-				type VARCHAR(20) NOT NULL,
+				type VARCHAR(191) NOT NULL,
 				name VARCHAR(191) NOT NULL,
 				value LONGTEXT NOT NULL,
 				PRIMARY KEY (id),
