@@ -51,7 +51,7 @@ class Repository {
 		foreach ($commits as $commit) {
 			foreach ($commit['changes'] as $filePath => $hash) {
 				$actions[] = [
-					'action' => 'tbd',
+					'action' => $hash === null ? 'delete' : 'tbd',
 					'file_path' => $filePath,
 					'content' => $this->app->state()->getFile($filePath),
 				];

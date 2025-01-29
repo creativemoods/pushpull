@@ -156,16 +156,16 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		$latestcommithash = $this->getLatestCommitHash();
 
 		// Create a blob for each $wrap action
+		$this->app->write_log($wrap);
 		foreach ($wrap['actions'] as $key => $action) {
-//			$wrap['actions'][$key]['sha'] = $this->git_exists($action['file_path']);
-//			if ($wrap['actions'][$key]['sha'] === null) {
+			if ($action['action'] != 'delete') {
 				$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/blobs', ['encoding' => 'utf-8', 'content' => $action['content']] );
 				if (is_wp_error($res)) {
 					$this->app->write_log($res);
 					return $res;
 				}
 				$wrap['actions'][$key]['sha'] = $res->sha;
-//			}
+			}
 		}
 
 		// Get the current base tree
@@ -179,7 +179,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 				'path' => $action['file_path'],
 				'mode' => '100644',
 				'type' => 'blob',
-				'sha' => $action['sha'],
+				'sha' => $action['action'] === 'delete' ? null : $action['sha'],
 			];
 		}
 		$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/trees', ['base_tree' => $base_tree, 'tree' => $tree] );
