@@ -637,7 +637,6 @@ class Rest {
 			$results[$key]['status'] = $this->app->deployer()->getValue($result['type'], $result['name']) === $result['value'] ? 'identical' : 'different';
 		}
 
-		$this->app->write_log($results);
 		return $results;
 	}
 

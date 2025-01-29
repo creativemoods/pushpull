@@ -76,7 +76,6 @@ class Deployer {
 					// TODO not clean
 					$post = $this->app->utils()->getLocalPostByName('attachment', $deployitem->value);
 				}
-				$this->app->write_log($post);
 				if ($post) {
 					return update_option($deployitem->name, $post->ID);
 				} else {
