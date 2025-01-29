@@ -27,6 +27,32 @@ class Deployer {
 	}
 
 	/**
+	 * Get a value from the database.
+	 *
+	 * @param string $type - the type of the value.
+	 * @param string $name - the name of the value.
+	 * 
+	 * @return mixed
+	 */
+	public function getValue($type, $name) {
+		switch ($type) {
+			case 'option_set':
+				return get_option($name);
+			case 'option_setidfromname':
+				$post = get_post(get_option($name));
+				if ($post) {
+					return $post->post_name;
+				} else {
+					return "unknown";
+				}
+			case 'option_setserialized':
+				return maybe_serialize(get_option($name));
+			default:
+				return "unknown";
+		}
+	}
+
+	/**
 	 * Deploy configuration and contents.
 	 *
 	 * @param int $id the id if the deploy item.

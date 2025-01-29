@@ -16,7 +16,7 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 * @return array|WP_Error
 	 */
 	protected function call( $method, $endpoint, $body = array(), $checkPublicRepo = true ) {
-		if ( $checkPublicRepo && ! $t = get_transient($this->app::PP_PUBLIC_REPO)) {
+		if ( $checkPublicRepo && ! $this->isPublicRepo()) {
 			return new WP_Error('404', 'Connection to private repositories is not supported with this version of PushPull');
 		};
 		$args = array(
@@ -383,11 +383,11 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 	 *
 	 * @return bool|WP_Error
 	 */
-	public function isPublic(): bool|WP_Error {
+	protected function checkPublicRepo(): bool|WP_Error {
 		$repo = $this->call( 'GET', $this->url() . '/repos/' . $this->repository(), array(), false);
 		if ( is_wp_error( $repo ) ) {
 			$this->app->write_log($repo);
-			return false;
+			return $repo;
 		}
 
 		return $repo->private === false;

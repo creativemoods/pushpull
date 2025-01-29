@@ -99,5 +99,5 @@ interface GitProviderInterface {
 	 *
 	 * @return bool|WP_Error
 	 */
-	public function isPublic(): bool|WP_Error;
+	public function isPublicRepo(): bool|WP_Error;
 }

@@ -18,7 +18,66 @@ import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Close';
 import { randomId } from '@mui/x-data-grid-generator';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import { darken, lighten, styled } from '@mui/material/styles';
 
+const getBackgroundColor = (color, theme, coefficient) => ({
+	backgroundColor: darken(color, coefficient),
+	...theme.applyStyles('light', {
+	  backgroundColor: lighten(color, coefficient),
+	}),
+  });
+  
+const StyledDataGrid = styled(DataGrid)(({ theme }) => ({
+'& .super-app-theme--notlocal': {
+	...getBackgroundColor(theme.palette.info.main, theme, 0.7),
+	'&:hover': {
+	...getBackgroundColor(theme.palette.info.main, theme, 0.6),
+	},
+	'&.Mui-selected': {
+	...getBackgroundColor(theme.palette.info.main, theme, 0.5),
+	'&:hover': {
+		...getBackgroundColor(theme.palette.info.main, theme, 0.4),
+	},
+	},
+},
+'& .super-app-theme--identical': {
+	...getBackgroundColor(theme.palette.success.main, theme, 0.7),
+	'&:hover': {
+	...getBackgroundColor(theme.palette.success.main, theme, 0.6),
+	},
+	'&.Mui-selected': {
+	...getBackgroundColor(theme.palette.success.main, theme, 0.5),
+	'&:hover': {
+		...getBackgroundColor(theme.palette.success.main, theme, 0.4),
+	},
+	},
+},
+'& .super-app-theme--notremote': {
+	...getBackgroundColor(theme.palette.warning.main, theme, 0.7),
+	'&:hover': {
+	...getBackgroundColor(theme.palette.warning.main, theme, 0.6),
+	},
+	'&.Mui-selected': {
+	...getBackgroundColor(theme.palette.warning.main, theme, 0.5),
+	'&:hover': {
+		...getBackgroundColor(theme.palette.warning.main, theme, 0.4),
+	},
+	},
+},
+'& .super-app-theme--different': {
+	...getBackgroundColor(theme.palette.error.main, theme, 0.7),
+	'&:hover': {
+	...getBackgroundColor(theme.palette.error.main, theme, 0.6),
+	},
+	'&.Mui-selected': {
+	...getBackgroundColor(theme.palette.error.main, theme, 0.5),
+	'&:hover': {
+		...getBackgroundColor(theme.palette.error.main, theme, 0.4),
+	},
+	},
+},
+}));
+  
 // From https://mui.com/x/react-data-grid/recipes-editing/#multiline-editing
 function EditTextarea(props) {
 	const { id, field, value, colDef, hasFocus } = props;
@@ -108,6 +167,16 @@ const DeployPane = (props) => {
 	const [deployItems, setDeployItems] = useState([]);
 	const [rowModesModel, setRowModesModel] = React.useState({});
 
+	const refreshData = () => {
+		apiFetch({
+			path: '/pushpull/v1/deploy',
+		}).then((data) => {
+			setDeployItems(data);
+		}).catch((error) => {
+			console.error(error);
+		});
+	};
+
 	const textAreaValue = {
 		type: 'string',
 		renderEditCell: (params) => <EditTextarea {...params} />,
@@ -136,9 +205,10 @@ const DeployPane = (props) => {
 			method: 'POST',
 			data: {'id': id},
 			}).then((data) => {
-				createSuccessNotice(__('Item successfully deployed.'), {
+				refreshData();
+				/*createSuccessNotice(__('Item successfully deployed.'), {
 					isDismissible: true,
-				});
+				});*/
 			}).catch((error) => {
 			createErrorNotice(__('Error deploying item with ID '+id+': '+error.message), {
 				isDismissible: true,
@@ -246,6 +316,13 @@ const DeployPane = (props) => {
 			...textAreaValue,
 		},
 		{
+			field: 'curval',
+			headerName: 'Status',
+			width: 90,
+			type: 'string',
+			editable: false,
+		},
+		{
 			field: 'actions',
 			type: 'actions',
 			headerName: 'Actions',
@@ -298,22 +375,16 @@ const DeployPane = (props) => {
 			},
 	    },
 	];
-	
+
 	useEffect( () => {
-		apiFetch({
-			path: '/pushpull/v1/deploy',
-		}).then((data) => {
-			setDeployItems(data);
-		}).catch((error) => {
-			console.error(error);
-		});
+		refreshData();
 	}, [] );
 
 	return (
 		<Card>
 			<CardBody>
 				<Grid2 size={6}>
-					<DataGrid
+					<StyledDataGrid
 					rows={deployItems}
 					columns={columns}
 					editMode="row"
@@ -339,6 +410,7 @@ const DeployPane = (props) => {
 					slotProps={{
 						toolbar: { setDeployItems, setRowModesModel },
 					}}
+					getRowClassName={(params) => `super-app-theme--${params.row.status}`}
 					/>
 				</Grid2>
 			</CardBody>

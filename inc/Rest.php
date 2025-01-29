@@ -357,9 +357,9 @@ class Rest {
 	 * Sets the settings.
 	 *
 	 * @param WP_REST_Request $data
-	 * @return array — The new settings.
+	 * @return array|WP_Error — The new settings.
 	 */
-	public function set_settings(WP_REST_Request $data) {
+	public function set_settings(WP_REST_Request $data): array|\WP_Error {
 		$params = $data->get_json_params();
 
 		$params['provider'] = sanitize_text_field($params['provider']);
@@ -394,9 +394,12 @@ class Rest {
 		$params['tables'] = array_map('sanitize_text_field', $params['tables']);
 		update_option($this->app::TABLES_OPTION_KEY, $params['tables']);
 
-		// Set whether the repo is public or not
+		// Force set whether the repo is public or not
 		$provider = GitProviderFactory::createProvider($params['provider'], $this->app);
-		set_transient($this->app::PP_PUBLIC_REPO, $provider->isPublic(), 60*60*24);
+		$public = $provider->isPublicRepo(true);
+		if (is_wp_error($public)) {
+			return new \WP_Error('error', __('Unable to determine public or private status of the repository.', 'pushpull'));
+		}
 
 		return $this->get_settings();
 	}
@@ -629,7 +632,12 @@ class Rest {
 
 		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared */
 		$results = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table_name}"), ARRAY_A);
+		foreach ($results as $key => $result) {
+			$results[$key]['curval'] = $this->app->deployer()->getValue($result['type'], $result['name']);
+			$results[$key]['status'] = $this->app->deployer()->getValue($result['type'], $result['name']) === $result['value'] ? 'identical' : 'different';
+		}
 
+		$this->app->write_log($results);
 		return $results;
 	}
 
