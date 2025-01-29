@@ -157,15 +157,15 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 
 		// Create a blob for each $wrap action
 		foreach ($wrap['actions'] as $key => $action) {
-			$wrap['actions'][$key]['sha'] = $this->git_exists($action['file_path']);
-			if ($wrap['actions'][$key]['sha'] === null) {
+//			$wrap['actions'][$key]['sha'] = $this->git_exists($action['file_path']);
+//			if ($wrap['actions'][$key]['sha'] === null) {
 				$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/blobs', ['encoding' => 'utf-8', 'content' => $action['content']] );
 				if (is_wp_error($res)) {
 					$this->app->write_log($res);
 					return $res;
 				}
 				$wrap['actions'][$key]['sha'] = $res->sha;
-			}
+//			}
 		}
 
 		// Get the current base tree
