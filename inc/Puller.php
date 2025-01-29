@@ -224,6 +224,11 @@ class Puller {
 			)
 		);
 
+		// Go directly to import_image() if this is an attachment
+		if ($type === "attachment") {
+			return $this->import_image($name);
+		}
+
 		$post = $this->app->state()->getFile("_".$type."/".$name);
 		$post = json_decode($post);
 
