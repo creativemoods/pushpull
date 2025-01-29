@@ -83,6 +83,9 @@ class Deployer {
 				}
 			case 'option_setserialized':
 				update_option($deployitem->name, maybe_unserialize($deployitem->value));
+			case 'pushpull_pull':
+				list ($type, $name) = explode('/', $deployitem->name);
+				$this->app->puller()->pull($type, $name);
 			default:
 				return false;
 		}

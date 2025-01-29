@@ -139,13 +139,13 @@ function EditTextarea(props) {
 }
 
 function EditToolbar(props) {
-	const { setDeployItems, setRowModesModel } = props;
+	const { setDeployItems, setRowModesModel, deployItems } = props;
 	
 	const handleClick = () => {
 		const id = randomId();
 		setDeployItems((oldRows) => [
 			...oldRows,
-			{ id, deployorder: 1, type: 'option_set', name: '', value: '', isNew: true },
+			{ id, deployorder: Math.max(...deployItems.map((item) => item.deployorder), 0) + 1, type: 'option_set', name: '', value: '', isNew: true },
 		]);
 		setRowModesModel((oldModel) => ({
 			...oldModel,
@@ -302,7 +302,7 @@ const DeployPane = (props) => {
 		  type: 'singleSelect',
 //		  valueOptions: ['option_set', 'option_add', 'option_merge', 'custom', 'lang_add', 'rest_request', 'folder_create', 'category_create', 'pushpull_pull', 'pushpull_pullall', 'menu_create', 'row_insert', 'rewrite_rules_flush', 'email_send'],
 		  // Warning max 20 chars
-		  valueOptions: ['option_set', 'option_setidfromname', 'option_setserialized', 'flush_rewrite_rules'],
+		  valueOptions: ['option_set', 'option_setidfromname', 'option_setserialized', 'flush_rewrite_rules', 'pushpull_pull'],
 	    },
 		{
 		  field: 'name',
@@ -399,6 +399,9 @@ const DeployPane = (props) => {
 								id: false,
 							},
 						},
+						sorting: {
+							sortModel: [{ field: 'deployorder', sort: 'asc' }],
+						},
 						pagination: {
 							paginationModel: {
 								pageSize: 50,
@@ -408,7 +411,7 @@ const DeployPane = (props) => {
 					pageSizeOptions={[5, 25, 50, 100]}
 					slots={{ toolbar: EditToolbar }}
 					slotProps={{
-						toolbar: { setDeployItems, setRowModesModel },
+						toolbar: { setDeployItems, setRowModesModel, deployItems },
 					}}
 					getRowClassName={(params) => `super-app-theme--${params.row.status}`}
 					/>

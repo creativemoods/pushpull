@@ -633,8 +633,14 @@ class Rest {
 		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared */
 		$results = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table_name}"), ARRAY_A);
 		foreach ($results as $key => $result) {
-			$results[$key]['curval'] = $this->app->deployer()->getValue($result['type'], $result['name']);
-			$results[$key]['status'] = $this->app->deployer()->getValue($result['type'], $result['name']) === $result['value'] ? 'identical' : 'different';
+			// TODO find a way to differentiate also notlocal and notremote
+			if ($result['type'] === 'pushpull_pull' || $result['type'] === 'flush_rewrite_rules') {
+				$results[$key]['curval'] = "";
+				$results[$key]['status'] = "";
+			} else {
+				$results[$key]['curval'] = $this->app->deployer()->getValue($result['type'], $result['name']);
+				$results[$key]['status'] = $this->app->deployer()->getValue($result['type'], $result['name']) === $result['value'] ? 'identical' : 'different';
+			}
 		}
 
 		return $results;
