@@ -48,6 +48,7 @@ class Repository {
 		$commits = $this->app->utils()->getElementsBetweenIds($commits, $remoteLatestCommitHash, $localLatestCommitHash);
 
 		$actions = [];
+		// TODO if you push a delete commit and a modify commit, it will fail because the delete commit is mentioned again in the modify commit
 		foreach ($commits as $commit) {
 			foreach ($commit['changes'] as $filePath => $hash) {
 				$actions[] = [
