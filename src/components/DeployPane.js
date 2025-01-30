@@ -16,9 +16,11 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Close';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { randomId } from '@mui/x-data-grid-generator';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import { darken, lighten, styled } from '@mui/material/styles';
+import Tooltip from "@mui/material/Tooltip";
 
 const getBackgroundColor = (color, theme, coefficient) => ({
 	backgroundColor: darken(color, coefficient),
@@ -217,6 +219,24 @@ const DeployPane = (props) => {
 		});
 	};
 
+	const handleReplaceClick = (id) => () => {
+		apiFetch({
+			path: '/pushpull/v1/deploy/replace',
+			method: 'POST',
+			data: {'id': id},
+			}).then((data) => {
+				refreshData();
+				/*createSuccessNotice(__('Item successfully deployed.'), {
+					isDismissible: true,
+				});*/
+			}).catch((error) => {
+			createErrorNotice(__('Error replacing item with ID '+id+': '+error.message), {
+				isDismissible: true,
+			});
+			console.error(error);
+		});
+	};
+
 	const handleDeleteClick = (id) => () => {
 		setDeployItems(deployItems.filter((row) => row.id !== id));
 		apiFetch({
@@ -326,7 +346,7 @@ const DeployPane = (props) => {
 			field: 'actions',
 			type: 'actions',
 			headerName: 'Actions',
-			width: 120,
+			width: 160,
 			cellClassName: 'actions',
 			getActions: ({ id }) => {
 			  const isInEditMode = rowModesModel[id]?.mode === GridRowModes.Edit;
@@ -334,7 +354,7 @@ const DeployPane = (props) => {
 			  if (isInEditMode) {
 				return [
 				  <GridActionsCellItem
-					icon={<SaveIcon />}
+					icon={<Tooltip title="Save"><SaveIcon /></Tooltip>}
 					label="Save"
 					sx={{
 					  color: 'primary.main',
@@ -342,7 +362,7 @@ const DeployPane = (props) => {
 					onClick={handleSaveClick(id)}
 				  />,
 				  <GridActionsCellItem
-					icon={<CancelIcon />}
+					icon={<Tooltip title="Cancel"><CancelIcon /></Tooltip>}
 					label="Cancel"
 					className="textPrimary"
 					onClick={handleCancelClick(id)}
@@ -353,20 +373,27 @@ const DeployPane = (props) => {
 
 			  return [
 				<GridActionsCellItem
-				  icon={<EditIcon />}
+				  icon={<Tooltip title="Edit"><EditIcon /></Tooltip>}
 				  label="Edit"
 				  className="textPrimary"
 				  onClick={handleEditClick(id)}
 				  color="inherit"
 				/>,
 				<GridActionsCellItem
-				  icon={<DeleteIcon />}
+				  icon={<Tooltip title="Replace with current value"><RestartAltIcon /></Tooltip>}
+				  label="Replace with current value"
+				  className="textPrimary"
+				  onClick={handleReplaceClick(id)}
+				  color="inherit"
+				/>,
+				<GridActionsCellItem
+				  icon={<Tooltip title="Delete"><DeleteIcon /></Tooltip>}
 				  label="Delete"
 				  onClick={handleDeleteClick(id)}
 				  color="inherit"
 				/>,
 				<GridActionsCellItem
-				  icon={<PlayCircleOutlineIcon />}
+				  icon={<Tooltip title="Deploy"><PlayCircleOutlineIcon /></Tooltip>}
 				  label="Deploy"
 				  onClick={handleDeployClick(id)}
 				  color="inherit"

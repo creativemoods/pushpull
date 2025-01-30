@@ -209,6 +209,13 @@ class Rest {
 				return current_user_can( 'administrator' );
 			}
 		));
+		register_rest_route('pushpull/v1', '/deploy/replace', array(
+			'methods' => 'POST',
+			'callback' => array( $this, 'replace'),
+			'permission_callback' => function () {
+				return current_user_can( 'administrator' );
+			}
+		));
 	}
 
 	/**
@@ -661,7 +668,7 @@ class Rest {
 		$params['value'] = sanitize_text_field($params['value']);
 
 		// Define the table name
-		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+		$table_name = esc_sql($wpdb->prefix . $this->app::PP_DEPLOY_TABLE);
 
 		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
 		$wpdb->insert(
@@ -694,7 +701,7 @@ class Rest {
 		$params['value'] = sanitize_text_field($params['value']);
 
 		// Define the table name
-		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+		$table_name = esc_sql($wpdb->prefix . $this->app::PP_DEPLOY_TABLE);
 
 		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
 		$res = $wpdb->update(
@@ -726,7 +733,7 @@ class Rest {
 		$params['id'] = sanitize_text_field($params['id']);
 
 		// Define the table name
-		$table_name = $wpdb->prefix . $this->app::PP_DEPLOY_TABLE;
+		$table_name = esc_sql($wpdb->prefix . $this->app::PP_DEPLOY_TABLE);
 
 		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
 		return $wpdb->delete(
@@ -746,5 +753,39 @@ class Rest {
 		$params['id'] = sanitize_text_field($params['id']);
 
 		return $this->app->deployer()->deploy($params['id']);
+	}
+
+	/**
+	 * Replace deployment item with current value.
+	 *
+	 * @param WP_REST_Request $data
+	 * @return bool — The result.
+	 */
+	public function replace(WP_REST_Request $data):bool {
+		global $wpdb;
+
+		$params = $data->get_json_params();
+		$params['id'] = sanitize_text_field($params['id']);
+
+		// Define the table name
+		$table_name = esc_sql($wpdb->prefix . $this->app::PP_DEPLOY_TABLE);
+
+        /* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared */
+		$deployitem = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table_name} WHERE id = %d", $params['id']));
+		$value = $this->app->deployer()->getValue($deployitem->type, $deployitem->name);
+
+		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching */
+		$res = $wpdb->update(
+			$table_name,
+			[
+				'value' => $value,
+			],
+			['id' => $params['id']],
+			['%s'],
+			['%d']
+		);
+		// TODO check if the update was successful $res === false
+
+		return $res;
 	}
 }
