@@ -35,6 +35,10 @@ class Puller {
 	 * @return integer|\WP_Error
 	 */
 	protected function import_image($image) {
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		WP_Filesystem();
 		global $wp_filesystem;
 
 		// Get attachment from Git

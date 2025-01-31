@@ -428,6 +428,10 @@ class Pusher {
 	 * @return mixed
 	 */
 	protected function create_post_commit_changes(WP_Post $post) {
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		WP_Filesystem();
 		global $wp_filesystem;
 
 		$content = $this->create_post_export($post);
