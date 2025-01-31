@@ -19,6 +19,7 @@
     "templates/",
     "PushPull.php",
     "uninstall.php",
+    "composer.json",
     "vendor/autoload.php",
     "vendor/composer/"
   ],
