@@ -156,7 +156,6 @@ class GitHubProvider extends GitProvider implements GitProviderInterface {
 		$latestcommithash = $this->getLatestCommitHash();
 
 		// Create a blob for each $wrap action
-		$this->app->write_log($wrap);
 		foreach ($wrap['actions'] as $key => $action) {
 			if ($action['action'] != 'delete') {
 				$res = $this->call( 'POST', $this->url() . '/repos/' . $this->repository() . '/git/blobs', ['encoding' => 'utf-8', 'content' => $action['content']] );

@@ -54,7 +54,7 @@ class Repository {
 				$actions[] = [
 					'action' => $hash === null ? 'delete' : 'tbd',
 					'file_path' => $filePath,
-					'content' => $this->app->state()->getFile($filePath),
+					'content' => $hash === null ? null : $this->app->state()->getFile($filePath),
 				];
 			}
 			$user = get_userdata(get_current_user_id());

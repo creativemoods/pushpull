@@ -511,7 +511,7 @@ class Rest {
 		$params = $data->get_json_params();
 		$params['posttype'] = sanitize_text_field($params['posttype']);
 		$params['postname'] = sanitize_text_field($params['postname']);
-		$done = $this->app->state()->deleteFile("_".$params['posttype']."/".$params['postname']);
+		$done = $this->app->state()->deleteFile("_".$params['posttype']."/".str_replace("/", "@@SLASH@@", $params['postname']));
 
 		return $done ? $done : ['done' => $done];
 	}

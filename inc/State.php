@@ -85,7 +85,7 @@ class State {
         // Release the lock
         $this->releaseLock();
 
-        $this->app->write_log("Persisted ". wp_json_encode($commitlog[count($commitlog) - 1]));
+//        $this->app->write_log("Persisted ". wp_json_encode($commitlog[count($commitlog) - 1]));
     }
 
     /**
@@ -116,7 +116,7 @@ class State {
         }
 
         // Persist commit log
-        $this->app->write_log("Persisting ". wp_json_encode($commitlog));
+//        $this->app->write_log("Persisting ". wp_json_encode($commitlog));
         $this->saveCommitLog($commitlog);
 
         // Release the lock
