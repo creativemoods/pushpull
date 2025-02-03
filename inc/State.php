@@ -274,15 +274,17 @@ class State {
     /**
      * Get file content by path.
      * @param string $filePath The relative file path.
-     * @return string|null
+     * @return string|WP_Error The file content.
      */
-    public function getFile($filePath) {
+    public function getFile($filePath): string|WP_Error {
         $this->app->write_log("Getting file: $filePath");
         $state = self::getState();
         if (!isset($state[$filePath])) {
-            return null;
+            return new WP_Error('state_nofile', 'Unable to find file in state');
         }
-        return get_transient(self::getFileContentTransientKey($filePath));
+
+        $transient = get_transient(self::getFileContentTransientKey($filePath));
+        return $transient ? $transient : new WP_Error('state_notransient', 'Unable to find transient from state');
     }
 
     /**

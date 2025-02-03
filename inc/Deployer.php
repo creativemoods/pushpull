@@ -34,7 +34,7 @@ class Deployer {
 	 * 
 	 * @return mixed
 	 */
-	public function getValue($type, $name) {
+	public function getValue($type, $name, $curval = null) {
 		switch ($type) {
 			case 'option_set':
 				return get_option($name);
@@ -47,6 +47,20 @@ class Deployer {
 				}
 			case 'option_setserialized':
 				return maybe_serialize(get_option($name));
+			case 'option_mergejson':
+				if ($curval) {
+					// We need to test the merge to see if the value has already been merged
+					$option = json_decode(get_option($name));
+					$value = json_decode($curval);
+					$merged = (object) array_merge((array) $option, (array) $value);
+					if (wp_json_encode($merged) === get_option($name)) {
+						return $curval;
+					} else {
+						return "";
+					}
+				} else {
+					return "";
+				}
 			default:
 				return "unknown";
 		}
@@ -83,6 +97,12 @@ class Deployer {
 				}
 			case 'option_setserialized':
 				update_option($deployitem->name, maybe_unserialize($deployitem->value));
+				break;
+			case 'option_mergejson':
+				$option = json_decode(get_option($deployitem->name));
+				$value = json_decode($deployitem->value);
+				$merged = (object) array_merge((array) $option, (array) $value);
+				update_option($deployitem->name, wp_json_encode($merged));
 				break;
 			case 'pushpull_pull':
 				list ($type, $name) = explode('/', $deployitem->name);

@@ -4,7 +4,7 @@
 * Plugin Name:       PushPull
 * Plugin URI:        https://creativemoods.pt/pushpull
 * Description:       Push Pull DevOps plugin for Wordpress
-* Version:           0.1.34
+* Version:           0.1.35
 * Requires at least: 6.6
 * Requires PHP:      8.0
 * Author:            Creative Moods
@@ -248,6 +248,8 @@ class PushPull {
 	* Attaches the plugin's hooks into WordPress.
 	*/
 	public function boot() {
+		global $wpdb;
+
 		//add_action( 'init', array( $this, 'l10n' ) );
 
 		// Pushpull is not needed on the frontend TODO This doesn't work
@@ -264,6 +266,9 @@ class PushPull {
 		add_action('admin_action_pushpull_pull', array(&$this, 'pull_post'));
 		add_filter('post_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);
 		add_filter('page_row_actions', array(&$this, 'dt_duplicate_post_link'), 10, 2);*/
+
+		// Suppress errors otherwise wpdb will send out header information before we can gracefully manage the error
+		$wpdb->suppress_errors(true);
 
 		// Wordpress core tables
 		$core = new Core($this);

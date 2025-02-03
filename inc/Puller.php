@@ -152,7 +152,7 @@ class Puller {
 	 *
 	 * @return string|WP_Error
 	 */
-	public function pull_tablerow( $plugin, $table, $name ) {
+	public function pull_tablerow( $plugin, $table, $name ): string|\WP_Error {
 		global $wpdb;
 
 		$this->app->write_log(
@@ -164,6 +164,9 @@ class Puller {
 		);
 
 		$row = $this->app->state()->getFile("_".$plugin.'@'.$table."/".str_replace("/", "@@SLASH@@", $name));
+		if (is_wp_error($row)) {
+			return $row;
+		}
 		$row = json_decode($row, true);
 
 		// Check if local exists already
@@ -190,6 +193,9 @@ class Puller {
 		$format = array_fill(0, count($values), '%s');
 		/* phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery */
 		$wpdb->insert($table_name, array_combine($columns, $values), $format);
+		if ($wpdb->last_error) {
+			return new \WP_Error('db_insert_error', $wpdb->last_error, 'pushpull');
+		}
 		$id = $wpdb->insert_id;
 
 		if (has_action('pushpull_default_tableimport_'.$plugin.'_'.$table.'_action')) {

@@ -105,6 +105,7 @@ class Repository {
 						// TODO test this and test both with gitlab
 						$this->app->state()->saveFile($file, $content);
 					} else {
+						// TODO WP_error if wp_json_encore doesn't work
 						$this->app->state()->saveFile($file, wp_json_encode($content));
 					}
 				}

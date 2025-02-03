@@ -283,11 +283,12 @@ const DeployPane = (props) => {
 				createSuccessNotice(__('Deployment item '+(updatedRow.isNew ? 'created.' : 'updated.')), {
 					isDismissible: true,
 				});
+				refreshData();
 				// If creation, we need to update the ID
-				if (updatedRow.isNew) {
+/*				if (updatedRow.isNew) {
 					updatedRow.id = data;
 					setDeployItems(deployItems.map((row) => (row.id === newRow.id ? updatedRow : row)));
-				}
+				}*/
 			}).catch((error) => {
 			createErrorNotice(__('Error '+(updatedRow.isNew ? 'creating' : 'updating')+' deployment item '+newRow.name+': '+error.message), {
 				isDismissible: true,
@@ -322,7 +323,7 @@ const DeployPane = (props) => {
 		  type: 'singleSelect',
 //		  valueOptions: ['option_set', 'option_add', 'option_merge', 'custom', 'lang_add', 'rest_request', 'folder_create', 'category_create', 'pushpull_pull', 'pushpull_pullall', 'menu_create', 'row_insert', 'rewrite_rules_flush', 'email_send'],
 		  // Warning max 20 chars
-		  valueOptions: ['option_set', 'option_setidfromname', 'option_setserialized', 'flush_rewrite_rules', 'pushpull_pull'],
+		  valueOptions: ['option_set', 'option_setidfromname', 'option_setserialized', 'option_mergejson', 'flush_rewrite_rules', 'pushpull_pull'],
 	    },
 		{
 		  field: 'name',
@@ -371,6 +372,7 @@ const DeployPane = (props) => {
 				];
 			  }
 
+			  // TODO Remove replace action if type is option_mergejson
 			  return [
 				<GridActionsCellItem
 				  icon={<Tooltip title="Edit"><EditIcon /></Tooltip>}

@@ -456,7 +456,7 @@ class Rest {
 			$id = $this->app->puller()->pull($params['posttype'], $params['postname']);
 		}
 
-		return is_wp_error($id) ? $id : ['id' => $id];
+		return is_wp_error($id) ? $id : rest_ensure_response(['id' => $id]);
 	}
 
 	/**
@@ -479,7 +479,7 @@ class Rest {
 			$id = $this->app->pusher()->pushByName($posttype, $postname);
 		}
 
-		return is_wp_error($id) ? $id : ['id' => $id];
+		return is_wp_error($id) ? $id : rest_ensure_response(['id' => $id]);
 	}
 
 	/**
@@ -645,8 +645,9 @@ class Rest {
 				$results[$key]['curval'] = "";
 				$results[$key]['status'] = "";
 			} else {
-				$results[$key]['curval'] = $this->app->deployer()->getValue($result['type'], $result['name']);
-				$results[$key]['status'] = $this->app->deployer()->getValue($result['type'], $result['name']) === $result['value'] ? 'identical' : 'different';
+				$value = $this->app->deployer()->getValue($result['type'], $result['name'], $result['value']);
+				$results[$key]['curval'] = $value;
+				$results[$key]['status'] = $value === $result['value'] ? 'identical' : 'different';
 			}
 		}
 
