@@ -18,11 +18,11 @@ cache:
 before_script:
   - apt-get update && apt-get install -y unzip curl git php php-cli
   - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-  - npm install
 
 install_dependencies:
   stage: install
   script:
+    - npm install
     - composer install --no-dev --prefer-dist --optimize-autoloader
   artifacts:
     paths:
@@ -31,7 +31,7 @@ install_dependencies:
 build_assets:
   stage: build
   script:
-    - npm run build
+    - npx wp-scripts build
   artifacts:
     paths:
       - build/
