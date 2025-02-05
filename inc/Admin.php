@@ -84,7 +84,7 @@ class Admin {
 	 * Add options menu to admin navbar
 	 */
 	public function add_admin_menu() {
-		add_menu_page( __( 'PushPull', 'pushpull'), __( 'PushPull', 'pushpull'), 'manage_options', 'pushpull', array( $this, 'pushpull_admin_page' ), 'dashicons-cloud-saved', '85' );
+		add_menu_page( __( 'PushPull Pro', 'pushpull'), __( 'PushPull Pro', 'pushpull'), 'manage_options', 'pushpull', array( $this, 'pushpull_admin_page' ), 'dashicons-cloud-saved', '85' );
 		add_action( 'admin_enqueue_scripts', array( $this, 'pushpull_admin_enqueue_scripts' ) );
 		add_action('admin_bar_menu', array(&$this, 'pp_admin_bar_item'), 100);
 	}

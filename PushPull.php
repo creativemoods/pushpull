@@ -32,6 +32,11 @@ use WP_CLI;
 
 require __DIR__ . '/vendor/autoload.php';
 
+// Load Pro version if available
+if ( file_exists( plugin_dir_path( __FILE__ ) . 'pro/Pro.php' ) ) {
+    include_once plugin_dir_path( __FILE__ ) . 'pro/Pro.php';
+}
+
 // Register activation and deactivation hooks
 register_activation_hook( __FILE__, array( 'CreativeMoods\\PushPull\\PushPull', 'activate' ) );
 register_uninstall_hook( __FILE__, array( 'CreativeMoods\\PushPull\\PushPull', 'uninstall' ) );
@@ -126,6 +131,13 @@ class PushPull {
 	* @var Rest
 	*/
 	protected $rest;
+
+	/**
+	* Pro object.
+	*
+	* @var Pro
+	*/
+	protected $pro;
 	
 	/**
 	* Puller.
@@ -156,6 +168,15 @@ class PushPull {
 	protected $export;
 	
 	/**
+	 * Is Pro or Enterprise version ?
+	 *
+	 * @return bool
+	 */
+	function isPro(): bool {
+		return class_exists('CreativeMoods\PushPull\Pro') && $this->pro && $this->pro->isValid();
+	}
+
+	/**
 	* Called at load time, hooks into WP core
 	*/
 	public function __construct() {
@@ -164,9 +185,13 @@ class PushPull {
 		if ( is_admin() ) {
 			$this->admin = new Admin($this);
 		}
-		
+
 		$this->rest = new Rest($this);
-		
+
+		if ( file_exists( plugin_dir_path( __FILE__ ) . 'pro/Pro.php' ) ) {
+			$this->pro = new Pro($this);
+		}
+
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			WP_CLI::add_command( 'pushpull', $this->cli() );
 		}

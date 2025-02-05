@@ -4,7 +4,6 @@ namespace CreativeMoods\PushPull\providers;
 
 use WP_Error;
 use stdClass;
-use WP;
 
 class GitLabProvider extends GitProvider implements GitProviderInterface {
 	/**
@@ -40,7 +39,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 	 * @return array|WP_Error
 	 */
 	protected function call( $method, $endpoint, $body = array(), $checkPublicRepo = true ) {
-		if ( $checkPublicRepo && ! $this->isPublicRepo()) {
+		if ( !$this->app->isPro() && $checkPublicRepo && ! $this->isPublicRepo()) {
 			return new WP_Error('404', 'Connection to private repositories is not supported with this version of PushPull');
 		};
 		$args = array(
@@ -381,7 +380,7 @@ class GitLabProvider extends GitProvider implements GitProviderInterface {
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
-		if ($response->visibility !== "public") {
+		if (!$this->app->isPro() && $response->visibility !== "public") {
 				return new WP_Error('404', 'Connection to private repositories is not supported with this version of PushPull');
 		}
 
