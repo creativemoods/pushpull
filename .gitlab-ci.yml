@@ -1,10 +1,10 @@
 image: node:18
 
 stages:
-#  - install
-#  - build
-#  - prepare
-#  - package
+  - install
+  - build
+  - prepare
+  - package
   - deploy
 
 variables:
@@ -74,6 +74,7 @@ deploy:
     # Push the squashed commit and tags to GitHub
     - git push origin $CI_COMMIT_REF_NAME --force  # Use --force to push the squashed commit
     - git push origin --tags
+  when: manual
   rules:
     - if: '$CI_COMMIT_REF_NAME == "main"'  # Only deploy from the main branch
     - if: '$CI_COMMIT_REF_NAME =~ /^v\d+\.\d+\.\d+$/'
