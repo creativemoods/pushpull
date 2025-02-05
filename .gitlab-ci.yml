@@ -5,10 +5,14 @@ stages:
   - build
   - prepare
   - package
+  - deploy
 
 variables:
   COMPOSER_VERSION: 2
   NODE_ENV: production
+  PLUGIN_VERSION: "free" # Default is "free" version
+  GITHUB_REPO_URL: "https://github.com/creativemoods/pushpull"  # GitHub repo URL
+  GITHUB_TOKEN: $PUSHPULL_GITHUB_TOKEN
 
 cache:
   paths:
@@ -31,6 +35,7 @@ install_dependencies:
 build_assets:
   stage: build
   script:
+    - if [ "$CI_COMMIT_REF_NAME" == "pro" ]; then export PLUGIN_VERSION="pro"; fi
     - npx wp-scripts build
   artifacts:
     paths:
@@ -49,3 +54,26 @@ package_plugin:
     paths:
       - "*.zip"
     expire_in: 7 days
+
+deploy:
+  stage: deploy
+  script:
+    - echo "Pushing the free version to GitHub..."
+    - git remote set-url origin https://$GITHUB_TOKEN@github.com/creativemoods/pushpull.git
+    - git config --global user.email "hello@creativemoods.pt"
+    - git config --global user.name "PushPull maintainer
+
+    # Check out the main branch (in case the pipeline is triggered on a merge request)
+    - git checkout $CI_COMMIT_REF_NAME
+
+    # Create a squashed commit
+    - git reset $(git merge-base origin/main HEAD)  # Resets to the common ancestor of the current branch and origin/main
+    - git add .  # Add all the changes since the last common commit
+    - git commit --amend --no-edit  # Amend the commit (squash)
+
+    # Push the squashed commit and tags to GitHub
+    - git push origin $CI_COMMIT_REF_NAME --force  # Use --force to push the squashed commit
+    - git push origin --tags
+  only:
+    - main  # Only deploy from the main branch
+    - /^v\d+\.\d+\.\d+$/  # Deploy only on version tags (e.g., v1.0.0, v1.1.0)
