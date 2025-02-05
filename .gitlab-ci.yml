@@ -22,7 +22,7 @@ before_script:
 install_dependencies:
   stage: install
   script:
-    - npm install
+    - npm install --omit=optional
     - composer install --no-dev --prefer-dist --optimize-autoloader
   artifacts:
     paths:
