@@ -1,0 +1,51 @@
+image: node:18
+
+stages:
+  - install
+  - build
+  - prepare
+  - package
+
+variables:
+  COMPOSER_VERSION: 2
+  NODE_ENV: production
+
+cache:
+  paths:
+    - node_modules/
+    - vendor/
+
+before_script:
+  - apt-get update && apt-get install -y unzip curl git
+  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+  - npm install
+
+install_dependencies:
+  stage: install
+  script:
+    - composer install --no-dev --prefer-dist --optimize-autoloader
+  artifacts:
+    paths:
+      - vendor/
+
+build_assets:
+  stage: build
+  script:
+    - npm run build
+  artifacts:
+    paths:
+      - build/
+
+prepare_autoload:
+  stage: prepare
+  script:
+    - composer dump-autoload --no-dev -o
+
+package_plugin:
+  stage: package
+  script:
+    - npm run zip
+  artifacts:
+    paths:
+      - "*.zip"
+    expire_in: 7 days
