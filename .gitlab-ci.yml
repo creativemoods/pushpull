@@ -75,5 +75,6 @@ deploy:
     - git push origin $CI_COMMIT_REF_NAME --force  # Use --force to push the squashed commit
     - git push origin --tags
   only:
-    - main  # Only deploy from the main branch
-    - /^v\d+\.\d+\.\d+$/  # Deploy only on version tags (e.g., v1.0.0, v1.1.0)
+    refs:
+      - main  # Only deploy from the main branch
+      - /^v\d+\.\d+\.\d+$/  # Deploy only on version tags (e.g., v1.0.0, v1.1.0)
