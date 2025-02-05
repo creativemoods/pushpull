@@ -19,41 +19,49 @@ cache:
     - node_modules/
     - vendor/
 
-before_script:
-  - apt-get update && apt-get install -y unzip curl git php php-cli
-  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+#before_script:
+#  - apt-get update && apt-get install -y unzip curl git php php-cli
+#  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-install_dependencies:
-  stage: install
-  script:
-    - npm install --omit=optional
-    - composer install --no-dev --prefer-dist --optimize-autoloader
-  artifacts:
-    paths:
-      - vendor/
+#install_dependencies:
+#  stage: install
+#  script:
+#    - npm install --omit=optional
+#    - composer install --no-dev --prefer-dist --optimize-autoloader
+#  artifacts:
+#    paths:
+#      - vendor/
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
-build_assets:
-  stage: build
-  script:
-    - if [ "$CI_COMMIT_REF_NAME" == "pro" ]; then export PLUGIN_VERSION="pro"; fi
-    - npx wp-scripts build
-  artifacts:
-    paths:
-      - build/
+#build_assets:
+#  stage: build
+#  script:
+#    - if [ "$CI_COMMIT_REF_NAME" == "pro" ]; then export PLUGIN_VERSION="pro"; fi
+#    - npx wp-scripts build
+#  artifacts:
+#    paths:
+#      - build/
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
-prepare_autoload:
-  stage: prepare
-  script:
-    - composer dump-autoload --no-dev -o
+#prepare_autoload:
+#  stage: prepare
+#  script:
+#    - composer dump-autoload --no-dev -o
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
-package_plugin:
-  stage: package
-  script:
-    - npm run zip
-  artifacts:
-    paths:
-      - "*.zip"
-    expire_in: 7 days
+#package_plugin:
+#  stage: package
+#  script:
+#    - npm run zip
+#  artifacts:
+#    paths:
+#      - "*.zip"
+#    expire_in: 7 days
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
 deploy:
   stage: deploy
@@ -75,6 +83,7 @@ deploy:
     - git push origin $CI_COMMIT_REF_NAME --force  # Use --force to push the squashed commit
     - git push origin --tags
   rules:
-    - if: '$CI_COMMIT_REF_NAME == "main"'  # Only deploy from the main branch
-    - if: '$CI_COMMIT_REF_NAME =~ /^v\d+\.\d+\.\d+$/'
+    - if: &version '$CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: on_success  # Deploy only on version tags (e.g., v1.0.0, v1.1.0)
+  tags:
+    - pushpull  # Run the job only on runners with this tag
