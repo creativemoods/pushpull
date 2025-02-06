@@ -12,7 +12,6 @@ variables:
   NODE_ENV: production
   PLUGIN_VERSION: "free" # Default is "free" version
   GITHUB_REPO_URL: "https://github.com/creativemoods/pushpull"  # GitHub repo URL
-  GITHUB_TOKEN: $PUSHPULL_GITHUB_TOKEN
 
 cache:
   paths:
@@ -68,8 +67,8 @@ deployfree:
   stage: deploy
   script:
     - echo "Pushing the free version to GitHub..."
-    - echo $GITHUB_TOKEN
-    - git remote set-url origin https://$GITHUB_TOKEN@github.com/creativemoods/pushpull.git
+    - echo "$PUSHPULL_GITHUB_TOKEN"
+    - git remote set-url origin https://$PUSHPULL_GITHUB_TOKEN@github.com/creativemoods/pushpull.git
     - git config --global user.email "hello@creativemoods.pt"
     - git config --global user.name "PushPull maintainer"
 
