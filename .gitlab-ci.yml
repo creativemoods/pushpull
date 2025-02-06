@@ -18,49 +18,49 @@ cache:
     - node_modules/
     - vendor/
 
-#before_script:
-#  - apt-get update && apt-get install -y unzip curl git php php-cli
-#  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+before_script:
+  - apt-get update && apt-get install -y unzip curl git php php-cli
+  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-#install_dependencies:
-#  stage: install
-#  script:
-#    - npm install --omit=optional
-#    - composer install --no-dev --prefer-dist --optimize-autoloader
-#  artifacts:
-#    paths:
-#      - vendor/
-#  tags:
-#    - pushpull  # Run the job only on runners with this tag
+install_dependencies:
+  stage: install
+  script:
+    - npm install --omit=optional
+    - composer install --no-dev --prefer-dist --optimize-autoloader
+  artifacts:
+    paths:
+      - vendor/
+  tags:
+    - pushpull  # Run the job only on runners with this tag
 
-#build_assets:
-#  stage: build
-#  script:
-#    - if [ "$CI_COMMIT_REF_NAME" == "pro" ]; then export PLUGIN_VERSION="pro"; fi
-#    - npx wp-scripts build
-#  artifacts:
-#    paths:
-#      - build/
-#  tags:
-#    - pushpull  # Run the job only on runners with this tag
+build_assets:
+  stage: build
+  script:
+    - if [ "$CI_COMMIT_REF_NAME" == "pro" ]; then export PLUGIN_VERSION="pro"; fi
+    - npx wp-scripts build
+  artifacts:
+    paths:
+      - build/
+  tags:
+    - pushpull  # Run the job only on runners with this tag
 
-#prepare_autoload:
-#  stage: prepare
-#  script:
-#    - composer dump-autoload --no-dev -o
-#  tags:
-#    - pushpull  # Run the job only on runners with this tag
+prepare_autoload:
+  stage: prepare
+  script:
+    - composer dump-autoload --no-dev -o
+  tags:
+    - pushpull  # Run the job only on runners with this tag
 
-#package_plugin:
-#  stage: package
-#  script:
-#    - npm run zip
-#  artifacts:
-#    paths:
-#      - "*.zip"
-#    expire_in: 7 days
-#  tags:
-#    - pushpull  # Run the job only on runners with this tag
+package_plugin:
+  stage: package
+  script:
+    - npm run zip
+  artifacts:
+    paths:
+      - "*.zip"
+    expire_in: 7 days
+  tags:
+    - pushpull  # Run the job only on runners with this tag
 
 # Do a merge of main into release-free and squash the commits, then create a tag v1.2.3-free from release-free to push the code to github
 deployfree:
@@ -79,7 +79,7 @@ deployfree:
   tags:
     - pushpull  # Run the job only on runners with this tag
 
-# Do a merge of main into release-pro and squash the commits, then create a tag v1.2.3-pro from release-pro to create a release
+# Do a merge of pro into release-pro and squash the commits, then create a tag v1.2.3-pro from release-pro to create a release
 deploypro:
   stage: deploy
   script:
