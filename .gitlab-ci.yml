@@ -69,7 +69,7 @@ deploy:
     - echo "Pushing the free version to GitHub..."
     - git remote set-url origin https://$GITHUB_TOKEN@github.com/creativemoods/pushpull.git
     - git config --global user.email "hello@creativemoods.pt"
-    - git config --global user.name "PushPull maintainer
+    - git config --global user.name "PushPull maintainer"
 
     # Check out the main branch (in case the pipeline is triggered on a merge request)
     - git checkout $CI_COMMIT_REF_NAME
