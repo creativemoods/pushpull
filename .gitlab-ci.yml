@@ -71,15 +71,10 @@ deployfree:
     - git remote set-url origin https://x-access-token:$PUSHPULL_GITHUB_TOKEN@github.com/creativemoods/pushpull.git
     - git config --global user.email "hello@creativemoods.pt"
     - git config --global user.name "PushPull maintainer"
-
-    # Check out the main branch (in case the pipeline is triggered on a merge request)
     - git checkout $CI_COMMIT_REF_NAME
-
-    # Push the commit and tags to GitHub
-    - git push origin $CI_COMMIT_REF_NAME --force  # Use --force to push the squashed commit
-    - git push origin --tags
+    - git push origin $CI_COMMIT_REF_NAME main
   rules:
-    - if: &version '$CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d-free+$/'
+    - if: '$CI_COMMIT_REF_NAME == "release-free"'  # Deploy only on main branch
       when: on_success  # Deploy only on version tags (e.g., v1.0.0-free, v1.1.0-free)
   tags:
     - pushpull  # Run the job only on runners with this tag
