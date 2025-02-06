@@ -1,4 +1,5 @@
 === PushPull ===
+
 Contributors: jeromesteunenberg
 Tags: git, version control, collaboration, publishing, devops
 Requires at least: 6.0
@@ -11,6 +12,7 @@ License URI: http://www.gnu.org/licenses/gpl-2.0.html
 PushPull DevOps plugin for Wordpress
 
 == Description ==
+
 *A WordPress plugin to sync content with a Git repository*
 
 Store your content in Git and manage your Wordpress instances the DevOps way!
