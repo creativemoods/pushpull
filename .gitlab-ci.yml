@@ -68,7 +68,7 @@ deployfree:
   script:
     - echo "Pushing the free version to GitHub..."
     - echo "$PUSHPULL_GITHUB_TOKEN"
-    - git remote set-url origin https://$PUSHPULL_GITHUB_TOKEN@github.com/creativemoods/pushpull.git
+    - git remote set-url origin https://x-access-token:$PUSHPULL_GITHUB_TOKEN@github.com/creativemoods/pushpull.git
     - git config --global user.email "hello@creativemoods.pt"
     - git config --global user.name "PushPull maintainer"
 
