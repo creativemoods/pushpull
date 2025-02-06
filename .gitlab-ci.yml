@@ -19,51 +19,52 @@ cache:
     - node_modules/
     - vendor/
 
-before_script:
-  - apt-get update && apt-get install -y unzip curl git php php-cli
-  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+#before_script:
+#  - apt-get update && apt-get install -y unzip curl git php php-cli
+#  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-install_dependencies:
-  stage: install
-  script:
-    - npm install --omit=optional
-    - composer install --no-dev --prefer-dist --optimize-autoloader
-  artifacts:
-    paths:
-      - vendor/
-  tags:
-    - pushpull  # Run the job only on runners with this tag
+#install_dependencies:
+#  stage: install
+#  script:
+#    - npm install --omit=optional
+#    - composer install --no-dev --prefer-dist --optimize-autoloader
+#  artifacts:
+#    paths:
+#      - vendor/
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
-build_assets:
-  stage: build
-  script:
-    - if [ "$CI_COMMIT_REF_NAME" == "pro" ]; then export PLUGIN_VERSION="pro"; fi
-    - npx wp-scripts build
-  artifacts:
-    paths:
-      - build/
-  tags:
-    - pushpull  # Run the job only on runners with this tag
+#build_assets:
+#  stage: build
+#  script:
+#    - if [ "$CI_COMMIT_REF_NAME" == "pro" ]; then export PLUGIN_VERSION="pro"; fi
+#    - npx wp-scripts build
+#  artifacts:
+#    paths:
+#      - build/
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
-prepare_autoload:
-  stage: prepare
-  script:
-    - composer dump-autoload --no-dev -o
-  tags:
-    - pushpull  # Run the job only on runners with this tag
+#prepare_autoload:
+#  stage: prepare
+#  script:
+#    - composer dump-autoload --no-dev -o
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
-package_plugin:
-  stage: package
-  script:
-    - npm run zip
-  artifacts:
-    paths:
-      - "*.zip"
-    expire_in: 7 days
-  tags:
-    - pushpull  # Run the job only on runners with this tag
+#package_plugin:
+#  stage: package
+#  script:
+#    - npm run zip
+#  artifacts:
+#    paths:
+#      - "*.zip"
+#    expire_in: 7 days
+#  tags:
+#    - pushpull  # Run the job only on runners with this tag
 
-deploy:
+# Do a merge of main into release-free and squash the commits, then create a tag v1.2.3-free to push the code to github
+deployfree:
   stage: deploy
   script:
     - echo "Pushing the free version to GitHub..."
@@ -74,16 +75,24 @@ deploy:
     # Check out the main branch (in case the pipeline is triggered on a merge request)
     - git checkout $CI_COMMIT_REF_NAME
 
-    # Create a squashed commit
-    - git reset $(git merge-base origin/main HEAD)  # Resets to the common ancestor of the current branch and origin/main
-    - git add .  # Add all the changes since the last common commit
-    - git commit --amend --no-edit  # Amend the commit (squash)
-
-    # Push the squashed commit and tags to GitHub
+    # Push the commit and tags to GitHub
     - git push origin $CI_COMMIT_REF_NAME --force  # Use --force to push the squashed commit
     - git push origin --tags
   rules:
-    - if: &version '$CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
-      when: on_success  # Deploy only on version tags (e.g., v1.0.0, v1.1.0)
+    - if: '$CI_COMMIT_REF_NAME == "release-free"'  # Only deploy from the release-free branch
+    - if: &version '$CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d-free+$/'
+      when: on_success  # Deploy only on version tags (e.g., v1.0.0-free, v1.1.0-free)
+  tags:
+    - pushpull  # Run the job only on runners with this tag
+
+# Do a merge of main into release-pro and squash the commits, then create a tag v1.2.3-pro to create a release
+deploypro:
+  stage: deploy
+  script:
+    - echo "Deploying the pro version..."
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "release-pro"'  # Only deploy from the release-pro branch
+    - if: &version '$CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d-pro+$/'
+      when: on_success  # Deploy only on version tags (e.g., v1.0.0-pro, v1.1.0-pro)
   tags:
     - pushpull  # Run the job only on runners with this tag
