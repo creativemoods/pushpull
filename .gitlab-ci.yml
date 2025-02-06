@@ -63,11 +63,12 @@ cache:
 #  tags:
 #    - pushpull  # Run the job only on runners with this tag
 
-# Do a merge of main into release-free and squash the commits, then create a tag v1.2.3-free to push the code to github
+# Do a merge of main into release-free and squash the commits, then create a tag v1.2.3-free from release-free to push the code to github
 deployfree:
   stage: deploy
   script:
     - echo "Pushing the free version to GitHub..."
+    - echo $GITHUB_TOKEN
     - git remote set-url origin https://$GITHUB_TOKEN@github.com/creativemoods/pushpull.git
     - git config --global user.email "hello@creativemoods.pt"
     - git config --global user.name "PushPull maintainer"
@@ -84,13 +85,12 @@ deployfree:
   tags:
     - pushpull  # Run the job only on runners with this tag
 
-# Do a merge of main into release-pro and squash the commits, then create a tag v1.2.3-pro to create a release
+# Do a merge of main into release-pro and squash the commits, then create a tag v1.2.3-pro from release-pro to create a release
 deploypro:
   stage: deploy
   script:
     - echo "Deploying the pro version..."
   rules:
-    - if: '$CI_COMMIT_REF_NAME == "release-pro"'  # Only deploy from the release-pro branch
     - if: &version '$CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d-pro+$/'
       when: on_success  # Deploy only on version tags (e.g., v1.0.0-pro, v1.1.0-pro)
   tags:
