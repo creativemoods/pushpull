@@ -1,0 +1,321 @@
+.pushpull-admin {
+    --pushpull-border: #d0d7de;
+    --pushpull-panel: #ffffff;
+    --pushpull-ink: #17222d;
+    --pushpull-muted: #556371;
+    --pushpull-accent: #0d5c63;
+    --pushpull-accent-soft: #edf7f8;
+}
+
+.pushpull-admin .pushpull-intro {
+    max-width: 72rem;
+    color: var(--pushpull-muted);
+}
+
+.pushpull-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+    align-items: start;
+    margin-top: 20px;
+}
+
+.pushpull-panel,
+.pushpull-status-card,
+.pushpull-main form {
+    background: var(--pushpull-panel);
+    border: 1px solid var(--pushpull-border);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgb(23 34 45 / 0.06);
+}
+
+.pushpull-main form {
+    padding: 16px 20px 4px;
+}
+
+.pushpull-sidebar,
+.pushpull-main {
+    min-width: 0;
+}
+
+.pushpull-panel {
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.pushpull-panel h2,
+.pushpull-status-card h2 {
+    margin-top: 0;
+    color: var(--pushpull-ink);
+}
+
+.pushpull-button-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+}
+
+.pushpull-summary {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 12px;
+    margin: 0;
+}
+
+.pushpull-summary dt {
+    font-weight: 600;
+    color: var(--pushpull-ink);
+}
+
+.pushpull-summary dd {
+    margin: 0;
+    color: var(--pushpull-muted);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.pushpull-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.pushpull-status-card {
+    padding: 16px;
+    background:
+        linear-gradient(180deg, var(--pushpull-accent-soft) 0, #fff 90px);
+}
+
+.pushpull-status-card p {
+    margin-bottom: 0;
+    color: var(--pushpull-muted);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.pushpull-export-list {
+    margin: 10px 0 0;
+}
+
+.pushpull-export-list li {
+    margin-bottom: 6px;
+}
+
+.pushpull-diff-item details {
+    border: 1px solid var(--pushpull-border);
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px 12px;
+}
+
+.pushpull-tree-browser {
+    margin-top: 16px;
+    border: 1px solid var(--pushpull-border);
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px 12px;
+}
+
+.pushpull-tree-browser > summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.pushpull-diff-item summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.pushpull-diff-item summary::-webkit-details-marker {
+    display: none;
+}
+
+.pushpull-diff-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1.6;
+    font-weight: 600;
+}
+
+.pushpull-diff-badge-added {
+    background: #e8f7ee;
+    color: #106b36;
+}
+
+.pushpull-diff-badge-deleted {
+    background: #fbebe9;
+    color: #a13a2b;
+}
+
+.pushpull-diff-badge-modified {
+    background: #eef3fb;
+    color: #245f93;
+}
+
+.pushpull-diff-badge-unchanged {
+    background: #eef1f4;
+    color: #556371;
+}
+
+.pushpull-diff-badge-muted {
+    background: #f6f8fa;
+    color: #7a8694;
+}
+
+.pushpull-inline-diff {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--pushpull-border);
+}
+
+.pushpull-inline-diff-pane h4 {
+    margin: 0 0 8px;
+}
+
+.pushpull-tree {
+    border: 1px solid var(--pushpull-border);
+    border-radius: 8px;
+    background: #f6f8fa;
+    padding: 10px 12px;
+}
+
+.pushpull-tree-list {
+    list-style: none;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.pushpull-tree-list > li {
+    margin: 4px 0;
+}
+
+.pushpull-tree-dir > summary {
+    cursor: pointer;
+}
+
+.pushpull-tree-name {
+    font-weight: 600;
+    color: var(--pushpull-ink);
+}
+
+.pushpull-tree-file {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+}
+
+.pushpull-operations-table td {
+    vertical-align: top;
+}
+
+.pushpull-operation-details summary {
+    cursor: pointer;
+}
+
+.pushpull-operation-detail-row td {
+    padding: 0 !important;
+    background: #f8fafc;
+}
+
+.pushpull-operation-details {
+    padding: 20px;
+}
+
+.pushpull-operation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.pushpull-operation-grid pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 16px;
+    margin: 0;
+    border-radius: 8px;
+    overflow: auto;
+}
+
+.pushpull-inline-diff-code {
+    min-height: 220px;
+    font-size: 12px;
+    border: 1px solid var(--pushpull-border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f6f8fa;
+}
+
+.pushpull-inline-diff-line {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: start;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    border-left: 4px solid transparent;
+}
+
+.pushpull-inline-diff-line code {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 4px 10px;
+    background: transparent;
+}
+
+.pushpull-inline-diff-line-number {
+    display: block;
+    padding: 4px 8px;
+    color: #7a8694;
+    text-align: right;
+    border-right: 1px solid var(--pushpull-border);
+    user-select: none;
+}
+
+.pushpull-inline-diff-line-added {
+    background: #e6ffec;
+    border-left-color: #2da44e;
+}
+
+.pushpull-inline-diff-line-removed {
+    background: #ffebe9;
+    border-left-color: #cf222e;
+}
+
+.pushpull-inline-diff-line-unchanged {
+    background: #f6f8fa;
+}
+
+.pushpull-inline-diff-line-empty {
+    background: #f6f8fa;
+    opacity: 0.55;
+}
+
+.pushpull-admin .form-table th {
+    width: 220px;
+}
+
+.pushpull-admin .button[disabled] {
+    opacity: 0.7;
+}
+
+@media (max-width: 960px) {
+    .pushpull-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .pushpull-inline-diff {
+        grid-template-columns: 1fr;
+    }
+
+    .pushpull-operation-grid {
+        grid-template-columns: 1fr;
+    }
+}

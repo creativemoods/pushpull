@@ -1,5 +1,4 @@
-# PushPull
-
+=== PushPull ===
 Contributors: jeromesteunenberg
 Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
@@ -7,13 +6,15 @@ Tested up to: 6.9
 Requires PHP: 8.1
 Stable tag: 0.0.4
 License: GPLv2
-License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
 Git-backed content workflows for selected WordPress content domains.
 
-> This is a beta plugin. It is still under active development, has limited functionality, and currently supports only a narrow subset of the intended PushPull feature set.
+= Beta notice =
 
-## Description
+This is a beta plugin. It is still under active development, has limited functionality, and currently supports only a narrow subset of the intended PushPull feature set.
+
+== Description ==
 
 PushPull stores selected WordPress content in a Git repository using a canonical JSON representation instead of raw database dumps.
 
@@ -21,7 +22,7 @@ The current release focuses on one managed domain:
 
 1. GenerateBlocks Global Styles (`gblocks_styles`)
 
-PushPull keeps a local Git-like repository inside WordPress database tables, lets you compare live WordPress content against local and remote snapshots, and supports the full workflow from WordPress:
+PushPull keeps a local Git-like repository inside WordPress database tables and supports the following workflow directly from WordPress admin:
 
 1. Test the remote GitHub connection
 2. Commit live managed content into the local repository
@@ -34,11 +35,11 @@ PushPull keeps a local Git-like repository inside WordPress database tables, let
 
 The plugin also includes:
 
-1. A dedicated operations history screen
+1. An operations history screen
 2. Local repository reset tooling
 3. Remote branch reset tooling that creates one commit removing all tracked files from the branch
 
-## Current scope
+== Current scope ==
 
 This is an early, focused release. At the moment, PushPull is intentionally limited to:
 
@@ -48,45 +49,30 @@ This is an early, focused release. At the moment, PushPull is intentionally limi
 
 It does not yet manage general posts, pages, menus, forms, or arbitrary plugin data.
 
-## How PushPull represents content
+== Installation ==
 
-PushPull does not use WordPress post IDs as repository identity.
+= Uploading in WordPress Dashboard =
 
-For GenerateBlocks Global Styles it stores:
-
-1. One canonical JSON file per style
-2. One separate `manifest.json` file that preserves style order and load priority
-
-That design keeps content stable across environments and makes reorder-only changes isolated and easy to review.
-
-## Installation
-
-### Uploading in WordPress Dashboard
-
-1. Download the packaged plugin ZIP.
+1. Download the plugin ZIP.
 2. In WordPress, go to Plugins > Add New Plugin.
 3. Click Upload Plugin.
 4. Select the ZIP file.
 5. Install and activate the plugin.
 
-### Installing from source
+= Installing from source =
 
 1. Clone this repository into `wp-content/plugins/pushpull`.
 2. Run `composer install`.
 3. Activate PushPull in WordPress.
 
-## Configuration
+== Configuration ==
 
 PushPull currently supports GitHub repositories through the GitHub Git Database REST API.
-
-### GitHub token
 
 Create a fine-grained personal access token or installation token with access to the target repository. The token should allow:
 
 1. Repository metadata read access
 2. Repository contents read and write access
-
-### Plugin settings
 
 In PushPull > Settings:
 
@@ -98,7 +84,7 @@ In PushPull > Settings:
 6. Click `Test connection`
 7. Save the settings
 
-### Empty repositories
+= Empty repositories =
 
 If the configured GitHub repository exists but has no commits yet, `Test connection` will report that the repository is reachable but empty.
 
@@ -108,34 +94,9 @@ In that case, click `Initialize remote repository`. PushPull will:
 2. fetch that initial commit into the local remote-tracking ref
 3. make the repository ready for normal commit, fetch, merge, apply, and push workflows
 
-You no longer need to create the first commit manually on GitHub before using PushPull.
+You do not need to create the first commit manually on GitHub before using PushPull.
 
-## Workflow
-
-The normal workflow is:
-
-1. `Commit` to snapshot the current live GenerateBlocks global styles into the local repository
-2. `Fetch` to import the current remote branch into `refs/remotes/origin/<branch>`
-3. `Merge` to bring fetched remote history into the local branch
-4. `Apply repo to WordPress` when you want the local branch state written back into WordPress
-5. `Push` when you want local commits published to GitHub
-
-If both local and remote changed, PushPull can persist conflicts, let you resolve them in the admin UI, and then finalize a merge commit.
-
-## Release checklist
-
-1. Make sure `main` is green in GitLab: PHPUnit, PHPCS, PHPStan, package, and PCP.
-2. Choose the next semantic version, for example `0.2.0`.
-3. Run `composer bump-version -- 0.2.0`.
-4. Review the changes in `pushpull.php` and `README.md`.
-5. Commit the version bump.
-6. Create and push a Git tag in the form `v0.2.0` on that commit.
-7. Let GitLab run the tag pipeline.
-8. The package job will build `build/pushpull-0.2.0.zip` from that tagged commit.
-9. Download the ZIP artifact from the tag pipeline and upload it in WordPress.
-10. Verify after upload that WordPress shows the new plugin version correctly.
-
-## External services
+== External services ==
 
 PushPull connects to the GitHub API for the repository you configure in the plugin settings.
 
@@ -157,6 +118,11 @@ In the current release, the only managed content sent to GitHub is GenerateBlock
 
 PushPull does not send your whole WordPress database to GitHub. It only sends the managed content represented by the enabled adapters.
 
-GitHub terms of service: [https://docs.github.com/en/site-policy/github-terms/github-terms-of-service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)
+GitHub terms of service: https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
+GitHub privacy statement: https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
 
-GitHub privacy statement: [https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
+== Changelog ==
+
+= 0.0.1 =
+
+Initial public release focused on GitHub-backed synchronization of GenerateBlocks Global Styles.
