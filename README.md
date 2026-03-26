@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.6
+Stable tag: 0.0.7
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -148,6 +148,12 @@ If both local and remote changed, PushPull can persist conflicts, let you resolv
 11. Verify after upload that WordPress shows the new plugin version correctly.
 
 ## Changelog
+
+### 0.0.7
+
+1. Fixed WordPress block pattern apply/export escaping so `\\u002d` sequences survive correctly in both `post_content` and pattern meta.
+2. Removed creation and modification timestamps from generic post-type canonical items to avoid false diffs across environments.
+3. Changed the `All Managed Sets` overview so each managed set starts collapsed by default.
 
 ### 0.0.6
 

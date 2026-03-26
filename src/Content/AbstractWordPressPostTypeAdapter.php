@@ -62,10 +62,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
      */
     protected function buildDerived(array $record): array
     {
-        return [
-            'postDate' => (string) ($record['post_date'] ?? ''),
-            'postModified' => (string) ($record['post_modified'] ?? ''),
-        ];
+        return [];
     }
 
     protected function includePostInExport(WP_Post $post): bool
@@ -409,6 +406,8 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
             'menu_order' => $menuOrder,
         ];
 
+        $postData = wp_slash($postData);
+
         if ($existingId !== null) {
             $postData['ID'] = $existingId;
 
@@ -425,7 +424,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         }
 
         foreach ($this->normalizeMetaEntries($item->metadata['postMeta'] ?? []) as $entry) {
-            add_post_meta($postId, $entry['key'], $entry['value']);
+            add_post_meta($postId, $entry['key'], wp_slash($entry['value']));
         }
 
         $this->persistTerms($postId, $item);

@@ -116,4 +116,63 @@ final class WordPressBlockPatternsApplyServiceTest extends TestCase
         self::assertSame([2], $GLOBALS['pushpull_test_object_terms'][$post->ID]['language'] ?? []);
         self::assertSame(['en_US'], $GLOBALS['pushpull_test_term_meta'][2]['locale'] ?? []);
     }
+
+    public function testApplyPreservesEscapedUnicodeSequencesInBlockMarkup(): void
+    {
+        $snapshot = $this->adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => 22458,
+                'post_title' => 'LockedCard',
+                'post_name' => 'lockedcard',
+                'post_status' => 'publish',
+                'post_content' => '<!-- wp:generateblocks/container {"backgroundColor":"var(\\u002d\\u002dbase-3)"} /-->',
+                'post_date' => '2025-12-03 11:35:25',
+                'post_modified' => '2025-12-03 11:37:24',
+                'post_meta' => [
+                    [
+                        'meta_key' => 'generateblocks_patterns_tree',
+                        'meta_value' => [
+                            [
+                                'id' => 'pattern-22458',
+                                'label' => 'LockedCard',
+                                'pattern' => '<!-- wp:generateblocks/container {"backgroundColor":"var(\\u002d\\u002dbase-3)"} /-->',
+                            ],
+                        ],
+                    ],
+                ],
+                'terms' => [],
+            ],
+        ]);
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $this->applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['wordpress_block_patterns']
+        ));
+
+        $post = $GLOBALS['pushpull_test_generateblocks_posts'][0];
+        self::assertStringContainsString('var(\\u002d\\u002dbase-3)', $post->post_content);
+        self::assertStringNotContainsString('var(u002du002dbase-3)', $post->post_content);
+        self::assertStringContainsString(
+            'var(\\u002d\\u002dbase-3)',
+            $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['generateblocks_patterns_tree'][0][0]['pattern']
+        );
+        self::assertStringNotContainsString(
+            'var(u002du002dbase-3)',
+            $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['generateblocks_patterns_tree'][0][0]['pattern']
+        );
+    }
 }

@@ -215,7 +215,7 @@ final class ManagedContentPage
             /** @var \PushPull\Persistence\WorkingState\WorkingStateRecord|null $workingState */
             $workingState = $row['workingState'];
 
-            echo '<details class="pushpull-tree-browser" open="open">';
+            echo '<details class="pushpull-tree-browser">';
             printf(
                 '<summary>%s <span class="pushpull-diff-badge pushpull-diff-badge-%s">%s</span></summary>',
                 esc_html($adapter->getManagedSetLabel()),

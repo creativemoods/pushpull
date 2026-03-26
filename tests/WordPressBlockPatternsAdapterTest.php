@@ -74,7 +74,7 @@ final class WordPressBlockPatternsAdapterTest extends TestCase
         $item = $adapter->deserialize(
             'wordpress/block-patterns/lockedcard.json',
             <<<'JSON'
-{"adapterVersion":1,"derived":{"postDate":"2025-12-03 11:35:25","postModified":"2025-12-03 11:37:24"},"displayName":"LockedCard","logicalKey":"lockedcard","metadata":{"postMeta":[{"key":"generateblocks_patterns_tree","value":[{"label":"LockedCard","preview":"<a href=\"{{pushpull.home_url}}/preview/\">Preview</a>","scripts":["{{pushpull.home_url}}/app/plugins/generateblocks-pro/dist/accordion.js","https://external.example.test/app/plugins/generateblocks-pro/dist/tabs.js"]}]}],"restoration":{"postType":"wp_block"},"terms":[]},"payload":{"postContent":"<a href=\"{{pushpull.home_url}}/premium-membership/\">Unlock</a>"},"postStatus":"publish","schemaVersion":1,"selector":"lockedcard","slug":"lockedcard","type":"wordpress_block_pattern"}
+{"adapterVersion":1,"derived":[],"displayName":"LockedCard","logicalKey":"lockedcard","metadata":{"postMeta":[{"key":"generateblocks_patterns_tree","value":[{"label":"LockedCard","preview":"<a href=\"{{pushpull.home_url}}/preview/\">Preview</a>","scripts":["{{pushpull.home_url}}/app/plugins/generateblocks-pro/dist/accordion.js","https://external.example.test/app/plugins/generateblocks-pro/dist/tabs.js"]}]}],"restoration":{"postType":"wp_block"},"terms":[]},"payload":{"postContent":"<a href=\"{{pushpull.home_url}}/premium-membership/\">Unlock</a>"},"postStatus":"publish","schemaVersion":1,"selector":"lockedcard","slug":"lockedcard","type":"wordpress_block_pattern"}
 JSON
         );
 

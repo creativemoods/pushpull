@@ -46,7 +46,7 @@ if (! function_exists('sanitize_text_field')) {
 }
 
 if (! function_exists('wp_unslash')) {
-    function wp_unslash(string|array $value): string|array
+    function wp_unslash(mixed $value): mixed
     {
         if (is_array($value)) {
             foreach ($value as $key => $entry) {
@@ -56,7 +56,30 @@ if (! function_exists('wp_unslash')) {
             return $value;
         }
 
+        if (! is_string($value)) {
+            return $value;
+        }
+
         return stripslashes($value);
+    }
+}
+
+if (! function_exists('wp_slash')) {
+    function wp_slash(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            foreach ($value as $key => $entry) {
+                $value[$key] = wp_slash($entry);
+            }
+
+            return $value;
+        }
+
+        if (! is_string($value)) {
+            return $value;
+        }
+
+        return addslashes($value);
     }
 }
 
@@ -222,7 +245,7 @@ if (! function_exists('get_post_meta')) {
 if (! function_exists('update_post_meta')) {
     function update_post_meta(int $postId, string $key, mixed $value): bool
     {
-        $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] = $value;
+        $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] = wp_unslash($value);
 
         return true;
     }
@@ -231,6 +254,7 @@ if (! function_exists('update_post_meta')) {
 if (! function_exists('add_post_meta')) {
     function add_post_meta(int $postId, string $key, mixed $value, bool $unique = false): bool
     {
+        $value = wp_unslash($value);
         $existing = $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] ?? null;
 
         if ($existing === null) {
@@ -265,6 +289,7 @@ if (! function_exists('delete_post_meta')) {
 if (! function_exists('wp_insert_post')) {
     function wp_insert_post(array $postarr): int
     {
+        $postarr = wp_unslash($postarr);
         $id = (int) ($GLOBALS['pushpull_test_next_post_id'] ?? 1);
         $GLOBALS['pushpull_test_next_post_id'] = $id + 1;
         $GLOBALS['pushpull_test_generateblocks_posts'][] = new WP_Post(
@@ -286,6 +311,7 @@ if (! function_exists('wp_insert_post')) {
 if (! function_exists('wp_update_post')) {
     function wp_update_post(array $postarr): int
     {
+        $postarr = wp_unslash($postarr);
         foreach ($GLOBALS['pushpull_test_generateblocks_posts'] as $index => $post) {
             if ($post->ID !== (int) ($postarr['ID'] ?? 0)) {
                 continue;
