@@ -89,9 +89,18 @@ final class RepositoryStateReader
                 continue;
             }
 
+            if (! $this->isManagedPath($path)) {
+                continue;
+            }
+
             $files[$path] = new CanonicalManagedFile($path, $blob->content);
         }
 
         return $files;
+    }
+
+    private function isManagedPath(string $path): bool
+    {
+        return $path !== '.pushpull-initialized';
     }
 }

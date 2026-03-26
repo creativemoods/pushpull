@@ -47,11 +47,12 @@ final class SettingsRepositoryTest extends TestCase
     {
         $repository = new SettingsRepository();
         $settings = $repository->sanitize([
-            'manage_generateblocks_global_styles' => '1',
+            'enabled_managed_sets' => ['generateblocks_global_styles', 'generateblocks_conditions'],
             'auto_apply_enabled' => '',
         ]);
 
-        self::assertTrue($settings->manageGenerateBlocksGlobalStyles);
+        self::assertTrue($settings->isManagedSetEnabled('generateblocks_global_styles'));
+        self::assertTrue($settings->isManagedSetEnabled('generateblocks_conditions'));
         self::assertFalse($settings->autoApplyEnabled);
         self::assertTrue($settings->diagnosticsEnabled);
 

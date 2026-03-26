@@ -33,7 +33,7 @@ final class SettingsRepository
             'branch' => 'main',
             'api_token' => '',
             'base_url' => '',
-            'manage_generateblocks_global_styles' => false,
+            'enabled_managed_sets' => [],
             'auto_apply_enabled' => false,
             'diagnostics_enabled' => true,
             'author_name' => '',
@@ -66,7 +66,12 @@ final class SettingsRepository
             'branch' => sanitize_text_field((string) ($input['branch'] ?? 'main')),
             'api_token' => $apiToken,
             'base_url' => esc_url_raw((string) ($input['base_url'] ?? '')),
-            'manage_generateblocks_global_styles' => ! empty($input['manage_generateblocks_global_styles']),
+            'enabled_managed_sets' => isset($input['enabled_managed_sets']) && is_array($input['enabled_managed_sets'])
+                ? array_values(array_filter(array_map(
+                    static fn (mixed $value): string => sanitize_key((string) $value),
+                    $input['enabled_managed_sets']
+                )))
+                : [],
             'auto_apply_enabled' => ! empty($input['auto_apply_enabled']),
             'diagnostics_enabled' => ! array_key_exists('diagnostics_enabled', $input) || ! empty($input['diagnostics_enabled']),
             'author_name' => sanitize_text_field((string) ($input['author_name'] ?? '')),

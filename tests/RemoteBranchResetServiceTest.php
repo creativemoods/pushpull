@@ -62,11 +62,11 @@ final class RemoteBranchResetServiceTest extends TestCase
             'main',
             'token',
             '',
-            true,
             false,
             true,
             'Jane Doe',
-            'jane@example.com'
+            'jane@example.com',
+            ['generateblocks_global_styles']
         ));
 
         self::assertSame('generateblocks_global_styles', $result->managedSetKey);

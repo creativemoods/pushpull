@@ -6,6 +6,9 @@ namespace PushPull\Settings;
 
 final class PushPullSettings
 {
+    /**
+     * @param string[] $enabledManagedSets
+     */
     public function __construct(
         public readonly string $providerKey,
         public readonly string $ownerOrWorkspace,
@@ -13,11 +16,11 @@ final class PushPullSettings
         public readonly string $branch,
         public readonly string $apiToken,
         public readonly string $baseUrl,
-        public readonly bool $manageGenerateBlocksGlobalStyles,
         public readonly bool $autoApplyEnabled,
         public readonly bool $diagnosticsEnabled,
         public readonly string $authorName,
-        public readonly string $authorEmail
+        public readonly string $authorEmail,
+        public readonly array $enabledManagedSets = []
     ) {
     }
 
@@ -26,6 +29,27 @@ final class PushPullSettings
      */
     public static function fromArray(array $values): self
     {
+        $enabledManagedSets = [];
+
+        if (isset($values['enabled_managed_sets']) && is_array($values['enabled_managed_sets'])) {
+            $enabledManagedSets = array_values(array_filter(array_map(
+                static fn (mixed $value): string => self::normalizeManagedSetKey((string) $value),
+                $values['enabled_managed_sets']
+            )));
+        } else {
+            if (! empty($values['manage_generateblocks_global_styles'])) {
+                $enabledManagedSets[] = 'generateblocks_global_styles';
+            }
+
+            if (! empty($values['manage_generateblocks_conditions'])) {
+                $enabledManagedSets[] = 'generateblocks_conditions';
+            }
+
+            if (! empty($values['manage_generateblocks_local_patterns'])) {
+                $enabledManagedSets[] = 'wordpress_block_patterns';
+            }
+        }
+
         return new self(
             (string) ($values['provider_key'] ?? 'github'),
             (string) ($values['owner_or_workspace'] ?? ''),
@@ -33,11 +57,11 @@ final class PushPullSettings
             (string) ($values['branch'] ?? 'main'),
             (string) ($values['api_token'] ?? ''),
             (string) ($values['base_url'] ?? ''),
-            (bool) ($values['manage_generateblocks_global_styles'] ?? false),
             (bool) ($values['auto_apply_enabled'] ?? false),
             (bool) ($values['diagnostics_enabled'] ?? true),
             (string) ($values['author_name'] ?? ''),
-            (string) ($values['author_email'] ?? '')
+            (string) ($values['author_email'] ?? ''),
+            array_values(array_unique($enabledManagedSets))
         );
     }
 
@@ -53,12 +77,27 @@ final class PushPullSettings
             'branch' => $this->branch,
             'api_token' => $this->apiToken,
             'base_url' => $this->baseUrl,
-            'manage_generateblocks_global_styles' => $this->manageGenerateBlocksGlobalStyles,
+            'enabled_managed_sets' => array_values($this->enabledManagedSets),
             'auto_apply_enabled' => $this->autoApplyEnabled,
             'diagnostics_enabled' => $this->diagnosticsEnabled,
             'author_name' => $this->authorName,
             'author_email' => $this->authorEmail,
         ];
+    }
+
+    public function isManagedSetEnabled(string $managedSetKey): bool
+    {
+        return in_array($managedSetKey, $this->enabledManagedSets, true);
+    }
+
+    private static function normalizeManagedSetKey(string $managedSetKey): string
+    {
+        $normalized = sanitize_key($managedSetKey);
+
+        return match ($normalized) {
+            'generateblocks_local_patterns' => 'wordpress_block_patterns',
+            default => $normalized,
+        };
     }
 
     public function maskedApiToken(): string

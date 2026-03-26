@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace PushPull\Content\GenerateBlocks;
 
-use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedContentItem;
+use PushPull\Content\ManagedContentSnapshot;
 
-final class GenerateBlocksGlobalStylesSnapshot extends ManagedContentSnapshot
+final class WordPressBlockPatternsSnapshot extends ManagedContentSnapshot
 {
     /**
      * @param ManagedContentItem[] $items

@@ -4,19 +4,19 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.4
+Stable tag: 0.0.5
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
-Git-backed content workflows for selected WordPress content domains.
-
-= Beta notice =
-
-This is a beta plugin. It is still under active development, has limited functionality, and currently supports only a narrow subset of the intended PushPull feature set.
+Git-based content sync for WordPress.
 
 == Description ==
 
 PushPull stores selected WordPress content in a Git repository using a canonical JSON representation instead of raw database dumps.
+
+=== Beta notice ===
+
+This is a beta plugin. It is still under active development, has limited functionality, and currently supports only a narrow subset of the intended PushPull feature set.
 
 The current release focuses on one managed domain:
 

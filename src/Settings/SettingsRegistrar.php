@@ -57,7 +57,7 @@ final class SettingsRegistrar
             'pushpull_managed_sets',
             __('Managed Content Sets', 'pushpull'),
             static function (): void {
-                echo '<p>Slice 1 exposes the managed-set toggle without enabling synchronization yet.</p>';
+                echo '<p>Enable the content domains that PushPull should manage and serialize into the repository.</p>';
             },
             self::SETTINGS_PAGE_SLUG
         );
@@ -71,26 +71,15 @@ final class SettingsRegistrar
             self::SETTINGS_PAGE_SLUG
         );
 
-        add_settings_section(
-            'pushpull_diagnostics',
-            __('Diagnostics', 'pushpull'),
-            static function (): void {
-                echo '<p>Use these settings to prepare later validation and troubleshooting features.</p>';
-            },
-            self::SETTINGS_PAGE_SLUG
-        );
-
         $this->registerField('pushpull_provider', 'provider_key', __('Git provider', 'pushpull'));
         $this->registerField('pushpull_remote', 'owner_or_workspace', __('Owner / workspace / group', 'pushpull'));
         $this->registerField('pushpull_remote', 'repository', __('Repository name', 'pushpull'));
         $this->registerField('pushpull_remote', 'branch', __('Branch', 'pushpull'));
         $this->registerField('pushpull_auth', 'api_token', __('API token', 'pushpull'));
         $this->registerField('pushpull_auth', 'base_url', __('Base URL', 'pushpull'));
-        $this->registerField('pushpull_managed_sets', 'manage_generateblocks_global_styles', __('GenerateBlocks global styles', 'pushpull'));
+        $this->registerField('pushpull_managed_sets', 'enabled_managed_sets', __('Enabled managed sets', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_name', __('Commit author name', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_email', __('Commit author email', 'pushpull'));
-        $this->registerField('pushpull_sync', 'auto_apply_enabled', __('Auto-apply repository changes', 'pushpull'));
-        $this->registerField('pushpull_diagnostics', 'diagnostics_enabled', __('Diagnostics mode', 'pushpull'));
     }
 
     /**
@@ -125,10 +114,8 @@ final class SettingsRegistrar
                         $this->renderPassword($name, $settings->maskedApiToken());
                         break;
 
-                    case 'manage_generateblocks_global_styles':
-                    case 'auto_apply_enabled':
-                    case 'diagnostics_enabled':
-                        $this->renderCheckbox($name, (bool) $value, $field);
+                    case 'enabled_managed_sets':
+                        $this->renderManagedSetCheckboxes(SettingsRepository::OPTION_KEY . '[enabled_managed_sets][]', $settings);
                         break;
 
                     case 'author_email':
@@ -183,24 +170,23 @@ final class SettingsRegistrar
         echo '<p class="description">Leave blank until you have a provider token.</p>';
     }
 
-    private function renderCheckbox(string $name, bool $checked, string $field): void
+    private function renderManagedSetCheckboxes(string $name, PushPullSettings $settings): void
     {
-        printf(
-            '<label><input type="checkbox" name="%s" value="1" %s /> %s</label>',
-            esc_attr($name),
-            checked($checked, true, false),
-            esc_html($this->checkboxLabel($field))
-        );
-    }
+        $options = [
+            'generateblocks_global_styles' => 'GenerateBlocks global styles',
+            'generateblocks_conditions' => 'GenerateBlocks conditions',
+            'wordpress_block_patterns' => 'WordPress block patterns',
+        ];
 
-    private function checkboxLabel(string $field): string
-    {
-        return match ($field) {
-            'manage_generateblocks_global_styles' => 'Enable this managed content set.',
-            'auto_apply_enabled' => 'Reserved for a future, explicit workflow. Keep disabled for now.',
-            'diagnostics_enabled' => 'Keep lightweight diagnostics available for later slices.',
-            default => '',
-        };
+        foreach ($options as $managedSetKey => $label) {
+            printf(
+                '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
+                esc_attr($name),
+                esc_attr($managedSetKey),
+                checked($settings->isManagedSetEnabled($managedSetKey), true, false),
+                esc_html($label)
+            );
+        }
     }
 
     private function renderInput(string $name, string $value, string $type = 'text', string $placeholder = ''): void

@@ -10,7 +10,7 @@ use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
-use PushPull\Domain\Sync\GenerateBlocksRepositoryCommitter;
+use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Persistence\ContentMap\ContentMapRepository;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Settings\PushPullSettings;
@@ -20,7 +20,7 @@ final class ManagedSetApplyServiceTest extends TestCase
     private \wpdb $wpdb;
     private DatabaseLocalRepository $repository;
     private GenerateBlocksGlobalStylesAdapter $adapter;
-    private GenerateBlocksRepositoryCommitter $committer;
+    private ManagedSetRepositoryCommitter $committer;
     private ManagedSetApplyService $applyService;
 
     protected function setUp(): void
@@ -28,7 +28,7 @@ final class ManagedSetApplyServiceTest extends TestCase
         $this->wpdb = new \wpdb();
         $this->repository = new DatabaseLocalRepository($this->wpdb);
         $this->adapter = new GenerateBlocksGlobalStylesAdapter();
-        $this->committer = new GenerateBlocksRepositoryCommitter($this->repository, $this->adapter);
+        $this->committer = new ManagedSetRepositoryCommitter($this->repository, $this->adapter);
         $this->applyService = new ManagedSetApplyService(
             $this->adapter,
             new RepositoryStateReader($this->repository),
@@ -78,11 +78,11 @@ final class ManagedSetApplyServiceTest extends TestCase
             'main',
             'token',
             '',
-            true,
             false,
             true,
             'Jane Doe',
-            'jane@example.com'
+            'jane@example.com',
+            ['generateblocks_global_styles']
         ));
 
         self::assertSame(1, $result->createdCount);
@@ -133,12 +133,63 @@ final class ManagedSetApplyServiceTest extends TestCase
             'main',
             'token',
             '',
-            true,
             false,
             true,
             'Jane Doe',
+            'jane@example.com',
+            ['generateblocks_global_styles']
+        ));
+    }
+
+    public function testApplyIgnoresRepositoryBootstrapMarkerFiles(): void
+    {
+        $snapshot = $this->adapter->snapshotFromRuntimeRecords([
+            $this->runtimeRecord('.gbp-section', 'gbp-section', 0, ['paddingTop' => '7rem']),
+        ]);
+
+        $result = $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        self::assertNotNull($result->commit);
+
+        $markerBlob = $this->repository->storeBlob("Initialized by PushPull.\n");
+        $tree = $this->repository->getTree($result->commit->treeHash);
+
+        self::assertNotNull($tree);
+
+        $entries = $tree->entries;
+        $entries[] = new \PushPull\Domain\Repository\TreeEntry('.pushpull-initialized', 'blob', $markerBlob->hash);
+        $newTree = $this->repository->storeTree($entries);
+        $newCommit = $this->repository->commit(new \PushPull\Domain\Repository\CommitRequest(
+            $newTree->hash,
+            $result->commit->hash,
+            null,
+            'Commit with bootstrap marker',
+            'Jane Doe',
             'jane@example.com'
         ));
+        $this->repository->updateRef('refs/heads/main', $newCommit->hash);
+        $this->repository->updateRef('HEAD', $newCommit->hash);
+
+        $applyResult = $this->applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['generateblocks_global_styles']
+        ));
+
+        self::assertSame(1, $applyResult->createdCount);
+        self::assertSame([], $applyResult->deletedLogicalKeys);
+        self::assertCount(1, $GLOBALS['pushpull_test_generateblocks_posts']);
     }
 
     /**

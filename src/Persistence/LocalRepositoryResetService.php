@@ -35,7 +35,6 @@ final class LocalRepositoryResetService
             $this->tables->repoCommits(),
             $this->tables->repoRefs(),
             $this->tables->repoWorkingState(),
-            $this->tables->repoOperations(),
             $this->tables->contentMap(),
         ];
     }

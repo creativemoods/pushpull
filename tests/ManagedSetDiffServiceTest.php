@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace PushPull\Tests;
 
 use PHPUnit\Framework\TestCase;
+use PushPull\Content\GenerateBlocks\GenerateBlocksConditionsAdapter;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
+use PushPull\Domain\Diff\CanonicalManagedFile;
 use PushPull\Domain\Diff\ManagedSetDiffService;
 use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Domain\Diff\RepositoryRelationship;
+use PushPull\Domain\Repository\CommitRequest;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
+use PushPull\Domain\Repository\TreeEntry;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
-use PushPull\Domain\Sync\GenerateBlocksRepositoryCommitter;
+use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Provider\RemoteBlob;
 use PushPull\Provider\RemoteCommit;
 use PushPull\Provider\RemoteTree;
@@ -22,7 +26,7 @@ final class ManagedSetDiffServiceTest extends TestCase
     private \wpdb $wpdb;
     private DatabaseLocalRepository $repository;
     private GenerateBlocksGlobalStylesAdapter $adapter;
-    private GenerateBlocksRepositoryCommitter $committer;
+    private ManagedSetRepositoryCommitter $committer;
     private ManagedSetDiffService $diffService;
     private PushPullSettings $settings;
 
@@ -31,13 +35,13 @@ final class ManagedSetDiffServiceTest extends TestCase
         $this->wpdb = new \wpdb();
         $this->repository = new DatabaseLocalRepository($this->wpdb);
         $this->adapter = new GenerateBlocksGlobalStylesAdapter();
-        $this->committer = new GenerateBlocksRepositoryCommitter($this->repository, $this->adapter);
+        $this->committer = new ManagedSetRepositoryCommitter($this->repository, $this->adapter);
         $this->diffService = new ManagedSetDiffService(
             $this->adapter,
             new RepositoryStateReader($this->repository),
             $this->repository
         );
-        $this->settings = new PushPullSettings('github', 'owner', 'repo', 'main', 'token', '', true, false, true, 'Jane Doe', 'jane@example.com');
+        $this->settings = new PushPullSettings('github', 'owner', 'repo', 'main', 'token', '', false, true, 'Jane Doe', 'jane@example.com', ['generateblocks_global_styles']);
     }
 
     public function testIdenticalLiveAndLocalStateIsClean(): void
@@ -148,6 +152,24 @@ final class ManagedSetDiffServiceTest extends TestCase
         );
     }
 
+    public function testRepositorySideStatesAreScopedToTheManagedSet(): void
+    {
+        $snapshot = $this->snapshot([
+            $this->runtimeRecord('.gbp-section', 'gbp-section', 0, ['paddingTop' => '7rem']),
+        ]);
+
+        $this->committer->commitSnapshot($snapshot, $this->commitRequest('Initial export'));
+        $this->replaceLivePosts($snapshot);
+        $this->injectForeignManagedSetFiles();
+
+        $result = $this->diffService->diff($this->settings);
+
+        self::assertArrayHasKey('generateblocks/global-styles/gbp-section.json', $result->local->files);
+        self::assertArrayHasKey('generateblocks/global-styles/manifest.json', $result->local->files);
+        self::assertArrayNotHasKey('generateblocks/conditions/is_event.json', $result->local->files);
+        self::assertArrayNotHasKey('generateblocks/conditions/manifest.json', $result->local->files);
+    }
+
     protected function tearDown(): void
     {
         $this->replaceLivePosts(null);
@@ -255,5 +277,61 @@ final class ManagedSetDiffServiceTest extends TestCase
         }
 
         $GLOBALS['pushpull_test_generateblocks_posts'] = $posts;
+    }
+
+    private function injectForeignManagedSetFiles(): void
+    {
+        $state = (new RepositoryStateReader($this->repository))->read('local', 'refs/heads/main');
+        $stylesFiles = $state->files;
+        $conditionsAdapter = new GenerateBlocksConditionsAdapter();
+        $conditionItem = $conditionsAdapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => 10,
+                'post_title' => 'is_event',
+                'post_name' => 'is_event',
+                'post_status' => 'publish',
+                'menu_order' => 0,
+                '_gb_conditions' => serialize([
+                    'logic' => 'OR',
+                    'groups' => [],
+                ]),
+            ],
+        ]);
+
+        $conditionFiles = [];
+        foreach ($conditionItem->items as $item) {
+            $path = $conditionsAdapter->getRepositoryPath($item);
+            $conditionFiles[$path] = new CanonicalManagedFile($path, $conditionsAdapter->serialize($item));
+        }
+        $manifestPath = $conditionsAdapter->getManifestPath();
+        $conditionFiles[$manifestPath] = new CanonicalManagedFile($manifestPath, $conditionsAdapter->serializeManifest($conditionItem->manifest));
+
+        $allFiles = array_merge($stylesFiles, $conditionFiles);
+        ksort($allFiles);
+
+        $entries = [];
+        foreach ($allFiles as $path => $file) {
+            $blob = $this->repository->storeBlob($file->content);
+            $entries[] = new TreeEntry($path, 'blob', $blob->hash);
+        }
+
+        $tree = $this->repository->storeTree($entries);
+        $headCommit = $this->localRepositoryHeadCommitHash();
+        $commit = $this->repository->commit(
+            new CommitRequest(
+                $tree->hash,
+                $headCommit,
+                null,
+                'Jane Doe',
+                'jane@example.com',
+                'Mixed managed-set snapshot'
+            )
+        );
+        $this->repository->updateRef('refs/heads/main', $commit->hash);
+    }
+
+    private function localRepositoryHeadCommitHash(): ?string
+    {
+        return $this->repository->getHeadCommit('main')?->hash;
     }
 }

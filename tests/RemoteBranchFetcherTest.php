@@ -133,11 +133,11 @@ final class RemoteBranchFetcherTest extends TestCase
             'main',
             'token',
             '',
-            true,
             false,
             true,
             'Jane Doe',
-            'jane@example.com'
+            'jane@example.com',
+            ['generateblocks_global_styles']
         ));
 
         self::assertSame('refs/heads/main', $result->remoteRefName);

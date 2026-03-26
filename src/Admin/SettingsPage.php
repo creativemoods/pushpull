@@ -43,6 +43,15 @@ final class SettingsPage
             [$this, 'render'],
             'dashicons-cloud-saved'
         );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Settings', 'pushpull'),
+            __('Settings', 'pushpull'),
+            Capabilities::MANAGE_PLUGIN,
+            self::MENU_SLUG,
+            [$this, 'render']
+        );
     }
 
     public function enqueueAssets(string $hookSuffix): void
@@ -70,6 +79,7 @@ final class SettingsPage
         echo '<div class="wrap pushpull-admin">';
         echo '<h1>' . esc_html__('PushPull Settings', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('Configure the remote provider, repository, branch, and managed content settings that drive PushPull fetch, merge, apply, and push workflows.', 'pushpull') . '</p>';
+        $this->renderPrimaryNavigation();
         $notice = $this->notice();
         if ($notice !== null) {
             printf(
@@ -100,6 +110,27 @@ final class SettingsPage
         echo '</div>';
     }
 
+    private function renderPrimaryNavigation(): void
+    {
+        echo '<nav class="nav-tab-wrapper wp-clearfix pushpull-page-nav">';
+        printf(
+            '<a href="%s" class="nav-tab nav-tab-active">%s</a>',
+            esc_url(admin_url('admin.php?page=' . self::MENU_SLUG)),
+            esc_html__('Settings', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . ManagedContentPage::MENU_SLUG)),
+            esc_html__('Managed Content', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . OperationsPage::MENU_SLUG)),
+            esc_html__('Audit Log', 'pushpull')
+        );
+        echo '</nav>';
+    }
+
     private function renderConnectionActions(): void
     {
         echo '<div class="pushpull-panel">';
@@ -118,7 +149,7 @@ final class SettingsPage
     {
         echo '<div class="pushpull-panel">';
         echo '<h2>' . esc_html__('Local Repository Reset', 'pushpull') . '</h2>';
-        echo '<p>' . esc_html__('This clears PushPull local repository state, fetched objects, refs, conflicts, and history while keeping your saved configuration, live WordPress content, and remote repository untouched.', 'pushpull') . '</p>';
+        echo '<p>' . esc_html__('This clears PushPull local repository state, fetched objects, refs, and conflicts while keeping your saved configuration, operation history, live WordPress content, and remote repository untouched.', 'pushpull') . '</p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the local PushPull repository state? This keeps settings but removes all local commits, fetch data, and conflicts.\');">';
         echo '<input type="hidden" name="action" value="pushpull_reset_local_repository" />';
         wp_nonce_field(self::RESET_LOCAL_REPOSITORY_ACTION);
@@ -135,7 +166,17 @@ final class SettingsPage
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Provider', 'pushpull'), esc_html($settings->providerKey));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Repository', 'pushpull'), esc_html(trim($settings->ownerOrWorkspace . '/' . $settings->repository, '/')));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Branch', 'pushpull'), esc_html($settings->branch));
-        printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Managed set', 'pushpull'), esc_html($settings->manageGenerateBlocksGlobalStyles ? 'GenerateBlocks global styles' : 'Not enabled'));
+        $managedSets = [];
+        if ($settings->isManagedSetEnabled('generateblocks_global_styles')) {
+            $managedSets[] = 'GenerateBlocks global styles';
+        }
+        if ($settings->isManagedSetEnabled('generateblocks_conditions')) {
+            $managedSets[] = 'GenerateBlocks conditions';
+        }
+        if ($settings->isManagedSetEnabled('wordpress_block_patterns')) {
+            $managedSets[] = 'WordPress block patterns';
+        }
+        printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Managed sets', 'pushpull'), esc_html($managedSets !== [] ? implode(', ', $managedSets) : 'Not enabled'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Token', 'pushpull'), esc_html($settings->maskedApiToken() !== '' ? $settings->maskedApiToken() : 'Not stored'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Schema', 'pushpull'), esc_html((new SchemaMigrator())->installedVersion() ?: 'Not installed'));
         echo '</dl>';

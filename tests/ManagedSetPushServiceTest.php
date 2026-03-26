@@ -9,7 +9,7 @@ use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
 use PushPull\Domain\Push\ManagedSetPushService;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
-use PushPull\Domain\Sync\GenerateBlocksRepositoryCommitter;
+use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Provider\CreateRemoteCommitRequest;
 use PushPull\Provider\GitProviderFactoryInterface;
 use PushPull\Provider\GitProviderInterface;
@@ -30,7 +30,7 @@ final class ManagedSetPushServiceTest extends TestCase
     private \wpdb $wpdb;
     private DatabaseLocalRepository $repository;
     private GenerateBlocksGlobalStylesAdapter $adapter;
-    private GenerateBlocksRepositoryCommitter $committer;
+    private ManagedSetRepositoryCommitter $committer;
     private InMemoryPushProvider $provider;
     private ManagedSetPushService $pushService;
 
@@ -39,7 +39,7 @@ final class ManagedSetPushServiceTest extends TestCase
         $this->wpdb = new \wpdb();
         $this->repository = new DatabaseLocalRepository($this->wpdb);
         $this->adapter = new GenerateBlocksGlobalStylesAdapter();
-        $this->committer = new GenerateBlocksRepositoryCommitter($this->repository, $this->adapter);
+        $this->committer = new ManagedSetRepositoryCommitter($this->repository, $this->adapter);
         $this->provider = new InMemoryPushProvider();
         $this->pushService = new ManagedSetPushService($this->repository, new InMemoryPushProviderFactory($this->provider));
     }
@@ -71,11 +71,11 @@ final class ManagedSetPushServiceTest extends TestCase
             'main',
             'token',
             '',
-            true,
             false,
             true,
             'Jane Doe',
-            'jane@example.com'
+            'jane@example.com',
+            ['generateblocks_global_styles']
         ));
 
         self::assertSame('pushed', $result->status);
@@ -106,11 +106,11 @@ final class ManagedSetPushServiceTest extends TestCase
             'main',
             'token',
             '',
-            true,
             false,
             true,
             'Jane Doe',
-            'jane@example.com'
+            'jane@example.com',
+            ['generateblocks_global_styles']
         ));
 
         self::assertSame('already_up_to_date', $result->status);

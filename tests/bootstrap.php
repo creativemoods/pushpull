@@ -7,6 +7,10 @@ global $pushpull_test_options;
 $pushpull_test_options ??= [];
 $GLOBALS['pushpull_test_generateblocks_posts'] ??= [];
 $GLOBALS['pushpull_test_generateblocks_meta'] ??= [];
+$GLOBALS['pushpull_test_terms'] ??= [];
+$GLOBALS['pushpull_test_object_terms'] ??= [];
+$GLOBALS['pushpull_test_term_meta'] ??= [];
+$GLOBALS['pushpull_test_next_term_id'] ??= 1;
 $GLOBALS['pushpull_test_next_post_id'] ??= 1;
 
 if (! defined('ARRAY_A')) {
@@ -41,6 +45,21 @@ if (! function_exists('sanitize_text_field')) {
     }
 }
 
+if (! function_exists('wp_unslash')) {
+    function wp_unslash(string|array $value): string|array
+    {
+        if (is_array($value)) {
+            foreach ($value as $key => $entry) {
+                $value[$key] = wp_unslash($entry);
+            }
+
+            return $value;
+        }
+
+        return stripslashes($value);
+    }
+}
+
 if (! function_exists('sanitize_email')) {
     function sanitize_email(string $email): string
     {
@@ -69,10 +88,58 @@ if (! function_exists('current_time')) {
     }
 }
 
+if (! function_exists('home_url')) {
+    function home_url(string $path = '', ?string $scheme = null): string
+    {
+        $base = 'https://source.example.test';
+
+        if ($path === '') {
+            return $base;
+        }
+
+        return $base . '/' . ltrim($path, '/');
+    }
+}
+
+if (! function_exists('site_url')) {
+    function site_url(string $path = '', ?string $scheme = null): string
+    {
+        $base = 'https://source.example.test';
+
+        if ($path === '') {
+            return $base;
+        }
+
+        return $base . '/' . ltrim($path, '/');
+    }
+}
+
 if (! function_exists('post_type_exists')) {
     function post_type_exists(string $postType): bool
     {
-        return $postType === 'gblocks_styles';
+        return in_array($postType, ['gblocks_styles', 'gblocks_condition', 'wp_block'], true);
+    }
+}
+
+if (! function_exists('taxonomy_exists')) {
+    function taxonomy_exists(string $taxonomy): bool
+    {
+        return in_array($taxonomy, ['gblocks_condition_cat', 'gblocks_pattern_collections', 'language'], true);
+    }
+}
+
+if (! function_exists('get_object_taxonomies')) {
+    function get_object_taxonomies(string $objectType, string $output = 'names'): array
+    {
+        if ($objectType === 'wp_block') {
+            return ['gblocks_pattern_collections', 'language'];
+        }
+
+        if ($objectType === 'gblocks_condition') {
+            return ['gblocks_condition_cat'];
+        }
+
+        return [];
     }
 }
 
@@ -84,7 +151,27 @@ if (! class_exists('WP_Post')) {
             public string $post_title = '',
             public string $post_name = '',
             public string $post_status = 'publish',
-            public int $menu_order = 0
+            public int $menu_order = 0,
+            public string $post_type = 'gblocks_styles',
+            public string $post_content = '',
+            public string $post_date = '2026-03-24 09:00:00',
+            public string $post_modified = '2026-03-24 09:00:00'
+        ) {
+        }
+    }
+}
+
+if (! class_exists('WP_Term')) {
+    class WP_Term
+    {
+        public function __construct(
+            public int $term_id = 0,
+            public int $term_taxonomy_id = 0,
+            public string $taxonomy = '',
+            public string $slug = '',
+            public string $name = '',
+            public string $description = '',
+            public int $parent = 0
         ) {
         }
     }
@@ -94,6 +181,15 @@ if (! function_exists('get_posts')) {
     function get_posts(array $args = []): array
     {
         $posts = $GLOBALS['pushpull_test_generateblocks_posts'] ?? [];
+
+        if (isset($args['post_type']) && is_string($args['post_type']) && $args['post_type'] !== '') {
+            $requestedPostType = $args['post_type'];
+            $posts = array_values(array_filter(
+                $posts,
+                static fn (WP_Post $post): bool => $post->post_type === $requestedPostType
+            ));
+        }
+
         usort(
             $posts,
             static fn (WP_Post $left, WP_Post $right): int => $left->ID <=> $right->ID
@@ -104,8 +200,19 @@ if (! function_exists('get_posts')) {
 }
 
 if (! function_exists('get_post_meta')) {
-    function get_post_meta(int $postId, string $key, bool $single = false): mixed
+    function get_post_meta(int $postId, string $key = '', bool $single = false): mixed
     {
+        if ($key === '') {
+            $allMeta = $GLOBALS['pushpull_test_generateblocks_meta'][$postId] ?? [];
+            $normalized = [];
+
+            foreach ($allMeta as $metaKey => $value) {
+                $normalized[(string) $metaKey] = is_array($value) && array_is_list($value) ? $value : [$value];
+            }
+
+            return $normalized;
+        }
+
         $value = $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] ?? ($single ? '' : []);
 
         return $single ? $value : [$value];
@@ -116,6 +223,31 @@ if (! function_exists('update_post_meta')) {
     function update_post_meta(int $postId, string $key, mixed $value): bool
     {
         $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] = $value;
+
+        return true;
+    }
+}
+
+if (! function_exists('add_post_meta')) {
+    function add_post_meta(int $postId, string $key, mixed $value, bool $unique = false): bool
+    {
+        $existing = $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] ?? null;
+
+        if ($existing === null) {
+            $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] = [$value];
+            return true;
+        }
+
+        if (! is_array($existing) || ! array_is_list($existing)) {
+            $existing = [$existing];
+        }
+
+        if ($unique && in_array($value, $existing, true)) {
+            return false;
+        }
+
+        $existing[] = $value;
+        $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] = $existing;
 
         return true;
     }
@@ -140,7 +272,11 @@ if (! function_exists('wp_insert_post')) {
             (string) ($postarr['post_title'] ?? ''),
             (string) ($postarr['post_name'] ?? ''),
             (string) ($postarr['post_status'] ?? 'publish'),
-            (int) ($postarr['menu_order'] ?? 0)
+            (int) ($postarr['menu_order'] ?? 0),
+            (string) ($postarr['post_type'] ?? 'gblocks_styles'),
+            (string) ($postarr['post_content'] ?? ''),
+            (string) ($postarr['post_date'] ?? '2026-03-24 09:00:00'),
+            (string) ($postarr['post_modified'] ?? '2026-03-24 09:00:00')
         );
 
         return $id;
@@ -160,7 +296,11 @@ if (! function_exists('wp_update_post')) {
                 (string) ($postarr['post_title'] ?? $post->post_title),
                 (string) ($postarr['post_name'] ?? $post->post_name),
                 (string) ($postarr['post_status'] ?? $post->post_status),
-                (int) ($postarr['menu_order'] ?? $post->menu_order)
+                (int) ($postarr['menu_order'] ?? $post->menu_order),
+                (string) ($postarr['post_type'] ?? $post->post_type),
+                (string) ($postarr['post_content'] ?? $post->post_content),
+                (string) ($postarr['post_date'] ?? $post->post_date),
+                (string) ($postarr['post_modified'] ?? $post->post_modified)
             );
 
             return $post->ID;
@@ -178,6 +318,187 @@ if (! function_exists('wp_delete_post')) {
             static fn (WP_Post $post): bool => $post->ID !== $postId
         ));
         unset($GLOBALS['pushpull_test_generateblocks_meta'][$postId]);
+        unset($GLOBALS['pushpull_test_object_terms'][$postId]);
+
+        return true;
+    }
+}
+
+if (! function_exists('wp_get_object_terms')) {
+    function wp_get_object_terms(int $objectId, string|array $taxonomy, array $args = []): array
+    {
+        $taxonomies = is_array($taxonomy) ? $taxonomy : ($taxonomy === '' ? [] : [$taxonomy]);
+        if ($taxonomies === []) {
+            $taxonomies = array_keys($GLOBALS['pushpull_test_object_terms'][$objectId] ?? []);
+        }
+
+        $terms = [];
+
+        foreach ($taxonomies as $taxonomyName) {
+            $termIds = $GLOBALS['pushpull_test_object_terms'][$objectId][$taxonomyName] ?? [];
+
+            foreach ($termIds as $termId) {
+                $term = $GLOBALS['pushpull_test_terms'][$taxonomyName][$termId] ?? null;
+
+                if ($term instanceof WP_Term) {
+                    $terms[] = $term;
+                }
+            }
+        }
+
+        usort(
+            $terms,
+            static fn (WP_Term $left, WP_Term $right): int => $left->slug <=> $right->slug
+        );
+
+        return $terms;
+    }
+}
+
+if (! function_exists('term_exists')) {
+    function term_exists(string $term, string $taxonomy): array|int|null
+    {
+        foreach ($GLOBALS['pushpull_test_terms'][$taxonomy] ?? [] as $termObject) {
+            if (! $termObject instanceof WP_Term) {
+                continue;
+            }
+
+            if ($termObject->slug === $term) {
+                return [
+                    'term_id' => $termObject->term_id,
+                    'term_taxonomy_id' => $termObject->term_taxonomy_id,
+                ];
+            }
+        }
+
+        return null;
+    }
+}
+
+if (! function_exists('wp_insert_term')) {
+    function wp_insert_term(string $term, string $taxonomy, array $args = []): array
+    {
+        $slug = sanitize_title((string) ($args['slug'] ?? $term));
+        $id = (int) ($GLOBALS['pushpull_test_next_term_id'] ?? 1);
+        $GLOBALS['pushpull_test_next_term_id'] = $id + 1;
+        $termObject = new WP_Term(
+            $id,
+            $id,
+            $taxonomy,
+            $slug,
+            $term,
+            (string) ($args['description'] ?? ''),
+            (int) ($args['parent'] ?? 0)
+        );
+        $GLOBALS['pushpull_test_terms'][$taxonomy][$id] = $termObject;
+
+        return [
+            'term_id' => $id,
+            'term_taxonomy_id' => $id,
+        ];
+    }
+}
+
+if (! function_exists('wp_update_term')) {
+    function wp_update_term(int $termId, string $taxonomy, array $args = []): array
+    {
+        $existing = $GLOBALS['pushpull_test_terms'][$taxonomy][$termId] ?? null;
+
+        if (! $existing instanceof WP_Term) {
+            return ['term_id' => 0, 'term_taxonomy_id' => 0];
+        }
+
+        $GLOBALS['pushpull_test_terms'][$taxonomy][$termId] = new WP_Term(
+            $existing->term_id,
+            $existing->term_taxonomy_id,
+            $taxonomy,
+            sanitize_title((string) ($args['slug'] ?? $existing->slug)),
+            (string) ($args['name'] ?? $existing->name),
+            (string) ($args['description'] ?? $existing->description),
+            (int) ($args['parent'] ?? $existing->parent)
+        );
+
+        return [
+            'term_id' => $termId,
+            'term_taxonomy_id' => $termId,
+        ];
+    }
+}
+
+if (! function_exists('wp_set_object_terms')) {
+    function wp_set_object_terms(int $objectId, array $terms, string $taxonomy, bool $append = false): array
+    {
+        $termIds = [];
+
+        foreach ($terms as $term) {
+            $termIds[] = (int) $term;
+        }
+
+        sort($termIds);
+        $GLOBALS['pushpull_test_object_terms'][$objectId][$taxonomy] = $termIds;
+
+        return array_map(static fn (int $termId): string => (string) $termId, $termIds);
+    }
+}
+
+if (! function_exists('get_term')) {
+    function get_term(int $termId, string $taxonomy): ?WP_Term
+    {
+        $term = $GLOBALS['pushpull_test_terms'][$taxonomy][$termId] ?? null;
+
+        return $term instanceof WP_Term ? $term : null;
+    }
+}
+
+if (! function_exists('get_term_meta')) {
+    function get_term_meta(int $termId, string $key = '', bool $single = false): mixed
+    {
+        if ($key === '') {
+            $allMeta = $GLOBALS['pushpull_test_term_meta'][$termId] ?? [];
+            $normalized = [];
+
+            foreach ($allMeta as $metaKey => $value) {
+                $normalized[(string) $metaKey] = is_array($value) && array_is_list($value) ? $value : [$value];
+            }
+
+            return $normalized;
+        }
+
+        $value = $GLOBALS['pushpull_test_term_meta'][$termId][$key] ?? ($single ? '' : []);
+
+        return $single ? $value : [$value];
+    }
+}
+
+if (! function_exists('add_term_meta')) {
+    function add_term_meta(int $termId, string $key, mixed $value, bool $unique = false): bool
+    {
+        $existing = $GLOBALS['pushpull_test_term_meta'][$termId][$key] ?? null;
+
+        if ($existing === null) {
+            $GLOBALS['pushpull_test_term_meta'][$termId][$key] = [$value];
+            return true;
+        }
+
+        if (! is_array($existing) || ! array_is_list($existing)) {
+            $existing = [$existing];
+        }
+
+        if ($unique && in_array($value, $existing, true)) {
+            return false;
+        }
+
+        $existing[] = $value;
+        $GLOBALS['pushpull_test_term_meta'][$termId][$key] = $existing;
+
+        return true;
+    }
+}
+
+if (! function_exists('delete_term_meta')) {
+    function delete_term_meta(int $termId, string $key): bool
+    {
+        unset($GLOBALS['pushpull_test_term_meta'][$termId][$key]);
 
         return true;
     }

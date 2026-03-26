@@ -4,21 +4,21 @@ declare(strict_types=1);
 
 namespace PushPull\Domain\Sync;
 
-use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
-use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesSnapshot;
+use PushPull\Content\ManagedContentSnapshot;
+use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Domain\Repository\CommitRequest;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Domain\Repository\TreeEntry;
 
-final class GenerateBlocksRepositoryCommitter
+final class ManagedSetRepositoryCommitter
 {
     public function __construct(
         private readonly LocalRepositoryInterface $localRepository,
-        private readonly GenerateBlocksGlobalStylesAdapter $adapter
+        private readonly ManifestManagedContentAdapterInterface $adapter
     ) {
     }
 
-    public function commitSnapshot(GenerateBlocksGlobalStylesSnapshot $snapshot, CommitManagedSetRequest $request): CommitManagedSetResult
+    public function commitSnapshot(ManagedContentSnapshot $snapshot, CommitManagedSetRequest $request): CommitManagedSetResult
     {
         $initializedRepository = false;
 

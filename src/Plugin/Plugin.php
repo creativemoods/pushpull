@@ -10,8 +10,11 @@ if (! defined('ABSPATH')) {
 
 use PushPull\Admin\ManagedContentPage;
 use PushPull\Admin\OperationsPage;
+use PushPull\Content\GenerateBlocks\GenerateBlocksConditionsAdapter;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
+use PushPull\Content\ManagedSetRegistry;
 use PushPull\Admin\SettingsPage;
+use PushPull\Content\GenerateBlocks\WordPressBlockPatternsAdapter;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Diff\ManagedSetDiffService;
 use PushPull\Domain\Diff\RepositoryStateReader;
@@ -24,9 +27,9 @@ use PushPull\Persistence\ContentMap\ContentMapRepository;
 use PushPull\Persistence\LocalRepositoryResetService;
 use PushPull\Persistence\Operations\OperationLogRepository;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
-use PushPull\Domain\Sync\GenerateBlocksRepositoryCommitter;
 use PushPull\Domain\Sync\RemoteRepositoryInitializer;
 use PushPull\Domain\Sync\LocalSyncService;
+use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Persistence\Migrations\SchemaMigrator;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\GitProviderFactory;
@@ -55,17 +58,34 @@ final class Plugin
         $remoteRepositoryInitializer = new RemoteRepositoryInitializer($providerFactory, $localRepository);
         $operationLogRepository = new OperationLogRepository($wpdb);
         $operationExecutor = new OperationExecutor($operationLogRepository, new OperationLockService());
-        $generateBlocksAdapter = new GenerateBlocksGlobalStylesAdapter();
+        $generateBlocksStylesAdapter = new GenerateBlocksGlobalStylesAdapter();
+        $generateBlocksConditionsAdapter = new GenerateBlocksConditionsAdapter();
+        $wordPressBlockPatternsAdapter = new WordPressBlockPatternsAdapter();
         $workingStateRepository = new WorkingStateRepository($wpdb);
         $contentMapRepository = new ContentMapRepository($wpdb);
-        $diffService = new ManagedSetDiffService(
-            $generateBlocksAdapter,
-            new RepositoryStateReader($localRepository),
-            $localRepository
-        );
+        $stateReader = new RepositoryStateReader($localRepository);
+        $managedSetRegistry = new ManagedSetRegistry([
+            $generateBlocksStylesAdapter,
+            $generateBlocksConditionsAdapter,
+            $wordPressBlockPatternsAdapter,
+        ]);
+        $managedSetCommitters = [];
+        $managedSetDiffServices = [];
+        $managedSetApplyServices = [];
+
+        foreach ($managedSetRegistry->all() as $managedSetKey => $adapter) {
+            $managedSetCommitters[$managedSetKey] = new ManagedSetRepositoryCommitter($localRepository, $adapter);
+            $managedSetDiffServices[$managedSetKey] = new ManagedSetDiffService($adapter, $stateReader, $localRepository);
+            $managedSetApplyServices[$managedSetKey] = new ManagedSetApplyService(
+                $adapter,
+                $stateReader,
+                $contentMapRepository,
+                $workingStateRepository
+            );
+        }
         $mergeService = new ManagedSetMergeService(
             $localRepository,
-            new RepositoryStateReader($localRepository),
+            $stateReader,
             new JsonThreeWayMerger(),
             $workingStateRepository
         );
@@ -73,20 +93,14 @@ final class Plugin
             $localRepository,
             $workingStateRepository
         );
-        $applyService = new ManagedSetApplyService(
-            $generateBlocksAdapter,
-            new RepositoryStateReader($localRepository),
-            $contentMapRepository,
-            $workingStateRepository
-        );
         $pushService = new ManagedSetPushService($localRepository, $providerFactory);
         $remoteBranchResetService = new RemoteBranchResetService($localRepository, $providerFactory);
         $syncService = new LocalSyncService(
-            $generateBlocksAdapter,
-            new GenerateBlocksRepositoryCommitter($localRepository, $generateBlocksAdapter),
-            $diffService,
+            $managedSetRegistry,
+            $managedSetCommitters,
+            $managedSetDiffServices,
+            $managedSetApplyServices,
             $mergeService,
-            $applyService,
             $pushService,
             $remoteBranchResetService,
             $localRepository,
@@ -99,7 +113,7 @@ final class Plugin
         $managedContentPage = new ManagedContentPage(
             $settingsRepository,
             $localRepository,
-            $generateBlocksAdapter,
+            $managedSetRegistry,
             $syncService,
             $workingStateRepository,
             $conflictResolutionService,
@@ -108,19 +122,20 @@ final class Plugin
 
         add_action('admin_init', [$settingsRegistrar, 'register']);
         add_action('admin_menu', [$settingsPage, 'register']);
-        add_action('admin_menu', [$operationsPage, 'register']);
         add_action('admin_menu', [$managedContentPage, 'register']);
+        add_action('admin_menu', [$operationsPage, 'register']);
         add_action('admin_post_pushpull_test_connection', [$settingsPage, 'handleTestConnection']);
         add_action('admin_post_pushpull_reset_local_repository', [$settingsPage, 'handleResetLocalRepository']);
         add_action('admin_post_pushpull_initialize_remote_repository', [$settingsPage, 'handleInitializeRemoteRepository']);
-        add_action('admin_post_pushpull_commit_generateblocks', [$managedContentPage, 'handleCommit']);
-        add_action('admin_post_pushpull_fetch_generateblocks', [$managedContentPage, 'handleFetch']);
-        add_action('admin_post_pushpull_merge_generateblocks', [$managedContentPage, 'handleMerge']);
-        add_action('admin_post_pushpull_apply_generateblocks', [$managedContentPage, 'handleApply']);
-        add_action('admin_post_pushpull_push_generateblocks', [$managedContentPage, 'handlePush']);
-        add_action('admin_post_pushpull_reset_remote_generateblocks', [$managedContentPage, 'handleResetRemote']);
-        add_action('admin_post_pushpull_resolve_conflict_generateblocks', [$managedContentPage, 'handleResolveConflict']);
-        add_action('admin_post_pushpull_finalize_merge_generateblocks', [$managedContentPage, 'handleFinalizeMerge']);
+        add_action('admin_post_pushpull_commit_managed_set', [$managedContentPage, 'handleCommit']);
+        add_action('admin_post_pushpull_pull_managed_set', [$managedContentPage, 'handlePull']);
+        add_action('admin_post_pushpull_fetch_managed_set', [$managedContentPage, 'handleFetch']);
+        add_action('admin_post_pushpull_merge_managed_set', [$managedContentPage, 'handleMerge']);
+        add_action('admin_post_pushpull_apply_managed_set', [$managedContentPage, 'handleApply']);
+        add_action('admin_post_pushpull_push_managed_set', [$managedContentPage, 'handlePush']);
+        add_action('admin_post_pushpull_reset_remote_managed_set', [$managedContentPage, 'handleResetRemote']);
+        add_action('admin_post_pushpull_resolve_conflict_managed_set', [$managedContentPage, 'handleResolveConflict']);
+        add_action('admin_post_pushpull_finalize_merge_managed_set', [$managedContentPage, 'handleFinalizeMerge']);
         add_action('admin_enqueue_scripts', [$settingsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$operationsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$managedContentPage, 'enqueueAssets']);

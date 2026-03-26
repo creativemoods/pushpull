@@ -10,7 +10,7 @@ use PushPull\Support\Capabilities;
 
 final class OperationsPage
 {
-    public const MENU_SLUG = 'pushpull-operations';
+    public const MENU_SLUG = 'pushpull-audit-log';
 
     public function __construct(private readonly OperationLogRepository $operationLogRepository)
     {
@@ -20,8 +20,8 @@ final class OperationsPage
     {
         add_submenu_page(
             SettingsPage::MENU_SLUG,
-            __('Operations', 'pushpull'),
-            __('Operations', 'pushpull'),
+            __('Audit Log', 'pushpull'),
+            __('Audit Log', 'pushpull'),
             Capabilities::MANAGE_PLUGIN,
             self::MENU_SLUG,
             [$this, 'render']
@@ -51,12 +51,13 @@ final class OperationsPage
         $records = $this->operationLogRepository->recent(100);
 
         echo '<div class="wrap pushpull-admin">';
-        echo '<h1>' . esc_html__('PushPull Operations', 'pushpull') . '</h1>';
-        echo '<p class="pushpull-intro">' . esc_html__('Recent PushPull sync and repository operations are listed here with their inputs, normalized outcomes, and failure details.', 'pushpull') . '</p>';
+        echo '<h1>' . esc_html__('PushPull Audit Log', 'pushpull') . '</h1>';
+        echo '<p class="pushpull-intro">' . esc_html__('This screen shows the recorded history of recent PushPull sync and repository actions, including inputs, normalized outcomes, and failure details.', 'pushpull') . '</p>';
+        $this->renderPrimaryNavigation();
 
         if ($records === []) {
             echo '<div class="pushpull-panel">';
-            echo '<p>' . esc_html__('No operations have been recorded yet.', 'pushpull') . '</p>';
+            echo '<p>' . esc_html__('No audit log entries have been recorded yet.', 'pushpull') . '</p>';
             echo '</div>';
             echo '</div>';
 
@@ -109,6 +110,27 @@ final class OperationsPage
         echo '</div>';
         echo '</div>';
         $this->renderToggleScript();
+    }
+
+    private function renderPrimaryNavigation(): void
+    {
+        echo '<nav class="nav-tab-wrapper wp-clearfix pushpull-page-nav">';
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . SettingsPage::MENU_SLUG)),
+            esc_html__('Settings', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . ManagedContentPage::MENU_SLUG)),
+            esc_html__('Managed Content', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab nav-tab-active">%s</a>',
+            esc_url(admin_url('admin.php?page=' . self::MENU_SLUG)),
+            esc_html__('Audit Log', 'pushpull')
+        );
+        echo '</nav>';
     }
 
     private function renderDetails(OperationRecord $record): void

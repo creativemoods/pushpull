@@ -39,4 +39,21 @@ final class RepositoryStateReaderTest extends TestCase
             $state->files['generateblocks/global-styles/manifest.json']->content
         );
     }
+
+    public function testReadCommitIgnoresBootstrapMarkerFiles(): void
+    {
+        $repository = new DatabaseLocalRepository(new \wpdb());
+        $repository->importRemoteBlob(new RemoteBlob('blob-init', "Initialized by PushPull.\n"));
+        $repository->importRemoteBlob(new RemoteBlob('blob-style', "{\n  \"type\": \"generateblocks_global_style\"\n}\n"));
+        $repository->importRemoteTree(new RemoteTree('tree-root', [
+            ['path' => '.pushpull-initialized', 'type' => 'blob', 'hash' => 'blob-init'],
+            ['path' => 'generateblocks/global-styles/gbp-section.json', 'type' => 'blob', 'hash' => 'blob-style'],
+        ]));
+        $repository->importRemoteCommit(new RemoteCommit('commit-1', 'tree-root', [], 'Remote commit'));
+
+        $state = (new RepositoryStateReader($repository))->readCommit('local', 'commit-1');
+
+        self::assertArrayNotHasKey('.pushpull-initialized', $state->files);
+        self::assertArrayHasKey('generateblocks/global-styles/gbp-section.json', $state->files);
+    }
 }

@@ -11,7 +11,7 @@ use PushPull\Domain\Merge\ManagedSetMergeService;
 use PushPull\Domain\Merge\JsonThreeWayMerger;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
-use PushPull\Domain\Sync\GenerateBlocksRepositoryCommitter;
+use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\RemoteBlob;
 use PushPull\Provider\RemoteCommit;
@@ -22,7 +22,7 @@ final class ManagedSetMergeServiceTest extends TestCase
     private \wpdb $wpdb;
     private DatabaseLocalRepository $repository;
     private GenerateBlocksGlobalStylesAdapter $adapter;
-    private GenerateBlocksRepositoryCommitter $committer;
+    private ManagedSetRepositoryCommitter $committer;
     private WorkingStateRepository $workingStateRepository;
     private ManagedSetMergeService $mergeService;
 
@@ -31,7 +31,7 @@ final class ManagedSetMergeServiceTest extends TestCase
         $this->wpdb = new \wpdb();
         $this->repository = new DatabaseLocalRepository($this->wpdb);
         $this->adapter = new GenerateBlocksGlobalStylesAdapter();
-        $this->committer = new GenerateBlocksRepositoryCommitter($this->repository, $this->adapter);
+        $this->committer = new ManagedSetRepositoryCommitter($this->repository, $this->adapter);
         $this->workingStateRepository = new WorkingStateRepository($this->wpdb);
         $this->mergeService = new ManagedSetMergeService(
             $this->repository,

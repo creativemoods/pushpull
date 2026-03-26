@@ -8,21 +8,21 @@ use PHPUnit\Framework\TestCase;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
-use PushPull\Domain\Sync\GenerateBlocksRepositoryCommitter;
+use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 
 final class GenerateBlocksRepositoryCommitterTest extends TestCase
 {
     private \wpdb $wpdb;
     private DatabaseLocalRepository $repository;
     private GenerateBlocksGlobalStylesAdapter $adapter;
-    private GenerateBlocksRepositoryCommitter $committer;
+    private ManagedSetRepositoryCommitter $committer;
 
     protected function setUp(): void
     {
         $this->wpdb = new \wpdb();
         $this->repository = new DatabaseLocalRepository($this->wpdb);
         $this->adapter = new GenerateBlocksGlobalStylesAdapter();
-        $this->committer = new GenerateBlocksRepositoryCommitter($this->repository, $this->adapter);
+        $this->committer = new ManagedSetRepositoryCommitter($this->repository, $this->adapter);
     }
 
     public function testCommitSnapshotCreatesTreeCommitAndRefs(): void

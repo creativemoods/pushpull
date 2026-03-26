@@ -6,7 +6,8 @@ namespace PushPull\Domain\Sync;
 
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
-use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
+use PushPull\Content\ManagedSetRegistry;
+use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Domain\Apply\ApplyManagedSetResult;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Diff\ManagedSetDiffResult;
@@ -25,37 +26,44 @@ use RuntimeException;
 
 final class LocalSyncService implements SyncServiceInterface
 {
+    /** @var array<string, ManagedSetRepositoryCommitter> */
+    private array $committersByManagedSetKey;
+    /** @var array<string, ManagedSetDiffService> */
+    private array $diffServicesByManagedSetKey;
+    /** @var array<string, ManagedSetApplyService> */
+    private array $applyServicesByManagedSetKey;
+
     public function __construct(
-        private readonly GenerateBlocksGlobalStylesAdapter $generateBlocksAdapter,
-        private readonly GenerateBlocksRepositoryCommitter $generateBlocksCommitter,
-        private readonly ManagedSetDiffService $generateBlocksDiffService,
+        private readonly ManagedSetRegistry $managedSetRegistry,
+        array $managedSetCommitters,
+        array $managedSetDiffServices,
+        array $managedSetApplyServices,
         private readonly ManagedSetMergeService $generateBlocksMergeService,
-        private readonly ManagedSetApplyService $generateBlocksApplyService,
         private readonly ManagedSetPushService $generateBlocksPushService,
         private readonly RemoteBranchResetService $remoteBranchResetService,
         private readonly LocalRepositoryInterface $localRepository,
         private readonly SettingsRepository $settingsRepository,
         private readonly GitProviderFactoryInterface $providerFactory
     ) {
+        $this->committersByManagedSetKey = $managedSetCommitters;
+        $this->diffServicesByManagedSetKey = $managedSetDiffServices;
+        $this->applyServicesByManagedSetKey = $managedSetApplyServices;
     }
 
     public function commitManagedSet(string $managedSetKey, CommitManagedSetRequest $request): CommitManagedSetResult
     {
-        if ($managedSetKey !== $this->generateBlocksAdapter->getManagedSetKey()) {
-            throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
-        }
+        $adapter = $this->requireAdapter($managedSetKey);
+        $committer = $this->requireCommitter($managedSetKey);
 
-        return $this->generateBlocksCommitter->commitSnapshot(
-            $this->generateBlocksAdapter->exportSnapshot(),
+        return $committer->commitSnapshot(
+            $adapter->exportSnapshot(),
             $request
         );
     }
 
     public function fetch(string $managedSetKey): FetchManagedSetResult
     {
-        if ($managedSetKey !== $this->generateBlocksAdapter->getManagedSetKey()) {
-            throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
-        }
+        $this->requireAdapter($managedSetKey);
 
         $settings = $this->settingsRepository->get();
         [$provider, $remoteConfig] = $this->resolveValidatedProvider($settings);
@@ -64,20 +72,32 @@ final class LocalSyncService implements SyncServiceInterface
             ->fetchManagedSet($managedSetKey);
     }
 
+    public function pull(string $managedSetKey): PullManagedSetResult
+    {
+        $this->requireAdapter($managedSetKey);
+
+        $fetchResult = $this->fetch($managedSetKey);
+        $mergeResult = $this->merge($managedSetKey);
+        $settings = $this->settingsRepository->get();
+
+        return new PullManagedSetResult(
+            $managedSetKey,
+            $settings->branch,
+            $fetchResult,
+            $mergeResult
+        );
+    }
+
     public function diff(string $managedSetKey): ManagedSetDiffResult
     {
-        if ($managedSetKey !== $this->generateBlocksAdapter->getManagedSetKey()) {
-            throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
-        }
+        $diffService = $this->requireDiffService($managedSetKey);
 
-        return $this->generateBlocksDiffService->diff($this->settingsRepository->get());
+        return $diffService->diff($this->settingsRepository->get());
     }
 
     public function merge(string $managedSetKey): MergeManagedSetResult
     {
-        if ($managedSetKey !== $this->generateBlocksAdapter->getManagedSetKey()) {
-            throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
-        }
+        $this->requireAdapter($managedSetKey);
 
         $settings = $this->settingsRepository->get();
 
@@ -86,29 +106,59 @@ final class LocalSyncService implements SyncServiceInterface
 
     public function apply(string $managedSetKey): ApplyManagedSetResult
     {
-        if ($managedSetKey !== $this->generateBlocksAdapter->getManagedSetKey()) {
-            throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
-        }
+        $applyService = $this->requireApplyService($managedSetKey);
 
-        return $this->generateBlocksApplyService->apply($this->settingsRepository->get());
+        return $applyService->apply($this->settingsRepository->get());
     }
 
     public function push(string $managedSetKey): PushManagedSetResult
     {
-        if ($managedSetKey !== $this->generateBlocksAdapter->getManagedSetKey()) {
-            throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
-        }
+        $this->requireAdapter($managedSetKey);
 
         return $this->generateBlocksPushService->push($managedSetKey, $this->settingsRepository->get());
     }
 
     public function resetRemote(string $managedSetKey): ResetRemoteBranchResult
     {
-        if ($managedSetKey !== $this->generateBlocksAdapter->getManagedSetKey()) {
+        $this->requireAdapter($managedSetKey);
+
+        return $this->remoteBranchResetService->reset($managedSetKey, $this->settingsRepository->get());
+    }
+
+    private function requireAdapter(string $managedSetKey): ManifestManagedContentAdapterInterface
+    {
+        if (! $this->managedSetRegistry->has($managedSetKey)) {
             throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
         }
 
-        return $this->remoteBranchResetService->reset($managedSetKey, $this->settingsRepository->get());
+        return $this->managedSetRegistry->get($managedSetKey);
+    }
+
+    private function requireCommitter(string $managedSetKey): ManagedSetRepositoryCommitter
+    {
+        if (! isset($this->committersByManagedSetKey[$managedSetKey])) {
+            throw new RuntimeException(sprintf('Managed set "%s" cannot be committed.', $managedSetKey));
+        }
+
+        return $this->committersByManagedSetKey[$managedSetKey];
+    }
+
+    private function requireDiffService(string $managedSetKey): ManagedSetDiffService
+    {
+        if (! isset($this->diffServicesByManagedSetKey[$managedSetKey])) {
+            throw new RuntimeException(sprintf('Managed set "%s" cannot be diffed.', $managedSetKey));
+        }
+
+        return $this->diffServicesByManagedSetKey[$managedSetKey];
+    }
+
+    private function requireApplyService(string $managedSetKey): ManagedSetApplyService
+    {
+        if (! isset($this->applyServicesByManagedSetKey[$managedSetKey])) {
+            throw new RuntimeException(sprintf('Managed set "%s" cannot be applied.', $managedSetKey));
+        }
+
+        return $this->applyServicesByManagedSetKey[$managedSetKey];
     }
 
     /**

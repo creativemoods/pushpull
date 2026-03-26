@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PushPull\Admin;
 
+use PushPull\Content\ManifestManagedContentAdapterInterface;
+use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\Exception\ManagedContentExportException;
-use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
-use PushPull\Content\ManagedContentAdapterInterface;
 use PushPull\Domain\Diff\CanonicalDiffResult;
 use PushPull\Domain\Diff\ManagedSetDiffResult;
 use PushPull\Domain\Merge\ManagedSetConflictResolutionService;
@@ -24,19 +24,20 @@ use RuntimeException;
 final class ManagedContentPage
 {
     public const MENU_SLUG = 'pushpull-managed-content';
-    private const COMMIT_ACTION = 'pushpull_commit_generateblocks';
-    private const FETCH_ACTION = 'pushpull_fetch_generateblocks';
-    private const MERGE_ACTION = 'pushpull_merge_generateblocks';
-    private const APPLY_ACTION = 'pushpull_apply_generateblocks';
-    private const PUSH_ACTION = 'pushpull_push_generateblocks';
-    private const RESET_REMOTE_ACTION = 'pushpull_reset_remote_generateblocks';
-    private const RESOLVE_CONFLICT_ACTION = 'pushpull_resolve_conflict_generateblocks';
-    private const FINALIZE_MERGE_ACTION = 'pushpull_finalize_merge_generateblocks';
+    private const COMMIT_ACTION = 'pushpull_commit_managed_set';
+    private const PULL_ACTION = 'pushpull_pull_managed_set';
+    private const FETCH_ACTION = 'pushpull_fetch_managed_set';
+    private const MERGE_ACTION = 'pushpull_merge_managed_set';
+    private const APPLY_ACTION = 'pushpull_apply_managed_set';
+    private const PUSH_ACTION = 'pushpull_push_managed_set';
+    private const RESET_REMOTE_ACTION = 'pushpull_reset_remote_managed_set';
+    private const RESOLVE_CONFLICT_ACTION = 'pushpull_resolve_conflict_managed_set';
+    private const FINALIZE_MERGE_ACTION = 'pushpull_finalize_merge_managed_set';
 
     public function __construct(
         private readonly SettingsRepository $settingsRepository,
         private readonly LocalRepositoryInterface $localRepository,
-        private readonly ManagedContentAdapterInterface $managedContentAdapter,
+        private readonly ManagedSetRegistry $managedSetRegistry,
         private readonly SyncServiceInterface $syncService,
         private readonly WorkingStateRepository $workingStateRepository,
         private readonly ManagedSetConflictResolutionService $conflictResolutionService,
@@ -77,16 +78,13 @@ final class ManagedContentPage
         }
 
         $settings = $this->settingsRepository->get();
-        $isInitialized = $this->localRepository->hasBeenInitialized($settings->branch);
-        $headCommit = $this->localRepository->getHeadCommit($settings->branch);
-        $exportPreview = $this->buildExportPreview();
         $commitNotice = $this->commitNotice();
-        $diffResult = $this->buildDiffResult();
-        $workingState = $this->workingStateRepository->get($this->managedContentAdapter->getManagedSetKey(), $settings->branch);
 
         echo '<div class="wrap pushpull-admin">';
         echo '<h1>' . esc_html__('Managed Content', 'pushpull') . '</h1>';
-        echo '<p class="pushpull-intro">' . esc_html__('Review managed content state, compare live, local, and remote snapshots, and run the GenerateBlocks global styles fetch, merge, apply, commit, and push workflow.', 'pushpull') . '</p>';
+        echo '<p class="pushpull-intro">' . esc_html__('Review managed content state across all enabled domains, then drill into a specific managed set for fetch, merge, apply, commit, and push actions.', 'pushpull') . '</p>';
+        $this->renderPrimaryNavigation();
+        $this->renderManagedSetTabs($this->requestManagedSetKey());
         if ($commitNotice !== null) {
             printf(
                 '<div class="notice notice-%1$s"><p>%2$s</p></div>',
@@ -94,6 +92,45 @@ final class ManagedContentPage
                 esc_html($commitNotice['message'])
             );
         }
+        if ($this->isOverviewMode()) {
+            $this->renderOverview($settings);
+        } else {
+            $this->renderManagedSetDetail($settings, $this->currentAdapter());
+        }
+        echo '</div>';
+    }
+
+    private function renderPrimaryNavigation(): void
+    {
+        echo '<nav class="nav-tab-wrapper wp-clearfix pushpull-page-nav">';
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . SettingsPage::MENU_SLUG)),
+            esc_html__('Settings', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab nav-tab-active">%s</a>',
+            esc_url(admin_url('admin.php?page=' . self::MENU_SLUG)),
+            esc_html__('Managed Content', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . OperationsPage::MENU_SLUG)),
+            esc_html__('Audit Log', 'pushpull')
+        );
+        echo '</nav>';
+    }
+
+    private function renderManagedSetDetail(\PushPull\Settings\PushPullSettings $settings, ManifestManagedContentAdapterInterface $managedContentAdapter): void
+    {
+        $managedSetKey = $managedContentAdapter->getManagedSetKey();
+        $managedSetEnabled = $this->isManagedSetEnabled($settings, $managedSetKey);
+        $isInitialized = $this->localRepository->hasBeenInitialized($settings->branch);
+        $headCommit = $this->localRepository->getHeadCommit($settings->branch);
+        $exportPreview = $this->buildExportPreview($managedContentAdapter);
+        $diffResult = $this->buildDiffResult($managedSetKey);
+        $workingState = $this->workingStateRepository->get($managedSetKey, $settings->branch);
+
         echo '<div class="pushpull-status-grid">';
         $this->statusCard(__('Current repo status', 'pushpull'), $isInitialized ? __('Initialized', 'pushpull') : __('Not initialized', 'pushpull'));
         $this->statusCard(__('Ahead / behind', 'pushpull'), $diffResult !== null ? $diffResult->repositoryRelationship->label() : __('Unavailable', 'pushpull'));
@@ -104,15 +141,15 @@ final class ManagedContentPage
         echo '</div>';
 
         echo '<div class="pushpull-panel">';
-        echo '<h2>' . esc_html__('Workflow Actions', 'pushpull') . '</h2>';
+        printf('<h2>%s</h2>', esc_html($managedContentAdapter->getManagedSetLabel()));
         echo '<div class="pushpull-button-grid">';
-        $this->renderCommitButton($settings->manageGenerateBlocksGlobalStyles && $this->managedContentAdapter->isAvailable());
-        $this->renderFetchButton($settings->manageGenerateBlocksGlobalStyles);
-        $this->renderDisabledActionButton(__('Pull', 'pushpull'));
-        $this->renderPushButton($settings->manageGenerateBlocksGlobalStyles);
-        $this->renderMergeButton($settings->manageGenerateBlocksGlobalStyles);
-        $this->renderApplyButton($settings->manageGenerateBlocksGlobalStyles);
-        $this->renderResetRemoteButton($settings->manageGenerateBlocksGlobalStyles);
+        $this->renderCommitButton($managedContentAdapter, $managedSetEnabled && $managedContentAdapter->isAvailable());
+        $this->renderPullButton($managedContentAdapter, $managedSetEnabled);
+        $this->renderFetchButton($managedContentAdapter, $managedSetEnabled);
+        $this->renderPushButton($managedContentAdapter, $managedSetEnabled);
+        $this->renderMergeButton($managedContentAdapter, $managedSetEnabled);
+        $this->renderApplyButton($managedContentAdapter, $managedSetEnabled);
+        $this->renderResetRemoteButton($managedContentAdapter, $managedSetEnabled);
         $this->renderResolveConflictsButton($workingState);
         printf(
             '<a class="button button-secondary" href="%s">%s</a>',
@@ -123,14 +160,110 @@ final class ManagedContentPage
         echo '</div>';
 
         if ($diffResult !== null) {
-            echo '<div id="pushpull-diff" class="pushpull-panel">';
-            echo '<h2>' . esc_html__('Diff Summary', 'pushpull') . '</h2>';
-            printf('<p>%s</p>', esc_html(sprintf(
-                'Live vs local: %d changed file(s). Local vs remote: %d changed file(s).',
-                $diffResult->liveToLocal->changedCount(),
-                $diffResult->localToRemote->changedCount()
-            )));
-            printf('<p class="description">%s</p>', esc_html($exportPreview['summary']));
+            $this->renderManagedSetDiffPanel($managedContentAdapter, $diffResult, $exportPreview['summary']);
+        }
+
+        if ($workingState !== null && ($workingState->hasConflicts() || $workingState->mergeTargetHash !== null)) {
+            $this->renderConflictPanel($managedContentAdapter, $workingState);
+        }
+    }
+
+    private function renderOverview(\PushPull\Settings\PushPullSettings $settings): void
+    {
+        $overviewRows = [];
+        $changedSetCount = 0;
+        $conflictedSetCount = 0;
+        $enabledSetCount = 0;
+
+        foreach ($this->managedSetRegistry->all() as $managedSetKey => $adapter) {
+            $enabled = $this->isManagedSetEnabled($settings, $managedSetKey);
+            if ($enabled) {
+                $enabledSetCount++;
+            }
+
+            $diffResult = $this->buildDiffResult($managedSetKey);
+            $workingState = $this->workingStateRepository->get($managedSetKey, $settings->branch);
+
+            if ($diffResult !== null && ($diffResult->liveToLocal->hasChanges() || $diffResult->localToRemote->hasChanges())) {
+                $changedSetCount++;
+            }
+
+            if ($workingState !== null && $workingState->hasConflicts()) {
+                $conflictedSetCount++;
+            }
+
+            $overviewRows[] = [
+                'adapter' => $adapter,
+                'enabled' => $enabled,
+                'diffResult' => $diffResult,
+                'workingState' => $workingState,
+            ];
+        }
+
+        echo '<div class="pushpull-status-grid">';
+        $this->statusCard(__('Current repo status', 'pushpull'), $this->localRepository->hasBeenInitialized($settings->branch) ? __('Initialized', 'pushpull') : __('Not initialized', 'pushpull'));
+        $this->statusCard(__('Enabled managed sets', 'pushpull'), (string) $enabledSetCount);
+        $this->statusCard(__('Sets with changes', 'pushpull'), (string) $changedSetCount);
+        $this->statusCard(__('Sets with conflicts', 'pushpull'), (string) $conflictedSetCount);
+        $this->statusCard(__('Last local commit', 'pushpull'), $this->localRepository->getHeadCommit($settings->branch)?->hash ?? __('None recorded', 'pushpull'));
+        $this->statusCard(__('Branch', 'pushpull'), $settings->branch);
+        echo '</div>';
+
+        echo '<div class="pushpull-panel">';
+        echo '<h2>' . esc_html__('All Managed Sets', 'pushpull') . '</h2>';
+        echo '<p class="description">' . esc_html__('Use this overview to review all enabled domains quickly, then open a focused domain view to act on one managed set.', 'pushpull') . '</p>';
+
+        foreach ($overviewRows as $row) {
+            /** @var ManifestManagedContentAdapterInterface $adapter */
+            $adapter = $row['adapter'];
+            $managedSetKey = $adapter->getManagedSetKey();
+            /** @var ManagedSetDiffResult|null $diffResult */
+            $diffResult = $row['diffResult'];
+            /** @var \PushPull\Persistence\WorkingState\WorkingStateRecord|null $workingState */
+            $workingState = $row['workingState'];
+
+            echo '<details class="pushpull-tree-browser" open="open">';
+            printf(
+                '<summary>%s <span class="pushpull-diff-badge pushpull-diff-badge-%s">%s</span></summary>',
+                esc_html($adapter->getManagedSetLabel()),
+                esc_attr($this->overviewBadgeClass($row['enabled'], $diffResult, $workingState)),
+                esc_html($this->overviewBadgeText($row['enabled'], $adapter, $diffResult, $workingState))
+            );
+
+            printf(
+                '<p><a class="button button-secondary" href="%s">%s</a></p>',
+                esc_url(add_query_arg(['page' => self::MENU_SLUG, 'managed_set' => $managedSetKey], admin_url('admin.php'))),
+                esc_html__('Open detailed view', 'pushpull')
+            );
+
+            if (! $row['enabled']) {
+                echo '<p class="description">' . esc_html__('This managed set is currently disabled in settings.', 'pushpull') . '</p>';
+                echo '</details>';
+                continue;
+            }
+
+            if (! $adapter->isAvailable()) {
+                echo '<p class="description">' . esc_html__('This managed set is enabled, but its WordPress content type is not available on this site.', 'pushpull') . '</p>';
+                echo '</details>';
+                continue;
+            }
+
+            if ($diffResult === null) {
+                echo '<p class="description">' . esc_html__('Diff data is currently unavailable for this managed set.', 'pushpull') . '</p>';
+                echo '</details>';
+                continue;
+            }
+
+            printf(
+                '<p>%s</p>',
+                esc_html(sprintf(
+                    'Live vs local: %d changed file(s). Local vs remote: %d changed file(s). Relationship: %s.',
+                    $diffResult->liveToLocal->changedCount(),
+                    $diffResult->localToRemote->changedCount(),
+                    $diffResult->repositoryRelationship->label()
+                ))
+            );
+
             $this->renderDiffList(
                 __('Uncommitted changes (live vs local)', 'pushpull'),
                 $diffResult->liveToLocal,
@@ -163,12 +296,62 @@ final class ManagedContentPage
                 $diffResult->remote->files,
                 $diffResult->localToRemote
             );
-            echo '</div>';
+
+            if ($workingState !== null && $workingState->hasConflicts()) {
+                printf(
+                    '<p class="description">%s</p>',
+                    esc_html(sprintf('%d conflict(s) are pending for this managed set.', count($workingState->conflicts)))
+                );
+            }
+
+            echo '</details>';
         }
 
-        if ($workingState !== null && ($workingState->hasConflicts() || $workingState->mergeTargetHash !== null)) {
-            $this->renderConflictPanel($workingState);
-        }
+        echo '</div>';
+    }
+
+    private function renderManagedSetDiffPanel(ManifestManagedContentAdapterInterface $managedContentAdapter, ManagedSetDiffResult $diffResult, string $summary): void
+    {
+        echo '<div id="pushpull-diff" class="pushpull-panel">';
+        printf('<h2>%s</h2>', esc_html(sprintf('Diff Summary: %s', $managedContentAdapter->getManagedSetLabel())));
+        printf('<p>%s</p>', esc_html(sprintf(
+            'Live vs local: %d changed file(s). Local vs remote: %d changed file(s).',
+            $diffResult->liveToLocal->changedCount(),
+            $diffResult->localToRemote->changedCount()
+        )));
+        printf('<p class="description">%s</p>', esc_html($summary));
+        $this->renderDiffList(
+            __('Uncommitted changes (live vs local)', 'pushpull'),
+            $diffResult->liveToLocal,
+            'live',
+            'local',
+            $diffResult->live->files,
+            $diffResult->local->files
+        );
+        $this->renderDiffList(
+            __('Local vs remote tracking', 'pushpull'),
+            $diffResult->localToRemote,
+            'local',
+            'remote tracking',
+            $diffResult->local->files,
+            $diffResult->remote->files
+        );
+        $this->renderStateTreeComparison(
+            __('Browse live and local trees', 'pushpull'),
+            'live',
+            'local',
+            $diffResult->live->files,
+            $diffResult->local->files,
+            $diffResult->liveToLocal
+        );
+        $this->renderStateTreeComparison(
+            __('Browse local and remote trees', 'pushpull'),
+            'local',
+            'remote tracking',
+            $diffResult->local->files,
+            $diffResult->remote->files,
+            $diffResult->localToRemote
+        );
         echo '</div>';
     }
 
@@ -183,17 +366,17 @@ final class ManagedContentPage
     /**
      * @return array{summary: string, paths: string[]}
      */
-    private function buildExportPreview(): array
+    private function buildExportPreview(ManifestManagedContentAdapterInterface $managedContentAdapter): array
     {
-        if (! $this->managedContentAdapter->isAvailable()) {
+        if (! $managedContentAdapter->isAvailable()) {
             return [
-                'summary' => 'GenerateBlocks global styles post type is not available on this site.',
+                'summary' => sprintf('%s is not available on this site.', $managedContentAdapter->getManagedSetLabel()),
                 'paths' => [],
             ];
         }
 
         try {
-            $items = $this->managedContentAdapter->exportAll();
+            $items = $managedContentAdapter->exportAll();
         } catch (ManagedContentExportException $exception) {
             return [
                 'summary' => $exception->getMessage(),
@@ -204,27 +387,25 @@ final class ManagedContentPage
         $paths = [];
 
         foreach (array_slice($items, 0, 5) as $item) {
-            $paths[] = $this->managedContentAdapter->getRepositoryPath($item);
+            $paths[] = $managedContentAdapter->getRepositoryPath($item);
         }
 
-        if ($this->managedContentAdapter instanceof GenerateBlocksGlobalStylesAdapter) {
-            $paths[] = $this->managedContentAdapter->getManifestPath();
-        }
+        $paths[] = $managedContentAdapter->getManifestPath();
 
         return [
             'summary' => sprintf(
                 'Adapter export preview found %d item(s) for %s.',
                 count($items),
-                $this->managedContentAdapter->getManagedSetLabel()
+                $managedContentAdapter->getManagedSetLabel()
             ),
             'paths' => $paths,
         ];
     }
 
-    private function buildDiffResult(): ?ManagedSetDiffResult
+    private function buildDiffResult(string $managedSetKey): ?ManagedSetDiffResult
     {
         try {
-            return $this->syncService->diff($this->managedContentAdapter->getManagedSetKey());
+            return $this->syncService->diff($managedSetKey);
         } catch (ManagedContentExportException | ProviderException | RuntimeException) {
             return null;
         }
@@ -573,39 +754,41 @@ final class ManagedContentPage
         check_admin_referer(self::COMMIT_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
-        if (! $settings->manageGenerateBlocksGlobalStyles) {
-            $this->redirectWithNotice('error', 'GenerateBlocks global styles is not enabled in settings.');
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
-        if (! $this->managedContentAdapter->isAvailable()) {
-            $this->redirectWithNotice('error', 'GenerateBlocks global styles is not available on this site.');
+        if (! $managedContentAdapter->isAvailable()) {
+            $this->redirectWithNotice('error', sprintf('%s is not available on this site.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'commit',
                 ['branch' => $settings->branch],
                 fn () => $this->syncService->commitManagedSet(
-                    $this->managedContentAdapter->getManagedSetKey(),
+                    $managedSetKey,
                     new CommitManagedSetRequest(
                         $settings->branch,
-                        'Commit live GenerateBlocks global styles',
+                        $managedContentAdapter->buildCommitMessage(),
                         $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
                         $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
                     )
                 )
             );
         } catch (ManagedContentExportException | RuntimeException $exception) {
-            $this->redirectWithNotice('error', $exception->getMessage());
+            $this->redirectWithNotice('error', $exception->getMessage(), $managedSetKey);
         }
 
         $message = $result->createdNewCommit
             ? sprintf('Committed %d file(s) to local branch %s.', count($result->pathHashes), $settings->branch)
             : sprintf('No local commit created. Branch %s already matches the live managed content.', $settings->branch);
 
-        $this->redirectWithNotice('success', $message);
+        $this->redirectWithNotice('success', $message, $managedSetKey);
     }
 
     public function handleFetch(): void
@@ -617,21 +800,23 @@ final class ManagedContentPage
         check_admin_referer(self::FETCH_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
-        if (! $settings->manageGenerateBlocksGlobalStyles) {
-            $this->redirectWithNotice('error', 'GenerateBlocks global styles is not enabled in settings.');
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'fetch',
                 ['branch' => $settings->branch],
-                fn () => $this->syncService->fetch($this->managedContentAdapter->getManagedSetKey())
+                fn () => $this->syncService->fetch($managedSetKey)
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message);
+            $this->redirectWithNotice('error', $message, $managedSetKey);
         }
 
         $message = sprintf(
@@ -646,7 +831,53 @@ final class ManagedContentPage
             count($result->traversedBlobHashes)
         );
 
-        $this->redirectWithNotice('success', $message);
+        $this->redirectWithNotice('success', $message, $managedSetKey);
+    }
+
+    public function handlePull(): void
+    {
+        if (! current_user_can(Capabilities::MANAGE_PLUGIN)) {
+            wp_die(esc_html__('You do not have permission to manage PushPull.', 'pushpull'));
+        }
+
+        check_admin_referer(self::PULL_ACTION);
+
+        $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
+
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
+        }
+
+        try {
+            $result = $this->operationExecutor->run(
+                $managedSetKey,
+                'pull',
+                ['branch' => $settings->branch],
+                fn () => $this->syncService->pull($managedSetKey)
+            );
+        } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
+            $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
+            $this->redirectWithNotice('error', $message, $managedSetKey);
+        }
+
+        $mergeMessage = match ($result->mergeResult->status) {
+            'already_up_to_date' => sprintf('Local branch %s was already up to date after fetch.', $settings->branch),
+            'fast_forward' => sprintf('Pulled remote branch %s and fast-forwarded local to %s.', $settings->branch, $result->mergeResult->theirsCommitHash),
+            'merged' => sprintf('Pulled remote branch %s and created merge commit %s.', $settings->branch, $result->mergeResult->commit?->hash),
+            'conflict' => sprintf('Pulled remote branch %s, but merge requires resolution. Stored %d conflict(s).', $settings->branch, count($result->mergeResult->conflicts)),
+            default => sprintf('Pulled remote branch %s.', $settings->branch),
+        };
+
+        $message = sprintf(
+            'Fetched %s into %s. %s',
+            $result->fetchResult->remoteCommitHash,
+            $result->fetchResult->remoteRefName,
+            $mergeMessage
+        );
+
+        $this->redirectWithNotice($result->mergeResult->hasConflicts() ? 'error' : 'success', $message, $managedSetKey);
     }
 
     public function handleMerge(): void
@@ -658,21 +889,23 @@ final class ManagedContentPage
         check_admin_referer(self::MERGE_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
-        if (! $settings->manageGenerateBlocksGlobalStyles) {
-            $this->redirectWithNotice('error', 'GenerateBlocks global styles is not enabled in settings.');
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'merge',
                 ['branch' => $settings->branch],
-                fn () => $this->syncService->merge($this->managedContentAdapter->getManagedSetKey())
+                fn () => $this->syncService->merge($managedSetKey)
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message);
+            $this->redirectWithNotice('error', $message, $managedSetKey);
         }
 
         $message = match ($result->status) {
@@ -683,7 +916,7 @@ final class ManagedContentPage
             default => 'Merge completed.',
         };
 
-        $this->redirectWithNotice($result->hasConflicts() ? 'error' : 'success', $message);
+        $this->redirectWithNotice($result->hasConflicts() ? 'error' : 'success', $message, $managedSetKey);
     }
 
     public function handleApply(): void
@@ -695,21 +928,23 @@ final class ManagedContentPage
         check_admin_referer(self::APPLY_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
-        if (! $settings->manageGenerateBlocksGlobalStyles) {
-            $this->redirectWithNotice('error', 'GenerateBlocks global styles is not enabled in settings.');
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'apply',
                 ['branch' => $settings->branch],
-                fn () => $this->syncService->apply($this->managedContentAdapter->getManagedSetKey())
+                fn () => $this->syncService->apply($managedSetKey)
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message);
+            $this->redirectWithNotice('error', $message, $managedSetKey);
         }
 
         $message = sprintf(
@@ -721,7 +956,7 @@ final class ManagedContentPage
             count($result->deletedLogicalKeys)
         );
 
-        $this->redirectWithNotice('success', $message);
+        $this->redirectWithNotice('success', $message, $managedSetKey);
     }
 
     public function handlePush(): void
@@ -733,21 +968,23 @@ final class ManagedContentPage
         check_admin_referer(self::PUSH_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
-        if (! $settings->manageGenerateBlocksGlobalStyles) {
-            $this->redirectWithNotice('error', 'GenerateBlocks global styles is not enabled in settings.');
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'push',
                 ['branch' => $settings->branch],
-                fn () => $this->syncService->push($this->managedContentAdapter->getManagedSetKey())
+                fn () => $this->syncService->push($managedSetKey)
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message);
+            $this->redirectWithNotice('error', $message, $managedSetKey);
         }
 
         $message = $result->status === 'already_up_to_date'
@@ -761,7 +998,7 @@ final class ManagedContentPage
                 count($result->pushedBlobHashes)
             );
 
-        $this->redirectWithNotice('success', $message);
+        $this->redirectWithNotice('success', $message, $managedSetKey);
     }
 
     public function handleResetRemote(): void
@@ -773,21 +1010,23 @@ final class ManagedContentPage
         check_admin_referer(self::RESET_REMOTE_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
-        if (! $settings->manageGenerateBlocksGlobalStyles) {
-            $this->redirectWithNotice('error', 'GenerateBlocks global styles is not enabled in settings.');
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'reset_remote',
                 ['branch' => $settings->branch],
-                fn () => $this->syncService->resetRemote($this->managedContentAdapter->getManagedSetKey())
+                fn () => $this->syncService->resetRemote($managedSetKey)
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message);
+            $this->redirectWithNotice('error', $message, $managedSetKey);
         }
 
         $message = sprintf(
@@ -797,7 +1036,7 @@ final class ManagedContentPage
             $result->remoteCommitHash
         );
 
-        $this->redirectWithNotice('success', $message);
+        $this->redirectWithNotice('success', $message, $managedSetKey);
     }
 
     public function handleResolveConflict(): void
@@ -809,35 +1048,36 @@ final class ManagedContentPage
         check_admin_referer(self::RESOLVE_CONFLICT_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
         $path = isset($_POST['path']) ? sanitize_text_field(wp_unslash((string) $_POST['path'])) : '';
         $strategy = isset($_POST['strategy']) ? sanitize_key((string) $_POST['strategy']) : '';
         // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- The value may contain raw JSON and is protected by nonce verification above.
         $manualContent = isset($_POST['manual_content']) ? (string) wp_unslash((string) $_POST['manual_content']) : '';
 
         if ($path === '' || ! in_array($strategy, ['ours', 'theirs', 'manual'], true)) {
-            $this->redirectWithNotice('error', 'Conflict resolution request was incomplete.');
+            $this->redirectWithNotice('error', 'Conflict resolution request was incomplete.', $managedSetKey);
         }
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'resolve_conflict',
                 ['branch' => $settings->branch, 'path' => $path, 'strategy' => $strategy],
                 fn () => match ($strategy) {
-                    'ours' => $this->conflictResolutionService->resolveUsingOurs($this->managedContentAdapter->getManagedSetKey(), $settings->branch, $path),
-                    'theirs' => $this->conflictResolutionService->resolveUsingTheirs($this->managedContentAdapter->getManagedSetKey(), $settings->branch, $path),
-                    default => $this->conflictResolutionService->resolveUsingManual($this->managedContentAdapter->getManagedSetKey(), $settings->branch, $path, $manualContent),
+                    'ours' => $this->conflictResolutionService->resolveUsingOurs($managedSetKey, $settings->branch, $path),
+                    'theirs' => $this->conflictResolutionService->resolveUsingTheirs($managedSetKey, $settings->branch, $path),
+                    default => $this->conflictResolutionService->resolveUsingManual($managedSetKey, $settings->branch, $path, $manualContent),
                 }
             );
         } catch (RuntimeException $exception) {
-            $this->redirectWithNotice('error', $exception->getMessage());
+            $this->redirectWithNotice('error', $exception->getMessage(), $managedSetKey);
         }
 
         $message = $result->remainingConflictCount > 0
             ? sprintf('Resolved conflict for %s. %d conflict(s) remain.', $result->path, $result->remainingConflictCount)
             : sprintf('Resolved conflict for %s. All conflicts are resolved; finalize the merge to create the merge commit.', $result->path);
 
-        $this->redirectWithNotice('success', $message);
+        $this->redirectWithNotice('success', $message, $managedSetKey);
     }
 
     public function handleFinalizeMerge(): void
@@ -849,26 +1089,27 @@ final class ManagedContentPage
         check_admin_referer(self::FINALIZE_MERGE_ACTION);
 
         $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->selectedManagedSetKeyOrFail();
 
         try {
             $result = $this->operationExecutor->run(
-                $this->managedContentAdapter->getManagedSetKey(),
+                $managedSetKey,
                 'finalize_merge',
                 ['branch' => $settings->branch],
-                fn () => $this->conflictResolutionService->finalize($this->managedContentAdapter->getManagedSetKey(), $settings->branch)
+                fn () => $this->conflictResolutionService->finalize($managedSetKey, $settings->branch)
             );
         } catch (RuntimeException $exception) {
-            $this->redirectWithNotice('error', $exception->getMessage());
+            $this->redirectWithNotice('error', $exception->getMessage(), $managedSetKey);
         }
 
         $this->redirectWithNotice('success', sprintf(
             'Finalized merge on branch %s with merge commit %s.',
             $result->branch,
             $result->commit->hash
-        ));
+        ), $managedSetKey);
     }
 
-    private function renderCommitButton(bool $enabled): void
+    private function renderCommitButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -880,13 +1121,14 @@ final class ManagedContentPage
         }
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="pushpull_commit_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::COMMIT_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::COMMIT_ACTION);
         submit_button(__('Commit', 'pushpull'), 'primary', 'submit', false);
         echo '</form>';
     }
 
-    private function renderFetchButton(bool $enabled): void
+    private function renderFetchButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -898,13 +1140,33 @@ final class ManagedContentPage
         }
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="pushpull_fetch_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::FETCH_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::FETCH_ACTION);
         submit_button(__('Fetch', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
     }
 
-    private function renderMergeButton(bool $enabled): void
+    private function renderPullButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
+    {
+        if (! $enabled) {
+            printf(
+                '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
+                esc_html__('Pull', 'pushpull')
+            );
+
+            return;
+        }
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::PULL_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
+        wp_nonce_field(self::PULL_ACTION);
+        submit_button(__('Pull', 'pushpull'), 'secondary', 'submit', false);
+        echo '</form>';
+    }
+
+    private function renderMergeButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -916,13 +1178,14 @@ final class ManagedContentPage
         }
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="pushpull_merge_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::MERGE_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::MERGE_ACTION);
         submit_button(__('Merge', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
     }
 
-    private function renderPushButton(bool $enabled): void
+    private function renderPushButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -934,13 +1197,14 @@ final class ManagedContentPage
         }
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="pushpull_push_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::PUSH_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::PUSH_ACTION);
         submit_button(__('Push', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
     }
 
-    private function renderApplyButton(bool $enabled): void
+    private function renderApplyButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -952,13 +1216,14 @@ final class ManagedContentPage
         }
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Apply the local repository state back into WordPress? This will update existing managed styles and remove local styles that are not present in the repository.\');">';
-        echo '<input type="hidden" name="action" value="pushpull_apply_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::APPLY_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::APPLY_ACTION);
         submit_button(__('Apply repo to WordPress', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
     }
 
-    private function renderResetRemoteButton(bool $enabled): void
+    private function renderResetRemoteButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -970,7 +1235,8 @@ final class ManagedContentPage
         }
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the remote branch to an empty commit? This will not delete Git history, but it will create one new remote commit that removes all tracked files from the branch.\');">';
-        echo '<input type="hidden" name="action" value="pushpull_reset_remote_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::RESET_REMOTE_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::RESET_REMOTE_ACTION);
         submit_button(__('Reset remote branch', 'pushpull'), 'delete', 'submit', false);
         echo '</form>';
@@ -999,7 +1265,42 @@ final class ManagedContentPage
         );
     }
 
-    private function renderConflictPanel(\PushPull\Persistence\WorkingState\WorkingStateRecord $workingState): void
+    private function renderManagedSetTabs(?string $activeManagedSetKey): void
+    {
+        if (count($this->managedSetRegistry->all()) < 2) {
+            return;
+        }
+
+        echo '<div class="pushpull-panel"><p>';
+
+        printf(
+            '<a class="%s" href="%s">%s</a> ',
+            esc_attr($activeManagedSetKey === null ? 'button button-primary' : 'button button-secondary'),
+            esc_url(add_query_arg(['page' => self::MENU_SLUG], admin_url('admin.php'))),
+            esc_html__('All managed sets', 'pushpull')
+        );
+
+        foreach ($this->managedSetRegistry->all() as $managedSetKey => $adapter) {
+            $url = add_query_arg(
+                [
+                    'page' => self::MENU_SLUG,
+                    'managed_set' => $managedSetKey,
+                ],
+                admin_url('admin.php')
+            );
+            $class = $managedSetKey === $activeManagedSetKey ? 'button button-primary' : 'button button-secondary';
+            printf(
+                '<a class="%s" href="%s">%s</a> ',
+                esc_attr($class),
+                esc_url($url),
+                esc_html($adapter->getManagedSetLabel())
+            );
+        }
+
+        echo '</p></div>';
+    }
+
+    private function renderConflictPanel(ManifestManagedContentAdapterInterface $managedContentAdapter, \PushPull\Persistence\WorkingState\WorkingStateRecord $workingState): void
     {
         echo '<div id="pushpull-conflicts" class="pushpull-panel">';
         echo '<h2>' . esc_html__('Merge Conflicts', 'pushpull') . '</h2>';
@@ -1021,7 +1322,8 @@ final class ManagedContentPage
 
         echo '<p>' . esc_html__('All conflicts are resolved. Finalize the merge to create the merge commit and clear the merge state.', 'pushpull') . '</p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="pushpull_finalize_merge_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::FINALIZE_MERGE_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::FINALIZE_MERGE_ACTION);
         submit_button(__('Finalize merge', 'pushpull'), 'primary', 'submit', false);
         echo '</form>';
@@ -1056,7 +1358,8 @@ final class ManagedContentPage
     private function renderConflictActionForm(string $path, string $strategy, ?string $manualContent, string $buttonLabel): void
     {
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="pushpull_resolve_conflict_generateblocks" />';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::RESOLVE_CONFLICT_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr($this->currentAdapter()->getManagedSetKey()) . '" />';
         echo '<input type="hidden" name="path" value="' . esc_attr($path) . '" />';
         echo '<input type="hidden" name="strategy" value="' . esc_attr($strategy) . '" />';
         wp_nonce_field(self::RESOLVE_CONFLICT_ACTION);
@@ -1070,6 +1373,107 @@ final class ManagedContentPage
 
         submit_button($buttonLabel, 'secondary', 'submit', false);
         echo '</form>';
+    }
+
+    private function currentAdapter(): ManifestManagedContentAdapterInterface
+    {
+        $requestedManagedSetKey = $this->requestManagedSetKey();
+
+        if ($requestedManagedSetKey !== null && $this->managedSetRegistry->has($requestedManagedSetKey)) {
+            return $this->managedSetRegistry->get($requestedManagedSetKey);
+        }
+
+        return $this->managedSetRegistry->first();
+    }
+
+    private function requestManagedSetKey(): ?string
+    {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only routing parameter used for screen selection.
+        $fromGet = isset($_GET['managed_set']) ? sanitize_key(wp_unslash((string) $_GET['managed_set'])) : '';
+
+        if ($fromGet !== '') {
+            return $fromGet;
+        }
+
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read-only routing parameter used after nonce validation in action handlers.
+        $fromPost = isset($_POST['managed_set']) ? sanitize_key(wp_unslash((string) $_POST['managed_set'])) : '';
+
+        return $fromPost !== '' ? $fromPost : null;
+    }
+
+    private function isOverviewMode(): bool
+    {
+        return $this->requestManagedSetKey() === null;
+    }
+
+    private function selectedManagedSetKeyOrFail(): string
+    {
+        $managedSetKey = $this->requestManagedSetKey() ?? $this->currentAdapter()->getManagedSetKey();
+
+        if (! $this->managedSetRegistry->has($managedSetKey)) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
+            throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
+        }
+
+        return $managedSetKey;
+    }
+
+    private function isManagedSetEnabled(\PushPull\Settings\PushPullSettings $settings, string $managedSetKey): bool
+    {
+        return $settings->isManagedSetEnabled($managedSetKey);
+    }
+
+    private function overviewBadgeText(
+        bool $enabled,
+        ManifestManagedContentAdapterInterface $adapter,
+        ?ManagedSetDiffResult $diffResult,
+        ?\PushPull\Persistence\WorkingState\WorkingStateRecord $workingState
+    ): string {
+        if (! $enabled) {
+            return 'Disabled';
+        }
+
+        if (! $adapter->isAvailable()) {
+            return 'Unavailable';
+        }
+
+        if ($workingState !== null && $workingState->hasConflicts()) {
+            return sprintf('%d conflict(s)', count($workingState->conflicts));
+        }
+
+        if ($diffResult === null) {
+            return 'Unavailable';
+        }
+
+        if ($diffResult->liveToLocal->hasChanges() || $diffResult->localToRemote->hasChanges()) {
+            return sprintf(
+                '%d local, %d remote',
+                $diffResult->liveToLocal->changedCount(),
+                $diffResult->localToRemote->changedCount()
+            );
+        }
+
+        return 'Clean';
+    }
+
+    private function overviewBadgeClass(
+        bool $enabled,
+        ?ManagedSetDiffResult $diffResult,
+        ?\PushPull\Persistence\WorkingState\WorkingStateRecord $workingState
+    ): string {
+        if (! $enabled) {
+            return 'muted';
+        }
+
+        if ($workingState !== null && $workingState->hasConflicts()) {
+            return 'deleted';
+        }
+
+        if ($diffResult !== null && ($diffResult->liveToLocal->hasChanges() || $diffResult->localToRemote->hasChanges())) {
+            return 'modified';
+        }
+
+        return 'unchanged';
     }
 
     /**
@@ -1092,11 +1496,12 @@ final class ManagedContentPage
         ];
     }
 
-    private function redirectWithNotice(string $status, string $message): never
+    private function redirectWithNotice(string $status, string $message, ?string $managedSetKey = null): never
     {
         $url = add_query_arg(
             [
                 'page' => self::MENU_SLUG,
+                'managed_set' => $managedSetKey ?? $this->currentAdapter()->getManagedSetKey(),
                 'pushpull_commit_status' => $status,
                 'pushpull_commit_message' => $message,
             ],

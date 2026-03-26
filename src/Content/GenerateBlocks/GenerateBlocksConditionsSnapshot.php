@@ -8,7 +8,7 @@ use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedContentItem;
 
-final class GenerateBlocksGlobalStylesSnapshot extends ManagedContentSnapshot
+final class GenerateBlocksConditionsSnapshot extends ManagedContentSnapshot
 {
     /**
      * @param ManagedContentItem[] $items

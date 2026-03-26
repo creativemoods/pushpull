@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace PushPull\Domain\Diff;
 
-use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
-use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesSnapshot;
+use PushPull\Content\ManagedContentSnapshot;
+use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Domain\Repository\Commit;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Settings\PushPullSettings;
@@ -13,7 +13,7 @@ use PushPull\Settings\PushPullSettings;
 final class ManagedSetDiffService
 {
     public function __construct(
-        private readonly GenerateBlocksGlobalStylesAdapter $adapter,
+        private readonly ManifestManagedContentAdapterInterface $adapter,
         private readonly RepositoryStateReader $repositoryStateReader,
         private readonly LocalRepositoryInterface $localRepository
     ) {
@@ -22,8 +22,12 @@ final class ManagedSetDiffService
     public function diff(PushPullSettings $settings): ManagedSetDiffResult
     {
         $live = $this->buildLiveState();
-        $local = $this->repositoryStateReader->read('local', 'refs/heads/' . $settings->branch);
-        $remote = $this->repositoryStateReader->read('remote', 'refs/remotes/origin/' . $settings->branch);
+        $local = $this->filterStateToManagedSet(
+            $this->repositoryStateReader->read('local', 'refs/heads/' . $settings->branch)
+        );
+        $remote = $this->filterStateToManagedSet(
+            $this->repositoryStateReader->read('remote', 'refs/remotes/origin/' . $settings->branch)
+        );
 
         return new ManagedSetDiffResult(
             $this->adapter->getManagedSetKey(),
@@ -186,7 +190,7 @@ final class ManagedSetDiffService
         return $this->localRepository->getCommit($hash);
     }
 
-    private function serializeSnapshot(GenerateBlocksGlobalStylesSnapshot $snapshot): string
+    private function serializeSnapshot(ManagedContentSnapshot $snapshot): string
     {
         $parts = [];
 
@@ -198,5 +202,28 @@ final class ManagedSetDiffService
         sort($parts);
 
         return implode("\n", $parts);
+    }
+
+    private function filterStateToManagedSet(CanonicalManagedState $state): CanonicalManagedState
+    {
+        $files = [];
+
+        foreach ($state->files as $path => $file) {
+            if (! $this->adapter->ownsRepositoryPath($path)) {
+                continue;
+            }
+
+            $files[$path] = $file;
+        }
+
+        ksort($files);
+
+        return new CanonicalManagedState(
+            $state->source,
+            $state->refName,
+            $state->commitHash,
+            $state->treeHash,
+            $files
+        );
     }
 }

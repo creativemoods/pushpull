@@ -12,6 +12,10 @@
     color: var(--pushpull-muted);
 }
 
+.pushpull-page-nav {
+    margin: 16px 0 20px;
+}
+
 .pushpull-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;

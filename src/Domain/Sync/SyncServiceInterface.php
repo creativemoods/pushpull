@@ -16,6 +16,8 @@ interface SyncServiceInterface
 
     public function fetch(string $managedSetKey): FetchManagedSetResult;
 
+    public function pull(string $managedSetKey): PullManagedSetResult;
+
     public function diff(string $managedSetKey): ManagedSetDiffResult;
 
     public function merge(string $managedSetKey): MergeManagedSetResult;

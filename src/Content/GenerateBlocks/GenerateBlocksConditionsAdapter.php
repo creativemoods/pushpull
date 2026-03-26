@@ -13,21 +13,22 @@ use PushPull\Content\WordPressManagedContentAdapterInterface;
 use PushPull\Support\Json\CanonicalJson;
 use WP_Post;
 
-final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContentAdapterInterface
+final class GenerateBlocksConditionsAdapter implements WordPressManagedContentAdapterInterface
 {
-    private const MANAGED_SET_KEY = 'generateblocks_global_styles';
-    private const CONTENT_TYPE = 'generateblocks_global_style';
-    private const MANIFEST_TYPE = 'generateblocks_global_styles_manifest';
-    private const POST_TYPE = 'gblocks_styles';
+    private const MANAGED_SET_KEY = 'generateblocks_conditions';
+    private const CONTENT_TYPE = 'generateblocks_condition';
+    private const MANIFEST_TYPE = 'generateblocks_conditions_manifest';
+    private const POST_TYPE = 'gblocks_condition';
+    private const META_KEY = '_gb_conditions';
+    private const CATEGORY_TAXONOMY = 'gblocks_condition_cat';
+    private const PATH_PREFIX = 'generateblocks/conditions';
 
-    private readonly GenerateBlocksLogicalKeyGenerator $logicalKeyGenerator;
-    private readonly GenerateBlocksRepositoryLayout $repositoryLayout;
+    private readonly GenerateBlocksConditionKeyGenerator $logicalKeyGenerator;
     private readonly GenerateBlocksCanonicalHasher $canonicalHasher;
 
     public function __construct()
     {
-        $this->logicalKeyGenerator = new GenerateBlocksLogicalKeyGenerator();
-        $this->repositoryLayout = new GenerateBlocksRepositoryLayout();
+        $this->logicalKeyGenerator = new GenerateBlocksConditionKeyGenerator();
         $this->canonicalHasher = new GenerateBlocksCanonicalHasher();
     }
 
@@ -38,7 +39,7 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
 
     public function getManagedSetLabel(): string
     {
-        return 'GenerateBlocks global styles';
+        return 'GenerateBlocks conditions';
     }
 
     public function getContentType(): string
@@ -56,10 +57,10 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
         return $this->exportSnapshot()->items;
     }
 
-    public function exportSnapshot(): GenerateBlocksGlobalStylesSnapshot
+    public function exportSnapshot(): GenerateBlocksConditionsSnapshot
     {
         if (! $this->isAvailable()) {
-            return new GenerateBlocksGlobalStylesSnapshot([], $this->buildManifest([]));
+            return new GenerateBlocksConditionsSnapshot([], $this->buildManifest([]));
         }
 
         $posts = get_posts([
@@ -86,22 +87,22 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
     /**
      * @param array<int, array<string, mixed>> $records
      */
-    public function snapshotFromRuntimeRecords(array $records): GenerateBlocksGlobalStylesSnapshot
+    public function snapshotFromRuntimeRecords(array $records): GenerateBlocksConditionsSnapshot
     {
         $items = [];
         $logicalKeys = [];
 
         foreach ($records as $record) {
             $item = $this->buildItemFromRuntimeRecord($record);
-            $logicalKeys[] = $item->logicalKey;
             $items[] = $item;
+            $logicalKeys[] = $item->logicalKey;
         }
 
         $this->logicalKeyGenerator->assertUnique($logicalKeys);
         $manifest = $this->buildManifest($records);
         $this->validateManifest($manifest, $items);
 
-        return new GenerateBlocksGlobalStylesSnapshot($items, $manifest);
+        return new GenerateBlocksConditionsSnapshot($items, $manifest);
     }
 
     public function exportByLogicalKey(string $logicalKey): ?ManagedContentItem
@@ -135,25 +136,23 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
 
     public function computeLogicalKey(array $wpRecord): string
     {
-        $selector = trim((string) ($wpRecord['gb_style_selector'] ?? $wpRecord['selector'] ?? ''));
+        $identifier = trim((string) ($wpRecord['post_name'] ?? ''));
 
-        if ($selector !== '') {
-            return $this->logicalKeyGenerator->fromSelector($selector);
+        if ($identifier === '') {
+            $identifier = trim((string) ($wpRecord['post_title'] ?? ''));
         }
 
-        $fallbackSelector = trim((string) ($wpRecord['post_title'] ?? $wpRecord['post_name'] ?? ''));
-
-        return $this->logicalKeyGenerator->fromSelector($fallbackSelector);
+        return $this->logicalKeyGenerator->fromIdentifier($identifier);
     }
 
     public function getRepositoryPath(ManagedContentItem $item): string
     {
-        return $this->repositoryLayout->itemPath($item->logicalKey);
+        return sprintf('%s/%s.json', self::PATH_PREFIX, $item->logicalKey);
     }
 
     public function getManifestPath(): string
     {
-        return $this->repositoryLayout->manifestPath();
+        return self::PATH_PREFIX . '/manifest.json';
     }
 
     public function ownsRepositoryPath(string $path): bool
@@ -185,7 +184,7 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
 
     public function buildCommitMessage(): string
     {
-        return 'Commit live GenerateBlocks global styles';
+        return 'Commit live GenerateBlocks conditions';
     }
 
     public function deserialize(string $path, string $content): ManagedContentItem
@@ -233,41 +232,35 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
 
     public function buildItemFromRuntimeRecord(array $record): ManagedContentItem
     {
-        $selector = trim((string) ($record['gb_style_selector'] ?? $record['post_title'] ?? ''));
         $logicalKey = $this->computeLogicalKey($record);
-        $payload = $this->normalizeStyleData($record['gb_style_data'] ?? '');
         $slug = trim((string) ($record['post_name'] ?? '')) !== ''
             ? (string) $record['post_name']
             : $logicalKey;
         $displayName = trim((string) ($record['post_title'] ?? '')) !== ''
             ? (string) $record['post_title']
-            : $selector;
+            : $logicalKey;
         $postStatus = trim((string) ($record['post_status'] ?? 'publish')) !== ''
             ? (string) $record['post_status']
             : 'publish';
-
-        $metadata = [
-            'restoration' => [
-                'postType' => self::POST_TYPE,
-            ],
-        ];
-        $derived = [];
-
-        if (trim((string) ($record['gb_style_css'] ?? '')) !== '') {
-            $derived['generatedCss'] = (string) $record['gb_style_css'];
-        }
 
         $item = new ManagedContentItem(
             self::MANAGED_SET_KEY,
             self::CONTENT_TYPE,
             $logicalKey,
             $displayName,
-            $selector,
+            $logicalKey,
             $slug,
-            $payload,
+            $this->normalizeConditions($record[self::META_KEY] ?? []),
             $postStatus,
-            $metadata,
-            $derived,
+            [
+                'restoration' => [
+                    'postType' => self::POST_TYPE,
+                    'metaKey' => self::META_KEY,
+                    'categoryTaxonomy' => self::CATEGORY_TAXONOMY,
+                ],
+                'categories' => $this->normalizeCategories($record['categories'] ?? []),
+            ],
+            [],
             isset($record['wp_object_id']) ? (int) $record['wp_object_id'] : null
         );
 
@@ -311,7 +304,7 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
     public function validateManifest(ManagedCollectionManifest $manifest, array $items): void
     {
         if ($manifest->manifestType !== self::MANIFEST_TYPE) {
-            throw new ManagedContentExportException('Invalid GenerateBlocks manifest type.');
+            throw new ManagedContentExportException('Invalid GenerateBlocks conditions manifest type.');
         }
 
         $knownKeys = [];
@@ -335,18 +328,18 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
             throw new ManagedContentExportException('Managed content item logical key cannot be empty.');
         }
 
-        if ($item->selector === '') {
+        if ($item->slug === '') {
             throw new ManagedContentExportException(
-                sprintf('Managed content item "%s" is missing its selector.', $item->logicalKey)
+                sprintf('Managed content item "%s" is missing its slug.', $item->logicalKey)
             );
         }
 
-        $expectedLogicalKey = $this->logicalKeyGenerator->fromSelector($item->selector);
+        $expectedLogicalKey = $this->logicalKeyGenerator->fromIdentifier($item->slug);
 
         if ($expectedLogicalKey !== $item->logicalKey) {
             throw new ManagedContentExportException(
                 sprintf(
-                    'Managed content item logical key "%s" does not match selector-derived key "%s".',
+                    'Managed content item logical key "%s" does not match slug-derived key "%s".',
                     $item->logicalKey,
                     $expectedLogicalKey
                 )
@@ -356,7 +349,7 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
 
     public function isManagedItemPath(string $path): bool
     {
-        return str_starts_with($path, 'generateblocks/global-styles/')
+        return str_starts_with($path, self::PATH_PREFIX . '/')
             && str_ends_with($path, '.json')
             && $path !== $this->getManifestPath();
     }
@@ -365,7 +358,6 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
     {
         foreach ($this->allPosts() as $post) {
             $candidateLogicalKey = $this->computeLogicalKey([
-                'gb_style_selector' => (string) get_post_meta($post->ID, 'gb_style_selector', true),
                 'post_title' => (string) $post->post_title,
                 'post_name' => (string) $post->post_name,
             ]);
@@ -410,14 +402,8 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
 
     public function persistItemMeta(int $postId, ManagedContentItem $item): void
     {
-        update_post_meta($postId, 'gb_style_selector', $item->selector);
-        update_post_meta($postId, 'gb_style_data', $item->payload);
-
-        if (isset($item->derived['generatedCss']) && is_string($item->derived['generatedCss']) && $item->derived['generatedCss'] !== '') {
-            update_post_meta($postId, 'gb_style_css', $item->derived['generatedCss']);
-        } else {
-            delete_post_meta($postId, 'gb_style_css');
-        }
+        update_post_meta($postId, self::META_KEY, $item->payload);
+        $this->persistCategories($postId, $item);
     }
 
     public function deleteMissingItems(array $desiredLogicalKeys): array
@@ -426,7 +412,6 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
 
         foreach ($this->allPosts() as $post) {
             $logicalKey = $this->computeLogicalKey([
-                'gb_style_selector' => (string) get_post_meta($post->ID, 'gb_style_selector', true),
                 'post_title' => (string) $post->post_title,
                 'post_name' => (string) $post->post_name,
             ]);
@@ -452,52 +437,147 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
             'post_name' => (string) $post->post_name,
             'post_status' => (string) $post->post_status,
             'menu_order' => (int) $post->menu_order,
-            'gb_style_selector' => (string) get_post_meta($post->ID, 'gb_style_selector', true),
-            'gb_style_data' => get_post_meta($post->ID, 'gb_style_data', true),
-            'gb_style_css' => (string) get_post_meta($post->ID, 'gb_style_css', true),
+            self::META_KEY => get_post_meta($post->ID, self::META_KEY, true),
+            'categories' => $this->assignedCategories((int) $post->ID),
         ];
+    }
+
+    /**
+     * @return array<int, array{slug: string, name: string}>
+     */
+    private function assignedCategories(int $postId): array
+    {
+        if (! function_exists('taxonomy_exists') || ! taxonomy_exists(self::CATEGORY_TAXONOMY)) {
+            return [];
+        }
+
+        $terms = wp_get_object_terms($postId, self::CATEGORY_TAXONOMY, ['fields' => 'all']);
+        $categories = [];
+
+        foreach ($terms as $term) {
+            if (! is_object($term) || ! isset($term->slug, $term->name)) {
+                continue;
+            }
+
+            $slug = sanitize_title((string) $term->slug);
+            $name = trim((string) $term->name);
+
+            if ($slug === '' || $name === '') {
+                continue;
+            }
+
+            $categories[] = [
+                'slug' => $slug,
+                'name' => $name,
+            ];
+        }
+
+        usort(
+            $categories,
+            static fn (array $left, array $right): int => $left['slug'] <=> $right['slug']
+        );
+
+        return $categories;
+    }
+
+    /**
+     * @return array<int, array{slug: string, name: string}>
+     */
+    private function normalizeCategories(mixed $categories): array
+    {
+        if (! is_array($categories)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($categories as $category) {
+            if (! is_array($category)) {
+                continue;
+            }
+
+            $slug = sanitize_title((string) ($category['slug'] ?? ''));
+            $name = trim((string) ($category['name'] ?? ''));
+
+            if ($slug === '' || $name === '') {
+                continue;
+            }
+
+            $normalized[$slug] = [
+                'slug' => $slug,
+                'name' => $name,
+            ];
+        }
+
+        ksort($normalized);
+
+        return array_values($normalized);
+    }
+
+    private function persistCategories(int $postId, ManagedContentItem $item): void
+    {
+        if (! function_exists('taxonomy_exists') || ! taxonomy_exists(self::CATEGORY_TAXONOMY)) {
+            return;
+        }
+
+        $categories = $this->normalizeCategories($item->metadata['categories'] ?? []);
+        $termIds = [];
+
+        foreach ($categories as $category) {
+            $existing = term_exists($category['slug'], self::CATEGORY_TAXONOMY);
+
+            if (is_array($existing) && isset($existing['term_id'])) {
+                $termIds[] = (int) $existing['term_id'];
+                continue;
+            }
+
+            if (is_int($existing) && $existing > 0) {
+                $termIds[] = $existing;
+                continue;
+            }
+
+            $created = wp_insert_term($category['name'], self::CATEGORY_TAXONOMY, ['slug' => $category['slug']]);
+
+            if (is_array($created) && isset($created['term_id'])) {
+                $termIds[] = (int) $created['term_id'];
+            }
+        }
+
+        wp_set_object_terms($postId, $termIds, self::CATEGORY_TAXONOMY, false);
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function normalizeStyleData(mixed $styleData): array
+    private function normalizeConditions(mixed $conditions): array
     {
-        if (is_array($styleData)) {
-            return $styleData;
+        if (is_array($conditions)) {
+            return $conditions;
         }
 
-        if (! is_string($styleData)) {
-            throw new ManagedContentExportException('GenerateBlocks gb_style_data must be an array or serialized string.');
+        if (! is_string($conditions)) {
+            throw new ManagedContentExportException('GenerateBlocks _gb_conditions must be an array or serialized string.');
         }
 
         $decoded = function_exists('maybe_unserialize')
-            ? maybe_unserialize($styleData)
-            : @unserialize($styleData, ['allowed_classes' => false]);
+            ? maybe_unserialize($conditions)
+            : @unserialize($conditions, ['allowed_classes' => false]);
 
         if (is_array($decoded)) {
             return $decoded;
         }
 
-        if (is_string($decoded) && $decoded !== '' && $decoded !== $styleData) {
-            $jsonDecoded = json_decode($decoded, true);
-
-            if (is_array($jsonDecoded)) {
-                return $jsonDecoded;
-            }
-        }
-
-        if ($styleData === '') {
+        if ($conditions === '') {
             return [];
         }
 
-        $jsonDecoded = json_decode($styleData, true);
+        $jsonDecoded = json_decode($conditions, true);
 
         if (is_array($jsonDecoded)) {
             return $jsonDecoded;
         }
 
-        throw new ManagedContentExportException('GenerateBlocks gb_style_data could not be normalized into canonical JSON.');
+        throw new ManagedContentExportException('GenerateBlocks _gb_conditions could not be normalized into canonical JSON.');
     }
 
     /**

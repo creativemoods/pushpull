@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
-use PushPull\Domain\Sync\GenerateBlocksRepositoryCommitter;
+use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Persistence\LocalRepositoryResetService;
 use PushPull\Persistence\TableNames;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
@@ -19,7 +19,7 @@ final class LocalRepositoryResetServiceTest extends TestCase
     private \wpdb $wpdb;
     private DatabaseLocalRepository $localRepository;
     private GenerateBlocksGlobalStylesAdapter $adapter;
-    private GenerateBlocksRepositoryCommitter $committer;
+    private ManagedSetRepositoryCommitter $committer;
     private WorkingStateRepository $workingStateRepository;
     private LocalRepositoryResetService $resetService;
 
@@ -31,7 +31,7 @@ final class LocalRepositoryResetServiceTest extends TestCase
         $this->wpdb = new \wpdb();
         $this->localRepository = new DatabaseLocalRepository($this->wpdb);
         $this->adapter = new GenerateBlocksGlobalStylesAdapter();
-        $this->committer = new GenerateBlocksRepositoryCommitter($this->localRepository, $this->adapter);
+        $this->committer = new ManagedSetRepositoryCommitter($this->localRepository, $this->adapter);
         $this->workingStateRepository = new WorkingStateRepository($this->wpdb);
         $this->resetService = new LocalRepositoryResetService($this->wpdb);
     }
@@ -45,7 +45,7 @@ final class LocalRepositoryResetServiceTest extends TestCase
             'repository' => 'pushpulltestrepo',
             'branch' => 'main',
             'api_token' => 'secret-token',
-            'manage_generateblocks_global_styles' => '1',
+            'enabled_managed_sets' => ['generateblocks_global_styles'],
         ]));
 
         $snapshot = $this->adapter->snapshotFromRuntimeRecords([
@@ -100,12 +100,13 @@ final class LocalRepositoryResetServiceTest extends TestCase
         self::assertNull($this->localRepository->getRef('refs/heads/main'));
         self::assertNull($this->localRepository->getCommit($commit->hash));
         self::assertNull($this->workingStateRepository->get('generateblocks_global_styles', 'main'));
+        self::assertSame(1, count((new \PushPull\Persistence\Operations\OperationLogRepository($this->wpdb))->all()));
 
         $settings = $settingsRepository->get();
         self::assertSame('creativemoods', $settings->ownerOrWorkspace);
         self::assertSame('pushpulltestrepo', $settings->repository);
         self::assertSame('secret-token', $settings->apiToken);
-        self::assertTrue($settings->manageGenerateBlocksGlobalStyles);
+        self::assertTrue($settings->isManagedSetEnabled('generateblocks_global_styles'));
     }
 
     /**
