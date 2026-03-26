@@ -36,7 +36,7 @@ final class OperationsPage
 
         wp_enqueue_style(
             'pushpull-admin',
-            PUSHPULL_PLUGIN_URL . 'assets/css/admin.css',
+            PUSHPULL_PLUGIN_URL . 'plugin-assets/css/admin.css',
             [],
             PUSHPULL_VERSION
         );

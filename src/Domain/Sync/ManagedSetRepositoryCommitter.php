@@ -27,23 +27,35 @@ final class ManagedSetRepositoryCommitter
             $initializedRepository = true;
         }
 
-        $entries = [];
+        $headCommit = $this->localRepository->getHeadCommit($request->branch);
+        $entriesByPath = [];
         $pathHashes = [];
+
+        if ($headCommit !== null) {
+            foreach ($this->readTreeEntries($headCommit->treeHash) as $entry) {
+                if ($this->adapter->ownsRepositoryPath($entry->path)) {
+                    continue;
+                }
+
+                $entriesByPath[$entry->path] = $entry;
+            }
+        }
 
         foreach ($snapshot->items as $item) {
             $path = $this->adapter->getRepositoryPath($item);
             $blob = $this->localRepository->storeBlob($this->adapter->serialize($item));
-            $entries[] = new TreeEntry($path, 'blob', $blob->hash);
+            $entriesByPath[$path] = new TreeEntry($path, 'blob', $blob->hash);
             $pathHashes[$path] = $blob->hash;
         }
 
         $manifestPath = $this->adapter->getManifestPath();
         $manifestBlob = $this->localRepository->storeBlob($this->adapter->serializeManifest($snapshot->manifest));
-        $entries[] = new TreeEntry($manifestPath, 'blob', $manifestBlob->hash);
+        $entriesByPath[$manifestPath] = new TreeEntry($manifestPath, 'blob', $manifestBlob->hash);
         $pathHashes[$manifestPath] = $manifestBlob->hash;
 
+        ksort($entriesByPath);
+        $entries = array_values($entriesByPath);
         $tree = $this->localRepository->storeTree($entries);
-        $headCommit = $this->localRepository->getHeadCommit($request->branch);
 
         if ($headCommit !== null && $headCommit->treeHash === $tree->hash) {
             return new CommitManagedSetResult(
@@ -80,5 +92,36 @@ final class ManagedSetRepositoryCommitter
             $pathHashes,
             $initializedRepository
         );
+    }
+
+    /**
+     * @return array<int, TreeEntry>
+     */
+    private function readTreeEntries(string $treeHash, string $prefix = ''): array
+    {
+        $tree = $this->localRepository->getTree($treeHash);
+
+        if ($tree === null) {
+            return [];
+        }
+
+        $entries = [];
+
+        foreach ($tree->entries as $entry) {
+            $path = $prefix !== '' ? $prefix . '/' . $entry->path : $entry->path;
+
+            if ($entry->type === 'tree') {
+                array_push($entries, ...$this->readTreeEntries($entry->hash, $path));
+                continue;
+            }
+
+            if ($entry->type !== 'blob') {
+                continue;
+            }
+
+            $entries[] = new TreeEntry($path, $entry->type, $entry->hash);
+        }
+
+        return $entries;
     }
 }

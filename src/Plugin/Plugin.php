@@ -108,7 +108,15 @@ final class Plugin
             $providerFactory
         );
         $settingsRegistrar = new SettingsRegistrar($settingsRepository);
-        $settingsPage = new SettingsPage($settingsRepository, $providerFactory, $localRepositoryResetService, $remoteRepositoryInitializer, $operationExecutor);
+        $settingsPage = new SettingsPage(
+            $settingsRepository,
+            $managedSetRegistry,
+            $syncService,
+            $providerFactory,
+            $localRepositoryResetService,
+            $remoteRepositoryInitializer,
+            $operationExecutor
+        );
         $operationsPage = new OperationsPage($operationLogRepository);
         $managedContentPage = new ManagedContentPage(
             $settingsRepository,
@@ -126,6 +134,7 @@ final class Plugin
         add_action('admin_menu', [$operationsPage, 'register']);
         add_action('admin_post_pushpull_test_connection', [$settingsPage, 'handleTestConnection']);
         add_action('admin_post_pushpull_reset_local_repository', [$settingsPage, 'handleResetLocalRepository']);
+        add_action('admin_post_pushpull_reset_remote_branch', [$settingsPage, 'handleResetRemoteBranch']);
         add_action('admin_post_pushpull_initialize_remote_repository', [$settingsPage, 'handleInitializeRemoteRepository']);
         add_action('admin_post_pushpull_commit_managed_set', [$managedContentPage, 'handleCommit']);
         add_action('admin_post_pushpull_pull_managed_set', [$managedContentPage, 'handlePull']);
@@ -133,7 +142,6 @@ final class Plugin
         add_action('admin_post_pushpull_merge_managed_set', [$managedContentPage, 'handleMerge']);
         add_action('admin_post_pushpull_apply_managed_set', [$managedContentPage, 'handleApply']);
         add_action('admin_post_pushpull_push_managed_set', [$managedContentPage, 'handlePush']);
-        add_action('admin_post_pushpull_reset_remote_managed_set', [$managedContentPage, 'handleResetRemote']);
         add_action('admin_post_pushpull_resolve_conflict_managed_set', [$managedContentPage, 'handleResolveConflict']);
         add_action('admin_post_pushpull_finalize_merge_managed_set', [$managedContentPage, 'handleFinalizeMerge']);
         add_action('admin_enqueue_scripts', [$settingsPage, 'enqueueAssets']);

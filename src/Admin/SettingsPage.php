@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace PushPull\Admin;
 
+use PushPull\Content\ManagedSetRegistry;
 use PushPull\Persistence\LocalRepositoryResetService;
 use PushPull\Persistence\Migrations\SchemaMigrator;
 use PushPull\Domain\Sync\RemoteRepositoryInitializer;
+use PushPull\Domain\Sync\SyncServiceInterface;
 use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\Exception\UnsupportedProviderException;
 use PushPull\Provider\GitProviderFactoryInterface;
@@ -22,10 +24,13 @@ final class SettingsPage
     public const MENU_SLUG = 'pushpull-settings';
     private const TEST_CONNECTION_ACTION = 'pushpull_test_connection';
     private const RESET_LOCAL_REPOSITORY_ACTION = 'pushpull_reset_local_repository';
+    private const RESET_REMOTE_BRANCH_ACTION = 'pushpull_reset_remote_branch';
     private const INITIALIZE_REMOTE_REPOSITORY_ACTION = 'pushpull_initialize_remote_repository';
 
     public function __construct(
         private readonly SettingsRepository $settingsRepository,
+        private readonly ManagedSetRegistry $managedSetRegistry,
+        private readonly SyncServiceInterface $syncService,
         private readonly GitProviderFactoryInterface $providerFactory,
         private readonly LocalRepositoryResetService $localRepositoryResetService,
         private readonly RemoteRepositoryInitializer $remoteRepositoryInitializer,
@@ -62,7 +67,7 @@ final class SettingsPage
 
         wp_enqueue_style(
             'pushpull-admin',
-            PUSHPULL_PLUGIN_URL . 'assets/css/admin.css',
+            PUSHPULL_PLUGIN_URL . 'plugin-assets/css/admin.css',
             [],
             PUSHPULL_VERSION
         );
@@ -148,12 +153,19 @@ final class SettingsPage
     private function renderDangerZone(): void
     {
         echo '<div class="pushpull-panel">';
-        echo '<h2>' . esc_html__('Local Repository Reset', 'pushpull') . '</h2>';
+        echo '<h2>' . esc_html__('Repository Reset', 'pushpull') . '</h2>';
         echo '<p>' . esc_html__('This clears PushPull local repository state, fetched objects, refs, and conflicts while keeping your saved configuration, operation history, live WordPress content, and remote repository untouched.', 'pushpull') . '</p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the local PushPull repository state? This keeps settings but removes all local commits, fetch data, and conflicts.\');">';
         echo '<input type="hidden" name="action" value="pushpull_reset_local_repository" />';
         wp_nonce_field(self::RESET_LOCAL_REPOSITORY_ACTION);
         submit_button(__('Reset local repository', 'pushpull'), 'delete', 'submit', false);
+        echo '</form>';
+        echo '<hr />';
+        echo '<p>' . esc_html__('This resets the configured remote branch by creating one new commit that removes all tracked files from the branch. It does not rewrite Git history.', 'pushpull') . '</p>';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the remote branch to an empty commit? This will not delete Git history, but it will create one new remote commit that removes all tracked files from the branch.\');">';
+        echo '<input type="hidden" name="action" value="pushpull_reset_remote_branch" />';
+        wp_nonce_field(self::RESET_REMOTE_BRANCH_ACTION);
+        submit_button(__('Reset remote branch', 'pushpull'), 'delete', 'submit', false);
         echo '</form>';
         echo '</div>';
     }
@@ -305,6 +317,44 @@ final class SettingsPage
         );
     }
 
+    public function handleResetRemoteBranch(): void
+    {
+        if (! current_user_can(Capabilities::MANAGE_PLUGIN)) {
+            wp_die(esc_html__('You do not have permission to manage PushPull.', 'pushpull'));
+        }
+
+        check_admin_referer(self::RESET_REMOTE_BRANCH_ACTION);
+
+        $settings = $this->settingsRepository->get();
+        $managedSetKey = $this->branchActionManagedSetKey($settings);
+
+        if ($managedSetKey === null) {
+            $this->redirectWithNotice('error', 'Enable at least one managed set before resetting the remote branch.');
+        }
+
+        try {
+            $result = $this->operationExecutor->run(
+                $managedSetKey,
+                'reset_remote_branch',
+                ['branch' => $settings->branch],
+                fn () => $this->syncService->resetRemote($managedSetKey)
+            );
+        } catch (\RuntimeException | ProviderException $exception) {
+            $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
+            $this->redirectWithNotice('error', $message);
+        }
+
+        $this->redirectWithNotice(
+            'success',
+            sprintf(
+                'Reset remote branch %s to commit %s. The local tracking ref %s was updated.',
+                $result->branch,
+                $result->remoteCommitHash,
+                $result->remoteRefName
+            )
+        );
+    }
+
     private function renderTestConnectionButton(): void
     {
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
@@ -321,6 +371,17 @@ final class SettingsPage
         wp_nonce_field(self::INITIALIZE_REMOTE_REPOSITORY_ACTION);
         submit_button(__('Initialize remote repository', 'pushpull'), 'primary', 'submit', false);
         echo '</form>';
+    }
+
+    private function branchActionManagedSetKey(PushPullSettings $settings): ?string
+    {
+        foreach ($this->managedSetRegistry->all() as $managedSetKey => $_adapter) {
+            if ($settings->isManagedSetEnabled($managedSetKey)) {
+                return $managedSetKey;
+            }
+        }
+
+        return null;
     }
 
     /**

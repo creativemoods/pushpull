@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.5
+Stable tag: 0.0.6
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,45 +17,55 @@ Git-backed content workflows for selected WordPress content domains.
 
 PushPull stores selected WordPress content in a Git repository using a canonical JSON representation instead of raw database dumps.
 
-The current release focuses on one managed domain:
+The current release supports these managed content domains:
 
 1. GenerateBlocks Global Styles (`gblocks_styles`)
+2. GenerateBlocks Conditions (`gblocks_condition`)
+3. WordPress Block Patterns (`wp_block`)
 
 PushPull keeps a local Git-like repository inside WordPress database tables, lets you compare live WordPress content against local and remote snapshots, and supports the full workflow from WordPress:
 
 1. Test the remote GitHub connection
 2. Commit live managed content into the local repository
-3. Fetch remote commits into a local tracking ref
-4. Diff live, local, and remote states
-5. Merge remote changes into the local branch
-6. Resolve conflicts when needed
-7. Apply repository content back into WordPress
-8. Push local commits to GitHub
+3. Initialize an empty remote repository
+4. Fetch remote commits into a local tracking ref
+5. Diff live, local, and remote states
+6. Pull remote changes through fetch + merge
+7. Merge remote changes into the local branch
+8. Resolve conflicts when needed
+9. Apply repository content back into WordPress
+10. Push local commits to GitHub
 
 The plugin also includes:
 
-1. A dedicated operations history screen
+1. A dedicated audit log screen
 2. Local repository reset tooling
 3. Remote branch reset tooling that creates one commit removing all tracked files from the branch
+4. Global and per-domain managed-content views in the admin UI
 
 ## Current scope
 
 This is an early, focused release. At the moment, PushPull is intentionally limited to:
 
 1. GitHub as the implemented remote provider
-2. GenerateBlocks Global Styles as the implemented managed content domain
-3. Canonical JSON files stored in a repository layout under `generateblocks/global-styles/`
+2. Three managed content domains:
+   `generateblocks/global-styles/`
+   `generateblocks/conditions/`
+   `wordpress/block-patterns/`
+3. Canonical JSON storage with one file per managed item plus a `manifest.json` per managed set
 
-It does not yet manage general posts, pages, menus, forms, or arbitrary plugin data.
+It does not yet manage general posts, pages, menus, media, forms, or arbitrary plugin data.
 
 ## How PushPull represents content
 
 PushPull does not use WordPress post IDs as repository identity.
 
-For GenerateBlocks Global Styles it stores:
+For the currently supported managed sets it stores:
 
-1. One canonical JSON file per style
-2. One separate `manifest.json` file that preserves style order and load priority
+1. One canonical JSON file per managed item
+2. One separate `manifest.json` file that preserves logical ordering
+3. Stable logical keys instead of environment-specific database IDs
+4. Recursive placeholder normalization for current-site absolute URLs in post-type-backed content
 
 That design keeps content stable across environments and makes reorder-only changes isolated and easy to review.
 
@@ -94,7 +104,7 @@ In PushPull > Settings:
 2. Enter the repository owner and repository name
 3. Enter the target branch
 4. Enter the API token
-5. Enable `GenerateBlocks Global Styles` in the managed content settings
+5. Enable one or more managed content domains in the managed content settings
 6. Click `Test connection`
 7. Save the settings
 
@@ -114,11 +124,12 @@ You no longer need to create the first commit manually on GitHub before using Pu
 
 The normal workflow is:
 
-1. `Commit` to snapshot the current live GenerateBlocks global styles into the local repository
+1. `Commit` to snapshot the current live managed-set content into the local repository
 2. `Fetch` to import the current remote branch into `refs/remotes/origin/<branch>`
-3. `Merge` to bring fetched remote history into the local branch
-4. `Apply repo to WordPress` when you want the local branch state written back into WordPress
-5. `Push` when you want local commits published to GitHub
+3. Inspect the live/local and local/remote diff views if needed
+4. `Pull` for the common fetch + merge flow, or `Merge` manually after fetch when you want review first
+5. `Apply repo to WordPress` when you want the local branch state written back into WordPress
+6. `Push` when you want local commits published to GitHub
 
 If both local and remote changed, PushPull can persist conflicts, let you resolve them in the admin UI, and then finalize a merge commit.
 
@@ -127,13 +138,32 @@ If both local and remote changed, PushPull can persist conflicts, let you resolv
 1. Make sure `main` is green in GitLab: PHPUnit, PHPCS, PHPStan, package, and PCP.
 2. Choose the next semantic version, for example `0.2.0`.
 3. Run `composer bump-version -- 0.2.0`.
-4. Review the changes in `pushpull.php` and `README.md`.
-5. Commit the version bump.
-6. Create and push a Git tag in the form `v0.2.0` on that commit.
-7. Let GitLab run the tag pipeline.
-8. The package job will build `build/pushpull-0.2.0.zip` from that tagged commit.
-9. Download the ZIP artifact from the tag pipeline and upload it in WordPress.
-10. Verify after upload that WordPress shows the new plugin version correctly.
+4. Update the changelog in `README.md` and `readme.txt` for that version.
+5. Review the changes in `pushpull.php`, `README.md`, and `readme.txt`.
+6. Commit the version bump.
+7. Create and push a Git tag in the form `v0.2.0` on that commit.
+8. Let GitLab run the tag pipeline.
+9. The package job will build `build/pushpull-0.2.0.zip` from that tagged commit.
+10. Download the ZIP artifact from the tag pipeline and upload it in WordPress.
+11. Verify after upload that WordPress shows the new plugin version correctly.
+
+## Changelog
+
+### 0.0.6
+
+1. Fixed branch commits so committing one managed set no longer removes previously committed managed-set content from the same branch.
+2. Reorganized the Managed Content admin UI so branch actions (`Pull`, `Fetch`, `Push`) appear only in the all-managed-sets overview, while per-managed-set views keep only managed-set actions.
+3. Moved remote branch reset into Settings alongside the local repository reset controls.
+4. Added transparent current-site URL placeholder normalization for post-type-backed managed content so environment-local absolute URLs can round-trip across sites.
+5. Split plugin runtime assets from WordPress.org listing assets, with packaging and SVN deploy updated to use the correct directories.
+
+### 0.0.5
+
+1. Added GitHub-backed remote repository support using GitHub's Git Database API.
+2. Added end-to-end commit, fetch, pull, merge, conflict resolution, apply, and push workflows in WordPress admin.
+3. Added local and remote repository reset actions, audit logging, and operation locking.
+4. Added support for multiple managed content domains, including GenerateBlocks conditions and WordPress block patterns.
+5. Added release automation for packaging, Plugin Check, WordPress.org SVN deploy, and public GitHub sync.
 
 ## External services
 
@@ -153,7 +183,7 @@ PushPull sends the following information to GitHub over HTTPS:
 3. Canonical JSON representations of the managed content you choose to commit and push
 4. Commit metadata such as commit messages and, if configured, author name and email
 
-In the current release, the only managed content sent to GitHub is GenerateBlocks Global Styles when you commit and push them.
+In the current release, the managed content sent to GitHub is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, and WordPress Block Patterns.
 
 PushPull does not send your whole WordPress database to GitHub. It only sends the managed content represented by the enabled adapters.
 

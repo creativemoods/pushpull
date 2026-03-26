@@ -65,7 +65,7 @@ final class ManagedContentPage
 
         wp_enqueue_style(
             'pushpull-admin',
-            PUSHPULL_PLUGIN_URL . 'assets/css/admin.css',
+            PUSHPULL_PLUGIN_URL . 'plugin-assets/css/admin.css',
             [],
             PUSHPULL_VERSION
         );
@@ -144,18 +144,9 @@ final class ManagedContentPage
         printf('<h2>%s</h2>', esc_html($managedContentAdapter->getManagedSetLabel()));
         echo '<div class="pushpull-button-grid">';
         $this->renderCommitButton($managedContentAdapter, $managedSetEnabled && $managedContentAdapter->isAvailable());
-        $this->renderPullButton($managedContentAdapter, $managedSetEnabled);
-        $this->renderFetchButton($managedContentAdapter, $managedSetEnabled);
-        $this->renderPushButton($managedContentAdapter, $managedSetEnabled);
         $this->renderMergeButton($managedContentAdapter, $managedSetEnabled);
         $this->renderApplyButton($managedContentAdapter, $managedSetEnabled);
-        $this->renderResetRemoteButton($managedContentAdapter, $managedSetEnabled);
         $this->renderResolveConflictsButton($workingState);
-        printf(
-            '<a class="button button-secondary" href="%s">%s</a>',
-            esc_url('#pushpull-diff'),
-            esc_html__('View diff', 'pushpull')
-        );
         echo '</div>';
         echo '</div>';
 
@@ -208,6 +199,8 @@ final class ManagedContentPage
         $this->statusCard(__('Last local commit', 'pushpull'), $this->localRepository->getHeadCommit($settings->branch)?->hash ?? __('None recorded', 'pushpull'));
         $this->statusCard(__('Branch', 'pushpull'), $settings->branch);
         echo '</div>';
+
+        $this->renderOverviewBranchActions($settings);
 
         echo '<div class="pushpull-panel">';
         echo '<h2>' . esc_html__('All Managed Sets', 'pushpull') . '</h2>';
@@ -305,6 +298,27 @@ final class ManagedContentPage
             }
 
             echo '</details>';
+        }
+
+        echo '</div>';
+    }
+
+    private function renderOverviewBranchActions(\PushPull\Settings\PushPullSettings $settings): void
+    {
+        $managedSetKey = $this->branchActionManagedSetKey($settings);
+        $enabled = $managedSetKey !== null;
+
+        echo '<div class="pushpull-panel">';
+        echo '<h2>' . esc_html__('Branch Actions', 'pushpull') . '</h2>';
+        echo '<p class="description">' . esc_html__('These actions operate on the whole local branch and remote-tracking state across all managed sets.', 'pushpull') . '</p>';
+        echo '<div class="pushpull-button-grid">';
+        $this->renderPullButton($managedSetKey, $enabled);
+        $this->renderFetchButton($managedSetKey, $enabled);
+        $this->renderPushButton($managedSetKey, $enabled);
+        echo '</div>';
+
+        if (! $enabled) {
+            echo '<p class="description">' . esc_html__('Enable at least one managed set in Settings before running branch actions.', 'pushpull') . '</p>';
         }
 
         echo '</div>';
@@ -1128,7 +1142,7 @@ final class ManagedContentPage
         echo '</form>';
     }
 
-    private function renderFetchButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
+    private function renderFetchButton(?string $managedSetKey, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -1141,13 +1155,13 @@ final class ManagedContentPage
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::FETCH_ACTION) . '" />';
-        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::FETCH_ACTION);
         submit_button(__('Fetch', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
     }
 
-    private function renderPullButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
+    private function renderPullButton(?string $managedSetKey, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -1160,7 +1174,7 @@ final class ManagedContentPage
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::PULL_ACTION) . '" />';
-        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::PULL_ACTION);
         submit_button(__('Pull', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
@@ -1185,7 +1199,7 @@ final class ManagedContentPage
         echo '</form>';
     }
 
-    private function renderPushButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
+    private function renderPushButton(?string $managedSetKey, bool $enabled): void
     {
         if (! $enabled) {
             printf(
@@ -1198,7 +1212,7 @@ final class ManagedContentPage
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::PUSH_ACTION) . '" />';
-        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::PUSH_ACTION);
         submit_button(__('Push', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
@@ -1220,25 +1234,6 @@ final class ManagedContentPage
         echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::APPLY_ACTION);
         submit_button(__('Apply repo to WordPress', 'pushpull'), 'secondary', 'submit', false);
-        echo '</form>';
-    }
-
-    private function renderResetRemoteButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
-    {
-        if (! $enabled) {
-            printf(
-                '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
-                esc_html__('Reset remote branch', 'pushpull')
-            );
-
-            return;
-        }
-
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the remote branch to an empty commit? This will not delete Git history, but it will create one new remote commit that removes all tracked files from the branch.\');">';
-        echo '<input type="hidden" name="action" value="' . esc_attr(self::RESET_REMOTE_ACTION) . '" />';
-        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
-        wp_nonce_field(self::RESET_REMOTE_ACTION);
-        submit_button(__('Reset remote branch', 'pushpull'), 'delete', 'submit', false);
         echo '</form>';
     }
 
@@ -1416,6 +1411,17 @@ final class ManagedContentPage
         }
 
         return $managedSetKey;
+    }
+
+    private function branchActionManagedSetKey(\PushPull\Settings\PushPullSettings $settings): ?string
+    {
+        foreach ($this->managedSetRegistry->all() as $managedSetKey => $_adapter) {
+            if ($this->isManagedSetEnabled($settings, $managedSetKey)) {
+                return $managedSetKey;
+            }
+        }
+
+        return null;
     }
 
     private function isManagedSetEnabled(\PushPull\Settings\PushPullSettings $settings, string $managedSetKey): bool
