@@ -57,6 +57,27 @@ final class OperationLockService
         delete_option($lock->optionKey);
     }
 
+    public function restore(string $token): OperationLock
+    {
+        return new OperationLock(self::LOCK_OPTION, $token);
+    }
+
+    public function refresh(OperationLock $lock): void
+    {
+        $existing = get_option($lock->optionKey, null);
+
+        if (! is_array($existing)) {
+            return;
+        }
+
+        if (($existing['token'] ?? null) !== $lock->token) {
+            return;
+        }
+
+        $existing['expiresAt'] = time() + $this->ttlSeconds;
+        update_option($lock->optionKey, $existing, false);
+    }
+
     /**
      * @param array<string, mixed> $payload
      */

@@ -40,6 +40,7 @@ use PushPull\Provider\GitProviderFactory;
 use PushPull\Settings\SettingsRegistrar;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Operations\OperationExecutor;
+use PushPull\Support\Operations\AsyncBranchOperationRunner;
 use PushPull\Support\Operations\OperationLockService;
 
 final class Plugin
@@ -61,7 +62,8 @@ final class Plugin
         $localRepositoryResetService = new LocalRepositoryResetService($wpdb);
         $remoteRepositoryInitializer = new RemoteRepositoryInitializer($providerFactory, $localRepository);
         $operationLogRepository = new OperationLogRepository($wpdb);
-        $operationExecutor = new OperationExecutor($operationLogRepository, new OperationLockService());
+        $operationLockService = new OperationLockService();
+        $operationExecutor = new OperationExecutor($operationLogRepository, $operationLockService);
         $generateBlocksStylesAdapter = new GenerateBlocksGlobalStylesAdapter();
         $generateBlocksConditionsAdapter = new GenerateBlocksConditionsAdapter();
         $wordPressBlockPatternsAdapter = new WordPressBlockPatternsAdapter();
@@ -135,7 +137,15 @@ final class Plugin
             $syncService,
             $workingStateRepository,
             $conflictResolutionService,
-            $operationExecutor
+            $operationExecutor,
+            new AsyncBranchOperationRunner(
+                $operationLogRepository,
+                $operationLockService,
+                $settingsRepository,
+                $localRepository,
+                $providerFactory,
+                $syncService
+            )
         );
         $attachmentSyncField = new AttachmentSyncField();
 
@@ -154,6 +164,8 @@ final class Plugin
         add_action('admin_post_pushpull_merge_managed_set', [$managedContentPage, 'handleMerge']);
         add_action('admin_post_pushpull_apply_managed_set', [$managedContentPage, 'handleApply']);
         add_action('admin_post_pushpull_push_managed_set', [$managedContentPage, 'handlePush']);
+        add_action('wp_ajax_pushpull_start_branch_action', [$managedContentPage, 'handleAjaxStartBranchAction']);
+        add_action('wp_ajax_pushpull_continue_branch_action', [$managedContentPage, 'handleAjaxContinueBranchAction']);
         add_action('admin_post_pushpull_resolve_conflict_managed_set', [$managedContentPage, 'handleResolveConflict']);
         add_action('admin_post_pushpull_finalize_merge_managed_set', [$managedContentPage, 'handleFinalizeMerge']);
         add_action('admin_enqueue_scripts', [$settingsPage, 'enqueueAssets']);

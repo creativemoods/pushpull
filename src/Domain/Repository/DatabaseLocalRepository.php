@@ -5,16 +5,20 @@ declare(strict_types=1);
 namespace PushPull\Domain\Repository;
 
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are internal constants, values still use prepare().
+// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Persistence\TableNames;
 use PushPull\Provider\RemoteBlob;
 use PushPull\Provider\RemoteCommit;
 use PushPull\Provider\RemoteTree;
 use PushPull\Support\Json\CanonicalJson;
+use RuntimeException;
 use wpdb;
 
 final class DatabaseLocalRepository implements LocalRepositoryInterface
 {
+    private const BLOB_ENCODING_PREFIX = 'base64:';
+
     private readonly TableNames $tables;
 
     public function __construct(private readonly wpdb $wpdb)
@@ -43,17 +47,22 @@ final class DatabaseLocalRepository implements LocalRepositoryInterface
         }
 
         $now = $this->now();
+        $storedContent = $this->encodeStoredBlobContent($content);
 
-        $this->wpdb->insert(
+        $inserted = $this->wpdb->insert(
             $this->tables->repoBlobs(),
             [
                 'hash' => $hash,
-                'content' => $content,
+                'content' => $storedContent,
                 'size' => strlen($content),
                 'created_at' => $now,
             ],
             ['%s', '%s', '%d', '%s']
         );
+
+        if ($inserted === false) {
+            throw new RuntimeException(sprintf('Failed to store local blob %s.', $hash));
+        }
 
         return new Blob($hash, $content, strlen($content), $now);
     }
@@ -72,9 +81,11 @@ final class DatabaseLocalRepository implements LocalRepositoryInterface
             return null;
         }
 
+        $content = $this->decodeStoredBlobContent((string) $row['content']);
+
         return new Blob(
             (string) $row['hash'],
-            (string) $row['content'],
+            $content,
             (int) $row['size'],
             (string) $row['created_at']
         );
@@ -89,18 +100,43 @@ final class DatabaseLocalRepository implements LocalRepositoryInterface
         }
 
         $now = $this->now();
-        $this->wpdb->insert(
+        $storedContent = $this->encodeStoredBlobContent($remoteBlob->content);
+        $inserted = $this->wpdb->insert(
             $this->tables->repoBlobs(),
             [
                 'hash' => $remoteBlob->hash,
-                'content' => $remoteBlob->content,
+                'content' => $storedContent,
                 'size' => strlen($remoteBlob->content),
                 'created_at' => $now,
             ],
             ['%s', '%s', '%d', '%s']
         );
 
+        if ($inserted === false) {
+            throw new RuntimeException(sprintf('Failed to import remote blob %s.', $remoteBlob->hash));
+        }
+
         return new Blob($remoteBlob->hash, $remoteBlob->content, strlen($remoteBlob->content), $now);
+    }
+
+    private function encodeStoredBlobContent(string $content): string
+    {
+        return self::BLOB_ENCODING_PREFIX . base64_encode($content);
+    }
+
+    private function decodeStoredBlobContent(string $storedContent): string
+    {
+        if (! str_starts_with($storedContent, self::BLOB_ENCODING_PREFIX)) {
+            return $storedContent;
+        }
+
+        $decoded = base64_decode(substr($storedContent, strlen(self::BLOB_ENCODING_PREFIX)), true);
+
+        if (! is_string($decoded)) {
+            throw new RuntimeException('Stored blob content could not be decoded.');
+        }
+
+        return $decoded;
     }
 
     public function storeTree(array $entries): Tree

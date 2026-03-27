@@ -18,6 +18,7 @@ use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\Exception\ProviderException;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Capabilities;
+use PushPull\Support\Operations\AsyncBranchOperationRunner;
 use PushPull\Support\Operations\OperationExecutor;
 use RuntimeException;
 
@@ -41,7 +42,8 @@ final class ManagedContentPage
         private readonly SyncServiceInterface $syncService,
         private readonly WorkingStateRepository $workingStateRepository,
         private readonly ManagedSetConflictResolutionService $conflictResolutionService,
-        private readonly OperationExecutor $operationExecutor
+        private readonly OperationExecutor $operationExecutor,
+        private readonly AsyncBranchOperationRunner $asyncBranchOperationRunner
     ) {
     }
 
@@ -69,6 +71,25 @@ final class ManagedContentPage
             [],
             PUSHPULL_VERSION
         );
+
+        wp_enqueue_script(
+            'pushpull-managed-content',
+            PUSHPULL_PLUGIN_URL . 'plugin-assets/js/managed-content.js',
+            [],
+            PUSHPULL_VERSION,
+            true
+        );
+        wp_localize_script('pushpull-managed-content', 'pushpullManagedContent', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'ajaxNonce' => wp_create_nonce('pushpull_async_branch_action'),
+            'strings' => [
+                'working' => __('Working…', 'pushpull'),
+                'close' => __('Close', 'pushpull'),
+                'failed' => __('The PushPull operation could not be completed.', 'pushpull'),
+                /* translators: %d: completion percentage. */
+                'progressPercent' => __('%d% complete', 'pushpull'),
+            ],
+        ]);
     }
 
     public function render(): void
@@ -97,6 +118,7 @@ final class ManagedContentPage
         } else {
             $this->renderManagedSetDetail($settings, $this->currentAdapter());
         }
+        $this->renderAsyncOperationModal();
         echo '</div>';
     }
 
@@ -787,7 +809,7 @@ final class ManagedContentPage
         $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
         if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
-            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), null);
         }
 
         if (! $managedContentAdapter->isAvailable()) {
@@ -845,7 +867,7 @@ final class ManagedContentPage
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message, $managedSetKey);
+            $this->redirectWithNotice('error', $message, null);
         }
 
         $message = sprintf(
@@ -860,7 +882,76 @@ final class ManagedContentPage
             count($result->traversedBlobHashes)
         );
 
-        $this->redirectWithNotice('success', $message, $managedSetKey);
+        $this->redirectWithNotice('success', $message, null);
+    }
+
+    public function handleAjaxStartBranchAction(): void
+    {
+        if (! current_user_can(Capabilities::MANAGE_PLUGIN)) {
+            wp_send_json_error(['message' => __('You do not have permission to manage PushPull.', 'pushpull')], 403);
+        }
+
+        check_ajax_referer('pushpull_async_branch_action', 'nonce');
+
+        $operationType = isset($_POST['operation_type']) ? sanitize_key(wp_unslash((string) $_POST['operation_type'])) : '';
+        $managedSetKey = isset($_POST['managed_set']) ? sanitize_key(wp_unslash((string) $_POST['managed_set'])) : '';
+
+        if ($managedSetKey === '' || ! $this->managedSetRegistry->has($managedSetKey)) {
+            wp_send_json_error(['message' => __('The managed set is not supported.', 'pushpull')], 400);
+        }
+
+        $settings = $this->settingsRepository->get();
+        $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
+
+        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+            wp_send_json_error(['message' => sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel())], 400);
+        }
+
+        try {
+            $started = $this->asyncBranchOperationRunner->start($managedSetKey, $operationType);
+        } catch (ProviderException | RuntimeException $exception) {
+            $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
+            wp_send_json_error(['message' => $message], 400);
+        }
+
+        wp_send_json_success([
+            'operationId' => $started['operationId'],
+            'message' => $started['progressMessage'],
+            'done' => $started['done'],
+            'status' => $started['status'] ?? 'running',
+            'redirectUrl' => $started['redirectUrl'] ?? null,
+            'progress' => $started['progress'],
+        ]);
+    }
+
+    public function handleAjaxContinueBranchAction(): void
+    {
+        if (! current_user_can(Capabilities::MANAGE_PLUGIN)) {
+            wp_send_json_error(['message' => __('You do not have permission to manage PushPull.', 'pushpull')], 403);
+        }
+
+        check_ajax_referer('pushpull_async_branch_action', 'nonce');
+
+        $operationId = isset($_POST['operation_id']) ? absint(wp_unslash((string) $_POST['operation_id'])) : 0;
+
+        if ($operationId <= 0) {
+            wp_send_json_error(['message' => __('The async operation could not be found.', 'pushpull')], 400);
+        }
+
+        try {
+            $response = $this->asyncBranchOperationRunner->continue($operationId);
+        } catch (ProviderException | RuntimeException $exception) {
+            $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
+            wp_send_json_error(['message' => $message], 400);
+        }
+
+        if (! $response['done']) {
+            wp_send_json_success($response);
+        }
+
+        wp_send_json_success($response + [
+            'redirectUrl' => $this->noticeUrl($response['status'], $response['message'], null),
+        ]);
     }
 
     public function handlePull(): void
@@ -876,7 +967,7 @@ final class ManagedContentPage
         $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
         if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
-            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), null);
         }
 
         try {
@@ -888,7 +979,7 @@ final class ManagedContentPage
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message, $managedSetKey);
+            $this->redirectWithNotice('error', $message, null);
         }
 
         $mergeMessage = match ($result->mergeResult->status) {
@@ -906,7 +997,7 @@ final class ManagedContentPage
             $mergeMessage
         );
 
-        $this->redirectWithNotice($result->mergeResult->hasConflicts() ? 'error' : 'success', $message, $managedSetKey);
+        $this->redirectWithNotice($result->mergeResult->hasConflicts() ? 'error' : 'success', $message, null);
     }
 
     public function handleMerge(): void
@@ -922,7 +1013,7 @@ final class ManagedContentPage
         $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
         if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
-            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
+            $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), null);
         }
 
         try {
@@ -934,7 +1025,7 @@ final class ManagedContentPage
             );
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
-            $this->redirectWithNotice('error', $message, $managedSetKey);
+            $this->redirectWithNotice('error', $message, null);
         }
 
         $message = match ($result->status) {
@@ -985,7 +1076,7 @@ final class ManagedContentPage
             count($result->deletedLogicalKeys)
         );
 
-        $this->redirectWithNotice('success', $message, $managedSetKey);
+        $this->redirectWithNotice('success', $message, null);
     }
 
     public function handlePush(): void
@@ -1168,7 +1259,7 @@ final class ManagedContentPage
             return;
         }
 
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="fetch" data-pushpull-async-label="' . esc_attr__('Fetch', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::FETCH_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::FETCH_ACTION);
@@ -1187,7 +1278,7 @@ final class ManagedContentPage
             return;
         }
 
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="pull" data-pushpull-async-label="' . esc_attr__('Pull', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::PULL_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::PULL_ACTION);
@@ -1225,7 +1316,7 @@ final class ManagedContentPage
             return;
         }
 
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="push" data-pushpull-async-label="' . esc_attr__('Push', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::PUSH_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::PUSH_ACTION);
@@ -1519,18 +1610,42 @@ final class ManagedContentPage
 
     private function redirectWithNotice(string $status, string $message, ?string $managedSetKey = null): never
     {
-        $url = add_query_arg(
-            [
-                'page' => self::MENU_SLUG,
-                'managed_set' => $managedSetKey ?? $this->currentAdapter()->getManagedSetKey(),
-                'pushpull_commit_status' => $status,
-                'pushpull_commit_message' => $message,
-            ],
-            admin_url('admin.php')
-        );
-
-        wp_safe_redirect($url);
+        wp_safe_redirect($this->noticeUrl($status, $message, $managedSetKey));
         exit;
+    }
+
+    private function noticeUrl(string $status, string $message, ?string $managedSetKey = null): string
+    {
+        $queryArgs = [
+            'page' => self::MENU_SLUG,
+            'pushpull_commit_status' => $status,
+            'pushpull_commit_message' => $message,
+        ];
+
+        if ($managedSetKey !== null) {
+            $queryArgs['managed_set'] = $managedSetKey;
+        }
+
+        return add_query_arg($queryArgs, admin_url('admin.php'));
+    }
+
+    private function renderAsyncOperationModal(): void
+    {
+        echo '<div class="pushpull-async-modal" hidden="hidden">';
+        echo '<div class="pushpull-async-modal__backdrop"></div>';
+        echo '<div class="pushpull-async-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="pushpull-async-modal-title">';
+        echo '<h2 id="pushpull-async-modal-title">' . esc_html__('Working…', 'pushpull') . '</h2>';
+        echo '<p class="pushpull-async-modal__message">' . esc_html__('Preparing operation…', 'pushpull') . '</p>';
+        echo '<div class="pushpull-async-modal__progress" hidden="hidden">';
+        echo '<div class="pushpull-async-modal__progress-bar is-indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">';
+        echo '<span class="pushpull-async-modal__progress-fill"></span>';
+        echo '</div>';
+        echo '<p class="pushpull-async-modal__progress-label"></p>';
+        echo '</div>';
+        echo '<div class="pushpull-async-modal__spinner" aria-hidden="true"></div>';
+        echo '<button type="button" class="button button-secondary pushpull-async-modal__close" hidden="hidden">' . esc_html__('Close', 'pushpull') . '</button>';
+        echo '</div>';
+        echo '</div>';
     }
 
     private function mergeStateSummary(?\PushPull\Persistence\WorkingState\WorkingStateRecord $workingState): string

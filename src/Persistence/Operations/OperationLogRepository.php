@@ -59,6 +59,14 @@ final class OperationLogRepository
         return $this->updateStatus($operationId, self::STATUS_FAILED, $result);
     }
 
+    /**
+     * @param array<string, mixed> $result
+     */
+    public function updateRunning(int $operationId, array $result = []): OperationRecord
+    {
+        return $this->replaceRecord($operationId, self::STATUS_RUNNING, $result, null);
+    }
+
     public function find(int $operationId): ?OperationRecord
     {
         $row = $this->wpdb->get_row(
@@ -110,6 +118,14 @@ final class OperationLogRepository
      */
     private function updateStatus(int $operationId, string $status, array $result): OperationRecord
     {
+        return $this->replaceRecord($operationId, $status, $result, current_time('mysql', true));
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     */
+    private function replaceRecord(int $operationId, string $status, array $result, ?string $finishedAt): OperationRecord
+    {
         $record = $this->find($operationId);
 
         if ($record === null) {
@@ -125,7 +141,7 @@ final class OperationLogRepository
             'result' => $result === [] ? null : wp_json_encode($result),
             'created_by' => $record->createdBy,
             'created_at' => $record->createdAt,
-            'finished_at' => current_time('mysql', true),
+            'finished_at' => $finishedAt,
         ]);
 
         return $this->find($operationId)

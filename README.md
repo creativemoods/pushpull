@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.8
+Stable tag: 0.0.9
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -156,6 +156,13 @@ If both local and remote changed, PushPull can persist conflicts, let you resolv
 11. Verify after upload that WordPress shows the new plugin version correctly.
 
 ## Changelog
+
+### 0.0.9
+
+1. Added asynchronous branch actions in the `All Managed Sets` overview so `Fetch`, `Pull`, and `Push` no longer rely on a blocking full-page POST flow.
+2. Added modal-based operation progress UI, with indeterminate progress for fetch and determinate progress for push.
+3. Added a first-commit guard so PushPull now requires `Fetch` before creating the first local commit when the remote branch already has history.
+4. Fixed push planning so unchanged remote objects are reused in the normal linear-history case instead of being counted and uploaded again.
 
 ### 0.0.8
 

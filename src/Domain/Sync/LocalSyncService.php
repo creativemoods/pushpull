@@ -19,6 +19,7 @@ use PushPull\Domain\Push\PushManagedSetResult;
 use PushPull\Domain\Push\RemoteBranchResetService;
 use PushPull\Domain\Push\ResetRemoteBranchResult;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
+use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\GitProviderFactoryInterface;
 use PushPull\Provider\GitRemoteConfig;
 use PushPull\Settings\SettingsRepository;
@@ -54,6 +55,7 @@ final class LocalSyncService implements SyncServiceInterface
     {
         $adapter = $this->requireAdapter($managedSetKey);
         $committer = $this->requireCommitter($managedSetKey);
+        $this->guardAgainstUnfetchedRemoteBootstrap($request->branch);
 
         return $committer->commitSnapshot(
             $adapter->exportSnapshot(),
@@ -159,6 +161,43 @@ final class LocalSyncService implements SyncServiceInterface
         }
 
         return $this->applyServicesByManagedSetKey[$managedSetKey];
+    }
+
+    private function guardAgainstUnfetchedRemoteBootstrap(string $branch): void
+    {
+        $localRef = $this->localRepository->getRef('refs/heads/' . $branch);
+
+        if ($localRef !== null && $localRef->commitHash !== '') {
+            return;
+        }
+
+        $trackingRef = $this->localRepository->getRef('refs/remotes/origin/' . $branch);
+
+        if ($trackingRef !== null && $trackingRef->commitHash !== '') {
+            return;
+        }
+
+        $settings = $this->settingsRepository->get();
+        [$provider, $remoteConfig] = $this->resolveValidatedProvider($settings);
+
+        try {
+            $remoteRef = $provider->getRef($remoteConfig, 'refs/heads/' . $branch);
+        } catch (ProviderException $exception) {
+            if ($exception->category === ProviderException::EMPTY_REPOSITORY) {
+                return;
+            }
+
+            throw $exception;
+        }
+
+        if ($remoteRef === null || $remoteRef->commitHash === '') {
+            return;
+        }
+
+        throw new RuntimeException(sprintf(
+            'Remote branch %s already has commits. Fetch it before creating the first local commit.',
+            $branch
+        ));
     }
 
     /**
