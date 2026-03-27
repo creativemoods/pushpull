@@ -14,7 +14,10 @@ interface WordPressManagedContentAdapterInterface extends ManifestManagedContent
 
     public function upsertItem(ManagedContentItem $item, int $menuOrder, ?int $existingId): int;
 
-    public function persistItemMeta(int $postId, ManagedContentItem $item): void;
+    /**
+     * @param array<string, string> $snapshotFiles
+     */
+    public function persistItemMeta(int $postId, ManagedContentItem $item, array $snapshotFiles = []): void;
 
     /**
      * @param array<string, true> $desiredLogicalKeys

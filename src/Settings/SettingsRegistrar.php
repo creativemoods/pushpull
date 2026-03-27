@@ -176,6 +176,9 @@ final class SettingsRegistrar
             'generateblocks_global_styles' => 'GenerateBlocks global styles',
             'generateblocks_conditions' => 'GenerateBlocks conditions',
             'wordpress_block_patterns' => 'WordPress block patterns',
+            'wordpress_attachments' => 'WordPress attachments',
+            'wordpress_custom_css' => 'WordPress custom CSS',
+            'wordpress_pages' => 'WordPress pages',
         ];
 
         foreach ($options as $managedSetKey => $label) {

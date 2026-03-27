@@ -38,21 +38,19 @@ final class ManagedSetApplyService
             throw new RuntimeException(sprintf('Local branch %s does not have a commit to apply.', $settings->branch));
         }
 
-        $manifestContent = $state->files[$this->adapter->getManifestPath()]->content ?? null;
-        if ($manifestContent === null) {
-            throw new RuntimeException('Managed set manifest is missing from the local branch.');
-        }
+        $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($this->managedSetFiles($state->files));
+        $items = [];
 
-        $manifest = $this->adapter->parseManifest($manifestContent);
-        $items = $this->readItems($state->files);
-        $this->adapter->validateManifest($manifest, array_values($items));
+        foreach ($snapshot->items as $item) {
+            $items[$item->logicalKey] = $item;
+        }
 
         $createdCount = 0;
         $updatedCount = 0;
         $appliedIds = [];
         $desiredLogicalKeys = [];
 
-        foreach ($manifest->orderedLogicalKeys as $menuOrder => $logicalKey) {
+        foreach ($snapshot->orderedLogicalKeys as $menuOrder => $logicalKey) {
             $item = $items[$logicalKey] ?? null;
 
             if ($item === null) {
@@ -69,7 +67,7 @@ final class ManagedSetApplyService
                 $updatedCount++;
             }
 
-            $this->adapter->persistItemMeta($postId, $item);
+            $this->adapter->persistItemMeta($postId, $item, $snapshot->files);
             $this->contentMapRepository->upsert(
                 $item->managedSetKey,
                 $item->contentType,
@@ -95,24 +93,23 @@ final class ManagedSetApplyService
 
     /**
      * @param array<string, \PushPull\Domain\Diff\CanonicalManagedFile> $files
-     * @return array<string, ManagedContentItem>
+     * @return array<string, string>
      */
-    private function readItems(array $files): array
+    private function managedSetFiles(array $files): array
     {
-        $items = [];
+        $managedSetFiles = [];
 
         foreach ($files as $path => $file) {
-            if ($path === $this->adapter->getManifestPath() || ! $this->adapter->isManagedItemPath($path)) {
+            if (! $this->adapter->ownsRepositoryPath($path)) {
                 continue;
             }
 
-            $item = $this->adapter->deserialize($path, $file->content);
-            $items[$item->logicalKey] = $item;
+            $managedSetFiles[$path] = $file->content;
         }
 
-        ksort($items);
+        ksort($managedSetFiles);
 
-        return $items;
+        return $managedSetFiles;
     }
 
     private function resolveExistingWpObjectId(ManagedContentItem $item): ?int

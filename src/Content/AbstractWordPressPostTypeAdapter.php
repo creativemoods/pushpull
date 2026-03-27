@@ -52,7 +52,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
             'restoration' => [
                 'postType' => $this->postType(),
             ],
-            'postMeta' => $this->normalizeMetaEntries($record['post_meta'] ?? []),
+            'postMeta' => $this->normalizePostMetaEntries($record['post_meta'] ?? []),
             'terms' => $this->normalizeTermAssignments($record['terms'] ?? []),
         ];
     }
@@ -68,6 +68,16 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
     protected function includePostInExport(WP_Post $post): bool
     {
         return true;
+    }
+
+    protected function shouldExportPostMetaKey(string $metaKey): bool
+    {
+        return true;
+    }
+
+    protected function shouldManagePostMetaKey(string $metaKey): bool
+    {
+        return $this->shouldExportPostMetaKey($metaKey);
     }
 
     /**
@@ -137,6 +147,41 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         $this->validateManifest($manifest, $items);
 
         return $this->buildSnapshot($records, $manifest);
+    }
+
+    /**
+     * @param array<string, string> $files
+     */
+    public function readSnapshotFromRepositoryFiles(array $files): ManagedContentSnapshot
+    {
+        $manifestContent = $files[$this->getManifestPath()] ?? null;
+
+        if ($manifestContent === null) {
+            throw new ManagedContentExportException('Managed set manifest is missing from the local branch.');
+        }
+
+        $manifest = $this->parseManifest($manifestContent);
+        $items = [];
+
+        foreach ($files as $path => $content) {
+            if ($path === $this->getManifestPath() || ! $this->isManagedItemPath($path)) {
+                continue;
+            }
+
+            $item = $this->deserialize($path, $content);
+            $items[$item->logicalKey] = $item;
+        }
+
+        ksort($items);
+        $this->validateManifest($manifest, array_values($items));
+
+        return new ManagedContentSnapshot(
+            array_values($items),
+            $manifest,
+            $files,
+            $manifest->orderedLogicalKeys,
+            false
+        );
     }
 
     public function exportByLogicalKey(string $logicalKey): ?ManagedContentItem
@@ -417,13 +462,13 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         return (int) wp_insert_post($postData);
     }
 
-    public function persistItemMeta(int $postId, ManagedContentItem $item): void
+    public function persistItemMeta(int $postId, ManagedContentItem $item, array $snapshotFiles = []): void
     {
         foreach ($this->currentPostMetaKeys($postId) as $metaKey) {
             delete_post_meta($postId, $metaKey);
         }
 
-        foreach ($this->normalizeMetaEntries($item->metadata['postMeta'] ?? []) as $entry) {
+        foreach ($this->normalizePostMetaEntries($item->metadata['postMeta'] ?? []) as $entry) {
             add_post_meta($postId, $entry['key'], wp_slash($entry['value']));
         }
 
@@ -484,6 +529,10 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         }
 
         foreach ($allMeta as $metaKey => $values) {
+            if (! $this->shouldExportPostMetaKey((string) $metaKey)) {
+                continue;
+            }
+
             if (! is_array($values)) {
                 continue;
             }
@@ -618,6 +667,17 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
     }
 
     /**
+     * @return array<int, array{key: string, value: mixed}>
+     */
+    protected function normalizePostMetaEntries(mixed $entries): array
+    {
+        return array_values(array_filter(
+            $this->normalizeMetaEntries($entries),
+            fn (array $entry): bool => $this->shouldExportPostMetaKey($entry['key'])
+        ));
+    }
+
+    /**
      * @return array<int, array{taxonomy: string, slug: string, name: string, description: string, parentSlug: string, termMeta: array<int, array{key: string, value: mixed}>}>
      */
     protected function normalizeTermAssignments(mixed $terms): array
@@ -671,6 +731,10 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         }
 
         $keys = array_map('strval', array_keys($allMeta));
+        $keys = array_values(array_filter(
+            $keys,
+            fn (string $metaKey): bool => $this->shouldManagePostMetaKey($metaKey)
+        ));
         sort($keys);
 
         return $keys;

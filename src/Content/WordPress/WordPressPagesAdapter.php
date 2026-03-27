@@ -2,25 +2,19 @@
 
 declare(strict_types=1);
 
-namespace PushPull\Content\GenerateBlocks;
+namespace PushPull\Content\WordPress;
 
 use PushPull\Content\AbstractWordPressPostTypeAdapter;
 use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedContentSnapshot;
 
-final class WordPressBlockPatternsAdapter extends AbstractWordPressPostTypeAdapter
+final class WordPressPagesAdapter extends AbstractWordPressPostTypeAdapter
 {
-    private const MANAGED_SET_KEY = 'wordpress_block_patterns';
-    private const CONTENT_TYPE = 'wordpress_block_pattern';
-    private const MANIFEST_TYPE = 'wordpress_block_patterns_manifest';
-    private const POST_TYPE = 'wp_block';
-    private const PATH_PREFIX = 'wordpress/block-patterns';
-    /** @var string[] */
-    private const OWNED_POST_META_KEYS = [
-        '_generateblocks_dynamic_css_version',
-        'generateblocks_patterns_tree',
-        'wp_pattern_sync_status',
-    ];
+    private const MANAGED_SET_KEY = 'wordpress_pages';
+    private const CONTENT_TYPE = 'wordpress_page';
+    private const MANIFEST_TYPE = 'wordpress_pages_manifest';
+    private const POST_TYPE = 'page';
+    private const PATH_PREFIX = 'wordpress/pages';
 
     protected function managedSetKey(): string
     {
@@ -29,7 +23,7 @@ final class WordPressBlockPatternsAdapter extends AbstractWordPressPostTypeAdapt
 
     protected function managedSetLabel(): string
     {
-        return 'WordPress block patterns';
+        return 'WordPress pages';
     }
 
     protected function contentType(): string
@@ -54,12 +48,25 @@ final class WordPressBlockPatternsAdapter extends AbstractWordPressPostTypeAdapt
 
     protected function commitMessage(): string
     {
-        return 'Commit live WordPress block patterns';
+        return 'Commit live WordPress pages';
     }
 
     protected function shouldExportPostMetaKey(string $metaKey): bool
     {
-        return in_array($metaKey, self::OWNED_POST_META_KEYS, true);
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     * @return array<string, mixed>
+     */
+    protected function buildMetadata(array $record): array
+    {
+        return [
+            'restoration' => [
+                'postType' => $this->postType(),
+            ],
+        ];
     }
 
     /**
@@ -73,6 +80,6 @@ final class WordPressBlockPatternsAdapter extends AbstractWordPressPostTypeAdapt
             $items[] = $this->buildItemFromRuntimeRecord($record);
         }
 
-        return new WordPressBlockPatternsSnapshot($items, $manifest);
+        return new WordPressPagesSnapshot($items, $manifest);
     }
 }

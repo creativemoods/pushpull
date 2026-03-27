@@ -8,6 +8,11 @@ interface ManifestManagedContentAdapterInterface extends ManagedContentAdapterIn
 {
     public function exportSnapshot(): ManagedContentSnapshot;
 
+    /**
+     * @param array<string, string> $files
+     */
+    public function readSnapshotFromRepositoryFiles(array $files): ManagedContentSnapshot;
+
     public function getManifestPath(): string;
 
     public function ownsRepositoryPath(string $path): bool;

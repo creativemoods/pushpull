@@ -45,13 +45,9 @@ final class ManagedSetDiffService
         $snapshot = $this->adapter->exportSnapshot();
         $files = [];
 
-        foreach ($snapshot->items as $item) {
-            $path = $this->adapter->getRepositoryPath($item);
-            $files[$path] = new CanonicalManagedFile($path, $this->adapter->serialize($item));
+        foreach ($this->snapshotFiles($snapshot) as $path => $content) {
+            $files[$path] = new CanonicalManagedFile($path, $content);
         }
-
-        $manifestPath = $this->adapter->getManifestPath();
-        $files[$manifestPath] = new CanonicalManagedFile($manifestPath, $this->adapter->serializeManifest($snapshot->manifest));
         ksort($files);
 
         return new CanonicalManagedState(
@@ -194,14 +190,33 @@ final class ManagedSetDiffService
     {
         $parts = [];
 
-        foreach ($snapshot->items as $item) {
-            $parts[] = $this->adapter->getRepositoryPath($item) . "\n" . $this->adapter->serialize($item);
+        foreach ($this->snapshotFiles($snapshot) as $path => $content) {
+            $parts[] = $path . "\n" . $content;
         }
-
-        $parts[] = $this->adapter->getManifestPath() . "\n" . $this->adapter->serializeManifest($snapshot->manifest);
         sort($parts);
 
         return implode("\n", $parts);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function snapshotFiles(ManagedContentSnapshot $snapshot): array
+    {
+        if ($snapshot->repositoryFilesAuthoritative) {
+            return $snapshot->files;
+        }
+
+        $files = [];
+
+        foreach ($snapshot->items as $item) {
+            $files[$this->adapter->getRepositoryPath($item)] = $this->adapter->serialize($item);
+        }
+
+        $files[$this->adapter->getManifestPath()] = $this->adapter->serializeManifest($snapshot->manifest);
+        ksort($files);
+
+        return $files;
     }
 
     private function filterStateToManagedSet(CanonicalManagedState $state): CanonicalManagedState

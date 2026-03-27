@@ -9,6 +9,7 @@ namespace PushPull\Content\GenerateBlocks;
 use PushPull\Content\Exception\ManagedContentExportException;
 use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedContentItem;
+use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\WordPressManagedContentAdapterInterface;
 use PushPull\Support\Json\CanonicalJson;
 use WP_Post;
@@ -81,6 +82,41 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
         }
 
         return $this->snapshotFromRuntimeRecords($records);
+    }
+
+    /**
+     * @param array<string, string> $files
+     */
+    public function readSnapshotFromRepositoryFiles(array $files): ManagedContentSnapshot
+    {
+        $manifestContent = $files[$this->getManifestPath()] ?? null;
+
+        if ($manifestContent === null) {
+            throw new ManagedContentExportException('Managed set manifest is missing from the local branch.');
+        }
+
+        $manifest = $this->parseManifest($manifestContent);
+        $items = [];
+
+        foreach ($files as $path => $content) {
+            if ($path === $this->getManifestPath() || ! $this->isManagedItemPath($path)) {
+                continue;
+            }
+
+            $item = $this->deserialize($path, $content);
+            $items[$item->logicalKey] = $item;
+        }
+
+        ksort($items);
+        $this->validateManifest($manifest, array_values($items));
+
+        return new ManagedContentSnapshot(
+            array_values($items),
+            $manifest,
+            $files,
+            $manifest->orderedLogicalKeys,
+            false
+        );
     }
 
     /**
@@ -408,7 +444,7 @@ final class GenerateBlocksGlobalStylesAdapter implements WordPressManagedContent
         return (int) wp_insert_post($postData);
     }
 
-    public function persistItemMeta(int $postId, ManagedContentItem $item): void
+    public function persistItemMeta(int $postId, ManagedContentItem $item, array $snapshotFiles = []): void
     {
         update_post_meta($postId, 'gb_style_selector', $item->selector);
         update_post_meta($postId, 'gb_style_data', $item->payload);

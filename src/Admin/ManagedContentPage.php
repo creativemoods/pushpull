@@ -390,7 +390,8 @@ final class ManagedContentPage
         }
 
         try {
-            $items = $managedContentAdapter->exportAll();
+            $snapshot = $managedContentAdapter->exportSnapshot();
+            $items = $snapshot->items;
         } catch (ManagedContentExportException $exception) {
             return [
                 'summary' => $exception->getMessage(),
@@ -404,7 +405,21 @@ final class ManagedContentPage
             $paths[] = $managedContentAdapter->getRepositoryPath($item);
         }
 
-        $paths[] = $managedContentAdapter->getManifestPath();
+        if ($snapshot->repositoryFilesAuthoritative) {
+            foreach (array_keys($snapshot->files) as $path) {
+                if (in_array($path, $paths, true)) {
+                    continue;
+                }
+
+                $paths[] = $path;
+
+                if (count($paths) >= 6) {
+                    break;
+                }
+            }
+        } else {
+            $paths[] = $managedContentAdapter->getManifestPath();
+        }
 
         return [
             'summary' => sprintf(

@@ -27,8 +27,10 @@ final class WordPressBlockPatternsAdapterTest extends TestCase
         self::assertStringContainsString('"postMeta"', $json);
         self::assertStringContainsString('"terms"', $json);
         self::assertStringContainsString('"generateblocks_patterns_tree"', $json);
+        self::assertStringContainsString('"wp_pattern_sync_status"', $json);
         self::assertStringContainsString('"taxonomy": "language"', $json);
         self::assertStringContainsString('"type": "wordpress_block_pattern"', $json);
+        self::assertStringNotContainsString('"_wpml_word_count"', $json);
     }
 
     public function testSerializationNormalizesCurrentEnvironmentUrlsToPlaceholders(): void
@@ -105,6 +107,8 @@ JSON
             'post_modified' => '2025-12-03 11:37:24',
             'post_meta' => [
                 ['meta_key' => '_generateblocks_dynamic_css_version', 'meta_value' => '2.1.2'],
+                ['meta_key' => 'wp_pattern_sync_status', 'meta_value' => 'unsynced'],
+                ['meta_key' => '_wpml_word_count', 'meta_value' => '44'],
                 ['meta_key' => 'generateblocks_patterns_tree', 'meta_value' => ['id' => 'pattern-22458', 'label' => 'LockedCard']],
             ],
             'terms' => [

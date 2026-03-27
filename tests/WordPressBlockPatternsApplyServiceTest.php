@@ -58,6 +58,7 @@ final class WordPressBlockPatternsApplyServiceTest extends TestCase
                 'post_modified' => '2025-12-03 11:37:24',
                 'post_meta' => [
                     ['meta_key' => '_generateblocks_dynamic_css_version', 'meta_value' => '2.1.2'],
+                    ['meta_key' => 'wp_pattern_sync_status', 'meta_value' => 'synced'],
                     ['meta_key' => 'generateblocks_patterns_tree', 'meta_value' => ['id' => 'pattern-22458', 'label' => 'LockedCard']],
                 ],
                 'terms' => [
@@ -108,6 +109,7 @@ final class WordPressBlockPatternsApplyServiceTest extends TestCase
         self::assertSame('lockedcard', $post->post_name);
         self::assertSame('<!-- wp:paragraph --><p>Pattern content</p><!-- /wp:paragraph -->', $post->post_content);
         self::assertSame('2.1.2', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_generateblocks_dynamic_css_version'][0]);
+        self::assertSame('synced', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['wp_pattern_sync_status'][0]);
         self::assertSame(['id' => 'pattern-22458', 'label' => 'LockedCard'], $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['generateblocks_patterns_tree'][0]);
 
         self::assertCount(1, $GLOBALS['pushpull_test_terms']['gblocks_pattern_collections'] ?? []);
@@ -174,5 +176,65 @@ final class WordPressBlockPatternsApplyServiceTest extends TestCase
             'var(u002du002dbase-3)',
             $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['generateblocks_patterns_tree'][0][0]['pattern']
         );
+    }
+
+    public function testApplyPreservesUnmanagedMetaKeysOnExistingPost(): void
+    {
+        $GLOBALS['pushpull_test_generateblocks_posts'][] = new \WP_Post(
+            99,
+            'LockedCard',
+            'lockedcard',
+            'publish',
+            0,
+            'wp_block',
+            '<!-- wp:paragraph --><p>Old</p><!-- /wp:paragraph -->'
+        );
+        $GLOBALS['pushpull_test_generateblocks_meta'][99] = [
+            '_wpml_word_count' => ['44'],
+            '_generateblocks_dynamic_css_version' => ['1.0.0'],
+            'wp_pattern_sync_status' => ['synced'],
+            'generateblocks_patterns_tree' => [['id' => 'old']],
+        ];
+
+        $snapshot = $this->adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => 99,
+                'post_title' => 'LockedCard',
+                'post_name' => 'lockedcard',
+                'post_status' => 'publish',
+                'post_content' => '<!-- wp:paragraph --><p>New</p><!-- /wp:paragraph -->',
+                'post_meta' => [
+                    ['meta_key' => '_generateblocks_dynamic_css_version', 'meta_value' => '2.1.2'],
+                    ['meta_key' => 'wp_pattern_sync_status', 'meta_value' => 'unsynced'],
+                    ['meta_key' => '_wpml_word_count', 'meta_value' => '99'],
+                    ['meta_key' => 'generateblocks_patterns_tree', 'meta_value' => ['id' => 'pattern-22458', 'label' => 'LockedCard']],
+                ],
+                'terms' => [],
+            ],
+        ]);
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $this->applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['wordpress_block_patterns']
+        ));
+
+        self::assertSame(['44'], $GLOBALS['pushpull_test_generateblocks_meta'][99]['_wpml_word_count']);
+        self::assertSame(['2.1.2'], $GLOBALS['pushpull_test_generateblocks_meta'][99]['_generateblocks_dynamic_css_version']);
+        self::assertSame(['unsynced'], $GLOBALS['pushpull_test_generateblocks_meta'][99]['wp_pattern_sync_status']);
+        self::assertSame([['id' => 'pattern-22458', 'label' => 'LockedCard']], $GLOBALS['pushpull_test_generateblocks_meta'][99]['generateblocks_patterns_tree']);
     }
 }

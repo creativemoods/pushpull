@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.7
+Stable tag: 0.0.8
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -22,6 +22,9 @@ The current release supports these managed content domains:
 1. GenerateBlocks Global Styles (`gblocks_styles`)
 2. GenerateBlocks Conditions (`gblocks_condition`)
 3. WordPress Block Patterns (`wp_block`)
+4. WordPress Pages (`page`)
+5. WordPress Custom CSS (`custom_css`)
+6. WordPress Attachments (`attachment`, explicit opt-in only)
 
 PushPull keeps a local Git-like repository inside WordPress database tables, lets you compare live WordPress content against local and remote snapshots, and supports the full workflow from WordPress:
 
@@ -48,13 +51,17 @@ The plugin also includes:
 This is an early, focused release. At the moment, PushPull is intentionally limited to:
 
 1. GitHub as the implemented remote provider
-2. Three managed content domains:
+2. Six managed content domains:
    `generateblocks/global-styles/`
    `generateblocks/conditions/`
    `wordpress/block-patterns/`
-3. Canonical JSON storage with one file per managed item plus a `manifest.json` per managed set
+   `wordpress/pages/`
+   `wordpress/custom-css/`
+   `wordpress/attachments/`
+3. Canonical JSON storage with one file per managed item for manifest-backed sets, plus directory-backed storage for attachments using `attachment.json` and the binary file
+4. Explicit opt-in attachment sync through a media-library checkbox
 
-It does not yet manage general posts, pages, menus, media, forms, or arbitrary plugin data.
+It does not yet manage general posts, menus, forms, `wp_options`, or arbitrary plugin data.
 
 ## How PushPull represents content
 
@@ -63,9 +70,10 @@ PushPull does not use WordPress post IDs as repository identity.
 For the currently supported managed sets it stores:
 
 1. One canonical JSON file per managed item
-2. One separate `manifest.json` file that preserves logical ordering
-3. Stable logical keys instead of environment-specific database IDs
-4. Recursive placeholder normalization for current-site absolute URLs in post-type-backed content
+2. One separate `manifest.json` file for manifest-backed sets that preserve logical ordering
+3. One directory per attachment for the attachments set, containing `attachment.json` and the binary file
+4. Stable logical keys instead of environment-specific database IDs
+5. Recursive placeholder normalization for current-site absolute URLs in post-type-backed content
 
 That design keeps content stable across environments and makes reorder-only changes isolated and easy to review.
 
@@ -149,6 +157,14 @@ If both local and remote changed, PushPull can persist conflicts, let you resolv
 
 ## Changelog
 
+### 0.0.8
+
+1. Added new managed content domains for WordPress custom CSS and WordPress pages.
+2. Added a dedicated WordPress attachments domain with directory-backed repository storage using `attachment.json` plus the binary file.
+3. Added explicit opt-in attachment sync through a `Sync with PushPull` checkbox in the media library, so only marked attachments are managed.
+4. Added `wp_pattern_sync_status` to the owned WordPress block pattern meta allowlist.
+5. Refactored the sync engine so managed sets can supply authoritative repository files directly, allowing non-manifest adapter families like attachments.
+
 ### 0.0.7
 
 1. Fixed WordPress block pattern apply/export escaping so `\\u002d` sequences survive correctly in both `post_content` and pattern meta.
@@ -189,7 +205,7 @@ PushPull sends the following information to GitHub over HTTPS:
 3. Canonical JSON representations of the managed content you choose to commit and push
 4. Commit metadata such as commit messages and, if configured, author name and email
 
-In the current release, the managed content sent to GitHub is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, and WordPress Block Patterns.
+In the current release, the managed content sent to GitHub is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Pages, WordPress Custom CSS, and explicitly opted-in WordPress Attachments.
 
 PushPull does not send your whole WordPress database to GitHub. It only sends the managed content represented by the enabled adapters.
 

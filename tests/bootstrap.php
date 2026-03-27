@@ -140,7 +140,7 @@ if (! function_exists('site_url')) {
 if (! function_exists('post_type_exists')) {
     function post_type_exists(string $postType): bool
     {
-        return in_array($postType, ['gblocks_styles', 'gblocks_condition', 'wp_block'], true);
+        return in_array($postType, ['gblocks_styles', 'gblocks_condition', 'wp_block', 'custom_css', 'page', 'attachment'], true);
     }
 }
 
@@ -178,7 +178,10 @@ if (! class_exists('WP_Post')) {
             public string $post_type = 'gblocks_styles',
             public string $post_content = '',
             public string $post_date = '2026-03-24 09:00:00',
-            public string $post_modified = '2026-03-24 09:00:00'
+            public string $post_modified = '2026-03-24 09:00:00',
+            public string $post_excerpt = '',
+            public string $post_mime_type = '',
+            public int $post_parent = 0
         ) {
         }
     }
@@ -238,7 +241,15 @@ if (! function_exists('get_post_meta')) {
 
         $value = $GLOBALS['pushpull_test_generateblocks_meta'][$postId][$key] ?? ($single ? '' : []);
 
-        return $single ? $value : [$value];
+        if (! $single) {
+            return [$value];
+        }
+
+        if (is_array($value) && array_is_list($value)) {
+            return $value[0] ?? '';
+        }
+
+        return $value;
     }
 }
 
@@ -301,7 +312,10 @@ if (! function_exists('wp_insert_post')) {
             (string) ($postarr['post_type'] ?? 'gblocks_styles'),
             (string) ($postarr['post_content'] ?? ''),
             (string) ($postarr['post_date'] ?? '2026-03-24 09:00:00'),
-            (string) ($postarr['post_modified'] ?? '2026-03-24 09:00:00')
+            (string) ($postarr['post_modified'] ?? '2026-03-24 09:00:00'),
+            (string) ($postarr['post_excerpt'] ?? ''),
+            (string) ($postarr['post_mime_type'] ?? ''),
+            (int) ($postarr['post_parent'] ?? 0)
         );
 
         return $id;
@@ -326,13 +340,44 @@ if (! function_exists('wp_update_post')) {
                 (string) ($postarr['post_type'] ?? $post->post_type),
                 (string) ($postarr['post_content'] ?? $post->post_content),
                 (string) ($postarr['post_date'] ?? $post->post_date),
-                (string) ($postarr['post_modified'] ?? $post->post_modified)
+                (string) ($postarr['post_modified'] ?? $post->post_modified),
+                (string) ($postarr['post_excerpt'] ?? $post->post_excerpt),
+                (string) ($postarr['post_mime_type'] ?? $post->post_mime_type),
+                (int) ($postarr['post_parent'] ?? $post->post_parent)
             );
 
             return $post->ID;
         }
 
         return 0;
+    }
+}
+
+if (! function_exists('wp_upload_dir')) {
+    function wp_upload_dir(): array
+    {
+        $baseDir = '/tmp/pushpull-test-uploads';
+        $baseUrl = 'https://source.example.test/app/uploads';
+
+        return [
+            'path' => $baseDir,
+            'url' => $baseUrl,
+            'subdir' => '',
+            'basedir' => $baseDir,
+            'baseurl' => $baseUrl,
+            'error' => false,
+        ];
+    }
+}
+
+if (! function_exists('wp_mkdir_p')) {
+    function wp_mkdir_p(string $target): bool
+    {
+        if (is_dir($target)) {
+            return true;
+        }
+
+        return mkdir($target, 0777, true);
     }
 }
 

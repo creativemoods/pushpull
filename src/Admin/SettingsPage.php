@@ -188,6 +188,15 @@ final class SettingsPage
         if ($settings->isManagedSetEnabled('wordpress_block_patterns')) {
             $managedSets[] = 'WordPress block patterns';
         }
+        if ($settings->isManagedSetEnabled('wordpress_attachments')) {
+            $managedSets[] = 'WordPress attachments';
+        }
+        if ($settings->isManagedSetEnabled('wordpress_custom_css')) {
+            $managedSets[] = 'WordPress custom CSS';
+        }
+        if ($settings->isManagedSetEnabled('wordpress_pages')) {
+            $managedSets[] = 'WordPress pages';
+        }
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Managed sets', 'pushpull'), esc_html($managedSets !== [] ? implode(', ', $managedSets) : 'Not enabled'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Token', 'pushpull'), esc_html($settings->maskedApiToken() !== '' ? $settings->maskedApiToken() : 'Not stored'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Schema', 'pushpull'), esc_html((new SchemaMigrator())->installedVersion() ?: 'Not installed'));

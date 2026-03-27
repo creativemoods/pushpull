@@ -41,17 +41,13 @@ final class ManagedSetRepositoryCommitter
             }
         }
 
-        foreach ($snapshot->items as $item) {
-            $path = $this->adapter->getRepositoryPath($item);
-            $blob = $this->localRepository->storeBlob($this->adapter->serialize($item));
+        $snapshotFiles = $snapshot->repositoryFilesAuthoritative ? $snapshot->files : $this->buildSnapshotFiles($snapshot);
+
+        foreach ($snapshotFiles as $path => $content) {
+            $blob = $this->localRepository->storeBlob($content);
             $entriesByPath[$path] = new TreeEntry($path, 'blob', $blob->hash);
             $pathHashes[$path] = $blob->hash;
         }
-
-        $manifestPath = $this->adapter->getManifestPath();
-        $manifestBlob = $this->localRepository->storeBlob($this->adapter->serializeManifest($snapshot->manifest));
-        $entriesByPath[$manifestPath] = new TreeEntry($manifestPath, 'blob', $manifestBlob->hash);
-        $pathHashes[$manifestPath] = $manifestBlob->hash;
 
         ksort($entriesByPath);
         $entries = array_values($entriesByPath);
@@ -92,6 +88,23 @@ final class ManagedSetRepositoryCommitter
             $pathHashes,
             $initializedRepository
         );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function buildSnapshotFiles(ManagedContentSnapshot $snapshot): array
+    {
+        $files = [];
+
+        foreach ($snapshot->items as $item) {
+            $files[$this->adapter->getRepositoryPath($item)] = $this->adapter->serialize($item);
+        }
+
+        $files[$this->adapter->getManifestPath()] = $this->adapter->serializeManifest($snapshot->manifest);
+        ksort($files);
+
+        return $files;
     }
 
     /**

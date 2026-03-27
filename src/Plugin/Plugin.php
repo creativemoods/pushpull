@@ -10,11 +10,15 @@ if (! defined('ABSPATH')) {
 
 use PushPull\Admin\ManagedContentPage;
 use PushPull\Admin\OperationsPage;
+use PushPull\Admin\AttachmentSyncField;
 use PushPull\Content\GenerateBlocks\GenerateBlocksConditionsAdapter;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Admin\SettingsPage;
 use PushPull\Content\GenerateBlocks\WordPressBlockPatternsAdapter;
+use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
+use PushPull\Content\WordPress\WordPressCustomCssAdapter;
+use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Diff\ManagedSetDiffService;
 use PushPull\Domain\Diff\RepositoryStateReader;
@@ -61,6 +65,9 @@ final class Plugin
         $generateBlocksStylesAdapter = new GenerateBlocksGlobalStylesAdapter();
         $generateBlocksConditionsAdapter = new GenerateBlocksConditionsAdapter();
         $wordPressBlockPatternsAdapter = new WordPressBlockPatternsAdapter();
+        $wordPressAttachmentsAdapter = new WordPressAttachmentsAdapter();
+        $wordPressCustomCssAdapter = new WordPressCustomCssAdapter();
+        $wordPressPagesAdapter = new WordPressPagesAdapter();
         $workingStateRepository = new WorkingStateRepository($wpdb);
         $contentMapRepository = new ContentMapRepository($wpdb);
         $stateReader = new RepositoryStateReader($localRepository);
@@ -68,6 +75,9 @@ final class Plugin
             $generateBlocksStylesAdapter,
             $generateBlocksConditionsAdapter,
             $wordPressBlockPatternsAdapter,
+            $wordPressAttachmentsAdapter,
+            $wordPressCustomCssAdapter,
+            $wordPressPagesAdapter,
         ]);
         $managedSetCommitters = [];
         $managedSetDiffServices = [];
@@ -127,8 +137,10 @@ final class Plugin
             $conflictResolutionService,
             $operationExecutor
         );
+        $attachmentSyncField = new AttachmentSyncField();
 
         add_action('admin_init', [$settingsRegistrar, 'register']);
+        add_action('admin_init', [$attachmentSyncField, 'register']);
         add_action('admin_menu', [$settingsPage, 'register']);
         add_action('admin_menu', [$managedContentPage, 'register']);
         add_action('admin_menu', [$operationsPage, 'register']);
