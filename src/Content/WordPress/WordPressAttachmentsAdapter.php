@@ -8,12 +8,13 @@ namespace PushPull\Content\WordPress;
 
 use PushPull\Content\Exception\ManagedContentExportException;
 use PushPull\Content\ManagedCollectionManifest;
+use PushPull\Content\ManagedSetDependencyAwareInterface;
 use PushPull\Content\ManagedContentItem;
 use PushPull\Content\WordPressManagedContentAdapterInterface;
 use PushPull\Support\Json\CanonicalJson;
 use WP_Post;
 
-final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapterInterface
+final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapterInterface, ManagedSetDependencyAwareInterface
 {
     public const SYNC_META_KEY = 'pushpull_sync_attachment';
 
@@ -41,6 +42,14 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
     public function isAvailable(): bool
     {
         return post_type_exists(self::POST_TYPE) && function_exists('wp_upload_dir') && function_exists('wp_mkdir_p');
+    }
+
+    /**
+     * @return string[]
+     */
+    public function getManagedSetDependencies(): array
+    {
+        return [];
     }
 
     public function exportAll(): array

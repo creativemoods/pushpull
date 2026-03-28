@@ -42,6 +42,24 @@
     margin: 0;
 }
 
+.pushpull-managed-set-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.pushpull-tab-separator {
+    margin: 0 4px 0 10px;
+    padding-left: 12px;
+    border-left: 1px solid var(--pushpull-border);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--pushpull-muted);
+    text-transform: uppercase;
+}
+
 .pushpull-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
@@ -77,6 +95,45 @@
 .pushpull-status-card h2 {
     margin-top: 0;
     color: var(--pushpull-ink);
+}
+
+.pushpull-domain-section {
+    margin-top: 20px;
+}
+
+.pushpull-domain-section-title {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--pushpull-muted);
+    text-transform: uppercase;
+}
+
+.pushpull-domain-badge {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1.6;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.pushpull-domain-badge-overlay {
+    background: #f4eefc;
+    color: #6a3fb0;
+}
+
+.pushpull-domain-badge-primary {
+    background: #edf7f8;
+    color: #0d5c63;
+}
+
+.pushpull-tree-browser.pushpull-overlay-domain {
+    background: #fcfaff;
+    border-color: #ddd1f5;
 }
 
 .pushpull-button-grid {

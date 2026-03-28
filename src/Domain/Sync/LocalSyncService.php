@@ -10,6 +10,7 @@ use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Domain\Apply\ApplyManagedSetResult;
 use PushPull\Domain\Apply\ManagedSetApplyService;
+use PushPull\Domain\Apply\ManagedSetApplyServiceInterface;
 use PushPull\Domain\Diff\ManagedSetDiffResult;
 use PushPull\Domain\Diff\ManagedSetDiffService;
 use PushPull\Domain\Merge\ManagedSetMergeService;
@@ -31,7 +32,7 @@ final class LocalSyncService implements SyncServiceInterface
     private array $committersByManagedSetKey;
     /** @var array<string, ManagedSetDiffService> */
     private array $diffServicesByManagedSetKey;
-    /** @var array<string, ManagedSetApplyService> */
+    /** @var array<string, ManagedSetApplyServiceInterface> */
     private array $applyServicesByManagedSetKey;
 
     public function __construct(
@@ -154,7 +155,7 @@ final class LocalSyncService implements SyncServiceInterface
         return $this->diffServicesByManagedSetKey[$managedSetKey];
     }
 
-    private function requireApplyService(string $managedSetKey): ManagedSetApplyService
+    private function requireApplyService(string $managedSetKey): ManagedSetApplyServiceInterface
     {
         if (! isset($this->applyServicesByManagedSetKey[$managedSetKey])) {
             throw new RuntimeException(sprintf('Managed set "%s" cannot be applied.', $managedSetKey));

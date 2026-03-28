@@ -12,6 +12,7 @@ $GLOBALS['pushpull_test_object_terms'] ??= [];
 $GLOBALS['pushpull_test_term_meta'] ??= [];
 $GLOBALS['pushpull_test_next_term_id'] ??= 1;
 $GLOBALS['pushpull_test_next_post_id'] ??= 1;
+$GLOBALS['pushpull_test_wpml_translations'] ??= [];
 
 if (! defined('ARRAY_A')) {
     define('ARRAY_A', 'ARRAY_A');
@@ -114,6 +115,31 @@ if (! function_exists('wp_json_encode')) {
     function wp_json_encode(mixed $value, int $flags = 0): string|false
     {
         return json_encode($value, $flags);
+    }
+}
+
+if (! function_exists('wp_cache_get')) {
+    function wp_cache_get(string $key, string $group = ''): mixed
+    {
+        return $GLOBALS['pushpull_test_object_cache'][$group][$key] ?? false;
+    }
+}
+
+if (! function_exists('wp_cache_set')) {
+    function wp_cache_set(string $key, mixed $data, string $group = '', int $expire = 0): bool
+    {
+        $GLOBALS['pushpull_test_object_cache'][$group][$key] = $data;
+
+        return true;
+    }
+}
+
+if (! function_exists('wp_cache_delete')) {
+    function wp_cache_delete(string $key, string $group = ''): bool
+    {
+        unset($GLOBALS['pushpull_test_object_cache'][$group][$key]);
+
+        return true;
     }
 }
 
@@ -714,6 +740,29 @@ if (! class_exists('wpdb')) {
         public function replace(string $table, array $data, array $format = []): bool
         {
             return $this->insert($table, $data, $format);
+        }
+
+        public function delete(string $table, array $where, array $where_format = []): int|false
+        {
+            if (! isset($this->tables[$table])) {
+                return 0;
+            }
+
+            $before = count($this->tables[$table]);
+            $this->tables[$table] = array_filter(
+                $this->tables[$table],
+                function (array $row) use ($where): bool {
+                    foreach ($where as $column => $value) {
+                        if ((string) ($row[$column] ?? '') !== (string) $value) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+            );
+
+            return $before - count($this->tables[$table]);
         }
 
         public function query(string $query): int|false

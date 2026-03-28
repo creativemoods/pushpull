@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PushPull\Admin;
 
+use PushPull\Content\OverlayManagedSetInterface;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\Exception\ManagedContentExportException;
@@ -148,9 +149,11 @@ final class ManagedContentPage
         echo '<div class="pushpull-top-actions">';
         $this->renderPullButton($managedSetKey, $enabled);
         $this->renderFetchButton($managedSetKey, $enabled);
+        $this->renderTopLevelMergeButton($managedSetKey, $enabled);
         $this->renderPushButton($managedSetKey, $enabled);
         echo '</div>';
         echo '</div>';
+        echo '<p class="description pushpull-top-actions-note">' . esc_html__('Branch actions operate on the whole branch. Pull runs Fetch + Merge, and Merge brings fetched remote-tracking changes into the local branch.', 'pushpull') . '</p>';
     }
 
     private function renderManagedSetDetail(\PushPull\Settings\PushPullSettings $settings, ManifestManagedContentAdapterInterface $managedContentAdapter): void
@@ -176,7 +179,6 @@ final class ManagedContentPage
         printf('<h2>%s</h2>', esc_html($managedContentAdapter->getManagedSetLabel()));
         echo '<div class="pushpull-button-grid">';
         $this->renderCommitButton($managedContentAdapter, $managedSetEnabled && $managedContentAdapter->isAvailable());
-        $this->renderMergeButton($managedContentAdapter, $managedSetEnabled);
         $this->renderApplyButton($managedContentAdapter, $managedSetEnabled);
         $this->renderResolveConflictsButton($workingState);
         echo '</div>';
@@ -194,11 +196,13 @@ final class ManagedContentPage
     private function renderOverview(\PushPull\Settings\PushPullSettings $settings): void
     {
         $overviewRows = [];
+        $primaryRows = [];
+        $overlayRows = [];
         $changedSetCount = 0;
         $conflictedSetCount = 0;
         $enabledSetCount = 0;
 
-        foreach ($this->managedSetRegistry->all() as $managedSetKey => $adapter) {
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
             $enabled = $this->isManagedSetEnabled($settings, $managedSetKey);
             if ($enabled) {
                 $enabledSetCount++;
@@ -223,6 +227,17 @@ final class ManagedContentPage
             ];
         }
 
+        foreach ($overviewRows as $row) {
+            /** @var ManifestManagedContentAdapterInterface $adapter */
+            $adapter = $row['adapter'];
+
+            if ($this->isOverlayAdapter($adapter)) {
+                $overlayRows[] = $row;
+            } else {
+                $primaryRows[] = $row;
+            }
+        }
+
         echo '<div class="pushpull-status-grid">';
         $this->statusCard(__('Current repo status', 'pushpull'), $this->localRepository->hasBeenInitialized($settings->branch) ? __('Initialized', 'pushpull') : __('Not initialized', 'pushpull'));
         $this->statusCard(__('Enabled managed sets', 'pushpull'), (string) $enabledSetCount);
@@ -236,7 +251,25 @@ final class ManagedContentPage
         echo '<h2>' . esc_html__('All Managed Sets', 'pushpull') . '</h2>';
         echo '<p class="description">' . esc_html__('Use this overview to review all enabled domains quickly, then open a focused domain view to act on one managed set.', 'pushpull') . '</p>';
 
-        foreach ($overviewRows as $row) {
+        $this->renderOverviewSection(__('Primary domains', 'pushpull'), $primaryRows);
+        $this->renderOverviewSection(__('Overlay domains', 'pushpull'), $overlayRows);
+
+        echo '</div>';
+    }
+
+    /**
+     * @param array<int, array{adapter: ManifestManagedContentAdapterInterface, enabled: bool, diffResult: ?ManagedSetDiffResult, workingState: ?\PushPull\Persistence\WorkingState\WorkingStateRecord}> $rows
+     */
+    private function renderOverviewSection(string $heading, array $rows): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        echo '<div class="pushpull-domain-section">';
+        echo '<p class="pushpull-domain-section-title">' . esc_html($heading) . '</p>';
+
+        foreach ($rows as $row) {
             /** @var ManifestManagedContentAdapterInterface $adapter */
             $adapter = $row['adapter'];
             $managedSetKey = $adapter->getManagedSetKey();
@@ -245,10 +278,13 @@ final class ManagedContentPage
             /** @var \PushPull\Persistence\WorkingState\WorkingStateRecord|null $workingState */
             $workingState = $row['workingState'];
 
-            echo '<details class="pushpull-tree-browser">';
+            echo '<details class="pushpull-tree-browser' . ($this->isOverlayAdapter($adapter) ? ' pushpull-overlay-domain' : '') . '">';
             printf(
-                '<summary>%s <span class="pushpull-diff-badge pushpull-diff-badge-%s">%s</span></summary>',
+                '<summary>%s%s <span class="pushpull-diff-badge pushpull-diff-badge-%s">%s</span></summary>',
                 esc_html($adapter->getManagedSetLabel()),
+                $this->isOverlayAdapter($adapter)
+                    ? ' <span class="pushpull-domain-badge pushpull-domain-badge-overlay">' . esc_html__('Overlay', 'pushpull') . '</span>'
+                    : ' <span class="pushpull-domain-badge pushpull-domain-badge-primary">' . esc_html__('Primary', 'pushpull') . '</span>',
                 esc_attr($this->overviewBadgeClass($row['enabled'], $diffResult, $workingState)),
                 esc_html($this->overviewBadgeText($row['enabled'], $adapter, $diffResult, $workingState))
             );
@@ -329,14 +365,19 @@ final class ManagedContentPage
 
             echo '</details>';
         }
-
         echo '</div>';
     }
 
     private function renderManagedSetDiffPanel(ManifestManagedContentAdapterInterface $managedContentAdapter, ManagedSetDiffResult $diffResult, string $summary): void
     {
         echo '<div id="pushpull-diff" class="pushpull-panel">';
-        printf('<h2>%s</h2>', esc_html(sprintf('Diff Summary: %s', $managedContentAdapter->getManagedSetLabel())));
+        printf(
+            '<h2>%s%s</h2>',
+            esc_html(sprintf('Diff Summary: %s', $managedContentAdapter->getManagedSetLabel())),
+            $this->isOverlayAdapter($managedContentAdapter)
+                ? ' <span class="pushpull-domain-badge pushpull-domain-badge-overlay">' . esc_html__('Overlay domain', 'pushpull') . '</span>'
+                : ' <span class="pushpull-domain-badge pushpull-domain-badge-primary">' . esc_html__('Primary domain', 'pushpull') . '</span>'
+        );
         printf('<p>%s</p>', esc_html(sprintf(
             'Live vs local: %d changed file(s). Local vs remote: %d changed file(s).',
             $diffResult->liveToLocal->changedCount(),
@@ -896,7 +937,7 @@ final class ManagedContentPage
 
         try {
             $started = $this->asyncBranchOperationRunner->start($managedSetKey, $operationType);
-        } catch (ProviderException | RuntimeException $exception) {
+        } catch (\Throwable $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             wp_send_json_error(['message' => $message], 400);
         }
@@ -927,7 +968,7 @@ final class ManagedContentPage
 
         try {
             $response = $this->asyncBranchOperationRunner->continue($operationId);
-        } catch (ProviderException | RuntimeException $exception) {
+        } catch (\Throwable $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             wp_send_json_error(['message' => $message], 400);
         }
@@ -1275,16 +1316,18 @@ final class ManagedContentPage
         echo '<input type="hidden" name="action" value="' . esc_attr(self::PULL_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::PULL_ACTION);
-        submit_button(__('Pull', 'pushpull'), 'secondary', 'submit', false);
+        submit_button(__('Pull', 'pushpull'), 'secondary', 'submit', false, [
+            'title' => __('Fetch remote changes and merge them into the local branch.', 'pushpull'),
+        ]);
         echo '</form>';
     }
 
-    private function renderMergeButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
+    private function renderTopLevelMergeButton(?string $managedSetKey, bool $enabled): void
     {
         if (! $enabled) {
             printf(
                 '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
-                esc_html__('Merge', 'pushpull')
+                esc_html__('Merge Remote', 'pushpull')
             );
 
             return;
@@ -1292,9 +1335,11 @@ final class ManagedContentPage
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::MERGE_ACTION) . '" />';
-        echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::MERGE_ACTION);
-        submit_button(__('Merge', 'pushpull'), 'secondary', 'submit', false);
+        submit_button(__('Merge Remote', 'pushpull'), 'secondary', 'submit', false, [
+            'title' => __('Merge fetched remote-tracking changes into the local branch.', 'pushpull'),
+        ]);
         echo '</form>';
     }
 
@@ -1361,11 +1406,22 @@ final class ManagedContentPage
 
     private function renderManagedSetTabs(?string $activeManagedSetKey): void
     {
-        if (count($this->managedSetRegistry->all()) < 2) {
+        if (count($this->managedSetRegistry->allInDependencyOrder()) < 2) {
             return;
         }
 
-        echo '<div class="pushpull-panel"><p>';
+        $primaryAdapters = [];
+        $overlayAdapters = [];
+
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
+            if ($this->isOverlayAdapter($adapter)) {
+                $overlayAdapters[$managedSetKey] = $adapter;
+            } else {
+                $primaryAdapters[$managedSetKey] = $adapter;
+            }
+        }
+
+        echo '<div class="pushpull-panel"><div class="pushpull-managed-set-tabs">';
 
         printf(
             '<a class="%s" href="%s">%s</a> ',
@@ -1374,7 +1430,11 @@ final class ManagedContentPage
             esc_html__('All managed sets', 'pushpull')
         );
 
-        foreach ($this->managedSetRegistry->all() as $managedSetKey => $adapter) {
+        if ($primaryAdapters !== []) {
+            echo '<span class="pushpull-tab-separator">' . esc_html__('Primary domains', 'pushpull') . '</span>';
+        }
+
+        foreach ($primaryAdapters as $managedSetKey => $adapter) {
             $url = add_query_arg(
                 [
                     'page' => self::MENU_SLUG,
@@ -1391,7 +1451,28 @@ final class ManagedContentPage
             );
         }
 
-        echo '</p></div>';
+        if ($overlayAdapters !== []) {
+            echo '<span class="pushpull-tab-separator">' . esc_html__('Overlay domains', 'pushpull') . '</span>';
+        }
+
+        foreach ($overlayAdapters as $managedSetKey => $adapter) {
+            $url = add_query_arg(
+                [
+                    'page' => self::MENU_SLUG,
+                    'managed_set' => $managedSetKey,
+                ],
+                admin_url('admin.php')
+            );
+            $class = $managedSetKey === $activeManagedSetKey ? 'button button-primary' : 'button button-secondary';
+            printf(
+                '<a class="%s" href="%s">%s</a> ',
+                esc_attr($class),
+                esc_url($url),
+                esc_html($adapter->getManagedSetLabel())
+            );
+        }
+
+        echo '</div></div>';
     }
 
     private function renderConflictPanel(ManifestManagedContentAdapterInterface $managedContentAdapter, \PushPull\Persistence\WorkingState\WorkingStateRecord $workingState): void
@@ -1514,7 +1595,7 @@ final class ManagedContentPage
 
     private function branchActionManagedSetKey(\PushPull\Settings\PushPullSettings $settings): ?string
     {
-        foreach ($this->managedSetRegistry->all() as $managedSetKey => $_adapter) {
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $_adapter) {
             if ($this->isManagedSetEnabled($settings, $managedSetKey)) {
                 return $managedSetKey;
             }
@@ -1526,6 +1607,11 @@ final class ManagedContentPage
     private function isManagedSetEnabled(\PushPull\Settings\PushPullSettings $settings, string $managedSetKey): bool
     {
         return $settings->isManagedSetEnabled($managedSetKey);
+    }
+
+    private function isOverlayAdapter(ManifestManagedContentAdapterInterface $adapter): bool
+    {
+        return $adapter instanceof OverlayManagedSetInterface && $adapter->isOverlayManagedSet();
     }
 
     private function overviewBadgeText(

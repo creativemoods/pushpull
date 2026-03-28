@@ -12,7 +12,7 @@ use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use WP_Post;
 use WP_Term;
 
-abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedContentAdapterInterface
+abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedContentAdapterInterface, ManagedSetDependencyAwareInterface
 {
     abstract protected function managedSetKey(): string;
 
@@ -32,6 +32,14 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
      * @param array<int, array<string, mixed>> $records
      */
     abstract protected function buildSnapshot(array $records, ManagedCollectionManifest $manifest): ManagedContentSnapshot;
+
+    /**
+     * @return string[]
+     */
+    protected function managedSetDependencies(): array
+    {
+        return [];
+    }
 
     /**
      * @return array<string, mixed>
@@ -101,6 +109,14 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
     public function getContentType(): string
     {
         return $this->contentType();
+    }
+
+    /**
+     * @return string[]
+     */
+    public function getManagedSetDependencies(): array
+    {
+        return array_values(array_unique(array_filter(array_map('strval', $this->managedSetDependencies()))));
     }
 
     public function isAvailable(): bool

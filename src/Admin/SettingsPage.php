@@ -390,7 +390,7 @@ final class SettingsPage
 
     private function branchActionManagedSetKey(PushPullSettings $settings): ?string
     {
-        foreach ($this->managedSetRegistry->all() as $managedSetKey => $_adapter) {
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $_adapter) {
             if ($settings->isManagedSetEnabled($managedSetKey)) {
                 return $managedSetKey;
             }

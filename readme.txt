@@ -4,7 +4,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.11
+Stable tag: 0.0.12
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -174,6 +174,14 @@ GitLab terms: https://about.gitlab.com/terms/
 GitLab privacy statement: https://about.gitlab.com/privacy/
 
 == Changelog ==
+
+= 0.0.12 =
+
+1. Added a new `translation_management` overlay domain with a first WPML-backed implementation that exports only in-scope translation groups for managed content.
+2. Added generic overlay-domain support, including separate `Primary domains` and `Overlay domains` sections in settings and clearer visual separation in the Managed Content UI.
+3. Added managed-set dependency ordering so hard domain dependencies can be declared explicitly, with GeneratePress elements now ordered after WordPress pages and posts.
+4. Added canonical logical-key mapping for GeneratePress element page/post conditions so environment-specific object IDs no longer leak across sites.
+5. Added the first overlay-specific apply path so non-post domains like translation management can be applied asynchronously without pretending to be WordPress posts.
 
 = 0.0.11 =
 

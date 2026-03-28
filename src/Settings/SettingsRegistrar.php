@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace PushPull\Settings;
 
+use PushPull\Content\ManagedSetRegistry;
+use PushPull\Content\OverlayManagedSetInterface;
+
 final class SettingsRegistrar
 {
     public const SETTINGS_GROUP = 'pushpull_settings';
     public const SETTINGS_PAGE_SLUG = 'pushpull-settings';
 
-    public function __construct(private readonly SettingsRepository $settingsRepository)
-    {
+    public function __construct(
+        private readonly SettingsRepository $settingsRepository,
+        private readonly ManagedSetRegistry $managedSetRegistry
+    ) {
     }
 
     public function register(): void
@@ -174,25 +179,45 @@ final class SettingsRegistrar
 
     private function renderManagedSetCheckboxes(string $name, PushPullSettings $settings): void
     {
-        $options = [
-            'generateblocks_global_styles' => 'GenerateBlocks global styles',
-            'generateblocks_conditions' => 'GenerateBlocks conditions',
-            'wordpress_block_patterns' => 'WordPress block patterns',
-            'wordpress_attachments' => 'WordPress attachments',
-            'wordpress_custom_css' => 'WordPress custom CSS',
-            'generatepress_elements' => 'GeneratePress elements',
-            'wordpress_pages' => 'WordPress pages',
-            'wordpress_posts' => 'WordPress posts',
-        ];
+        $primary = [];
+        $overlay = [];
 
-        foreach ($options as $managedSetKey => $label) {
-            printf(
-                '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
-                esc_attr($name),
-                esc_attr($managedSetKey),
-                checked($settings->isManagedSetEnabled($managedSetKey), true, false),
-                esc_html($label)
-            );
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
+            $target = $adapter instanceof OverlayManagedSetInterface && $adapter->isOverlayManagedSet()
+                ? 'overlay'
+                : 'primary';
+
+            if ($target === 'overlay') {
+                $overlay[$managedSetKey] = $adapter->getManagedSetLabel();
+            } else {
+                $primary[$managedSetKey] = $adapter->getManagedSetLabel();
+            }
+        }
+
+        if ($primary !== []) {
+            echo '<p><strong>' . esc_html__('Primary domains', 'pushpull') . '</strong></p>';
+            foreach ($primary as $managedSetKey => $label) {
+                printf(
+                    '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
+                    esc_attr($name),
+                    esc_attr($managedSetKey),
+                    checked($settings->isManagedSetEnabled($managedSetKey), true, false),
+                    esc_html($label)
+                );
+            }
+        }
+
+        if ($overlay !== []) {
+            echo '<p><strong>' . esc_html__('Overlay domains', 'pushpull') . '</strong></p>';
+            foreach ($overlay as $managedSetKey => $label) {
+                printf(
+                    '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
+                    esc_attr($name),
+                    esc_attr($managedSetKey),
+                    checked($settings->isManagedSetEnabled($managedSetKey), true, false),
+                    esc_html($label)
+                );
+            }
         }
     }
 

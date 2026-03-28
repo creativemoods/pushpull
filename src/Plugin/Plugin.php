@@ -16,12 +16,14 @@ use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Admin\SettingsPage;
 use PushPull\Content\GenerateBlocks\WordPressBlockPatternsAdapter;
+use PushPull\Content\Translation\WpmlTranslationManagementAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCustomCssAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Content\WordPress\WordPressPostsAdapter;
 use PushPull\Domain\Apply\ManagedSetApplyService;
+use PushPull\Domain\Apply\OverlayManagedSetApplyService;
 use PushPull\Domain\Diff\ManagedSetDiffService;
 use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Domain\Merge\ManagedSetConflictResolutionService;
@@ -74,6 +76,7 @@ final class Plugin
         $generatePressElementsAdapter = new GeneratePressElementsAdapter();
         $wordPressPagesAdapter = new WordPressPagesAdapter();
         $wordPressPostsAdapter = new WordPressPostsAdapter();
+        $wpmlTranslationManagementAdapter = new WpmlTranslationManagementAdapter($settingsRepository);
         $workingStateRepository = new WorkingStateRepository($wpdb);
         $contentMapRepository = new ContentMapRepository($wpdb);
         $stateReader = new RepositoryStateReader($localRepository);
@@ -86,6 +89,7 @@ final class Plugin
             $generatePressElementsAdapter,
             $wordPressPagesAdapter,
             $wordPressPostsAdapter,
+            $wpmlTranslationManagementAdapter,
         ]);
         $managedSetCommitters = [];
         $managedSetDiffServices = [];
@@ -94,12 +98,20 @@ final class Plugin
         foreach ($managedSetRegistry->all() as $managedSetKey => $adapter) {
             $managedSetCommitters[$managedSetKey] = new ManagedSetRepositoryCommitter($localRepository, $adapter);
             $managedSetDiffServices[$managedSetKey] = new ManagedSetDiffService($adapter, $stateReader, $localRepository);
-            $managedSetApplyServices[$managedSetKey] = new ManagedSetApplyService(
-                $adapter,
-                $stateReader,
-                $contentMapRepository,
-                $workingStateRepository
-            );
+            if ($adapter instanceof WpmlTranslationManagementAdapter) {
+                $managedSetApplyServices[$managedSetKey] = new OverlayManagedSetApplyService(
+                    $adapter,
+                    $stateReader,
+                    $workingStateRepository
+                );
+            } else {
+                $managedSetApplyServices[$managedSetKey] = new ManagedSetApplyService(
+                    $adapter,
+                    $stateReader,
+                    $contentMapRepository,
+                    $workingStateRepository
+                );
+            }
         }
         $mergeService = new ManagedSetMergeService(
             $localRepository,
@@ -125,7 +137,7 @@ final class Plugin
             $settingsRepository,
             $providerFactory
         );
-        $settingsRegistrar = new SettingsRegistrar($settingsRepository);
+        $settingsRegistrar = new SettingsRegistrar($settingsRepository, $managedSetRegistry);
         $settingsPage = new SettingsPage(
             $settingsRepository,
             $managedSetRegistry,

@@ -70,7 +70,19 @@
             },
             body: body.toString()
         });
-        const data = await response.json();
+        const rawBody = await response.text();
+        let data = null;
+
+        try {
+            data = JSON.parse(rawBody);
+        } catch (error) {
+            const htmlMessage = rawBody
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            throw new Error(htmlMessage || config.strings.failed);
+        }
 
         if (!response.ok || !data.success) {
             throw new Error((data.data && data.data.message) || config.strings.failed);

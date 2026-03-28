@@ -14,7 +14,7 @@ use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Settings\PushPullSettings;
 use RuntimeException;
 
-final class ManagedSetApplyService
+final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
 {
     public function __construct(
         private readonly WordPressManagedContentAdapterInterface $adapter,

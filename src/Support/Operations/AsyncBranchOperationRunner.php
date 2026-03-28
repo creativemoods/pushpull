@@ -7,6 +7,7 @@ namespace PushPull\Support\Operations;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Domain\Apply\ManagedSetApplyService;
+use PushPull\Domain\Apply\ManagedSetApplyServiceInterface;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Domain\Sync\SyncServiceInterface;
 use PushPull\Persistence\Operations\OperationLogRepository;
@@ -33,7 +34,7 @@ final class AsyncBranchOperationRunner
 {
     private const CHUNK_NODE_LIMIT = 12;
     private const ASYNC_TYPE = 'branch_action';
-    /** @var array<string, ManagedSetApplyService> */
+    /** @var array<string, ManagedSetApplyServiceInterface> */
     private array $applyServicesByManagedSetKey;
 
     public function __construct(
