@@ -6,6 +6,7 @@ namespace PushPull\Support\Operations;
 
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
+use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Domain\Sync\SyncServiceInterface;
 use PushPull\Persistence\Operations\OperationLogRepository;
@@ -32,6 +33,8 @@ final class AsyncBranchOperationRunner
 {
     private const CHUNK_NODE_LIMIT = 12;
     private const ASYNC_TYPE = 'branch_action';
+    /** @var array<string, ManagedSetApplyService> */
+    private array $applyServicesByManagedSetKey;
 
     public function __construct(
         private readonly OperationLogRepository $operationLogRepository,
@@ -39,8 +42,10 @@ final class AsyncBranchOperationRunner
         private readonly SettingsRepository $settingsRepository,
         private readonly LocalRepositoryInterface $localRepository,
         private readonly GitProviderFactoryInterface $providerFactory,
-        private readonly SyncServiceInterface $syncService
+        private readonly SyncServiceInterface $syncService,
+        array $managedSetApplyServices = []
     ) {
+        $this->applyServicesByManagedSetKey = $managedSetApplyServices;
     }
 
     /**
@@ -48,7 +53,7 @@ final class AsyncBranchOperationRunner
      */
     public function start(string $managedSetKey, string $operationType): array
     {
-        if (! in_array($operationType, ['fetch', 'pull', 'push'], true)) {
+        if (! in_array($operationType, ['fetch', 'pull', 'push', 'apply'], true)) {
             throw new RuntimeException(sprintf('Async branch action "%s" is not supported.', $operationType));
         }
 
@@ -98,7 +103,7 @@ final class AsyncBranchOperationRunner
     }
 
     /**
-     * @return array{done: bool, status: string, message: string, progress: array<string, mixed>}
+     * @return array{done: bool, status: string, message: string, progress: array<string, mixed>, redirectManagedSetKey?: string}
      */
     public function continue(int $operationId): array
     {
@@ -117,6 +122,7 @@ final class AsyncBranchOperationRunner
                 'status' => $summaryType,
                 'message' => $summaryMessage,
                 'progress' => $this->progressPayload($record->result),
+                'redirectManagedSetKey' => is_string($record->result['redirectManagedSetKey'] ?? null) ? $record->result['redirectManagedSetKey'] : null,
             ];
         }
 
@@ -152,6 +158,7 @@ final class AsyncBranchOperationRunner
                 'status' => (string) $response['finalResult']['summaryType'],
                 'message' => (string) $response['finalResult']['summaryMessage'],
                 'progress' => $this->progressPayload($response['finalResult']),
+                'redirectManagedSetKey' => is_string($response['finalResult']['redirectManagedSetKey'] ?? null) ? $response['finalResult']['redirectManagedSetKey'] : null,
             ];
         } catch (\Throwable $exception) {
             $this->operationLogRepository->markFailed($record->id, $this->normalizeFailure($exception));
@@ -176,6 +183,10 @@ final class AsyncBranchOperationRunner
 
         if ($operationType === 'push') {
             return $this->initialPushState($record, $baseState, $branch);
+        }
+
+        if ($operationType === 'apply') {
+            return $this->initialApplyState($record, $baseState, $branch);
         }
 
         [$remoteConfig, $remoteRef] = $this->loadRemoteRef($branch);
@@ -348,6 +359,38 @@ final class AsyncBranchOperationRunner
     }
 
     /**
+     * @param array<string, mixed> $baseState
+     * @return array<string, mixed>
+     */
+    private function initialApplyState(OperationRecord $record, array $baseState, string $branch): array
+    {
+        $applyService = $this->requireApplyService($record->managedSetKey);
+        $prepared = $applyService->prepareApply($this->settingsRepository->get());
+        $orderedLogicalKeys = $prepared['orderedLogicalKeys'];
+
+        return $baseState + [
+            'phase' => 'apply_items',
+            'sourceCommitHash' => $prepared['commitHash'],
+            'orderedLogicalKeys' => $orderedLogicalKeys,
+            'applyIndex' => 0,
+            'createdCount' => 0,
+            'updatedCount' => 0,
+            'appliedWpObjectIds' => [],
+            'desiredLogicalKeys' => [],
+            'deletedLogicalKeys' => [],
+            'progressMode' => 'determinate',
+            'progressCurrent' => 0,
+            'progressTotal' => max(1, count($orderedLogicalKeys) + 1),
+            'progressMessage' => sprintf(
+                'Prepared apply plan for %s: %d item(s) from local branch %s.',
+                $record->managedSetKey,
+                count($orderedLogicalKeys),
+                $branch
+            ),
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $state
      * @return array{done: bool, state?: array<string, mixed>, finalResult?: array<string, mixed>}
      */
@@ -357,6 +400,7 @@ final class AsyncBranchOperationRunner
             'fetch' => $this->continueFetchOrPull($record, $state, false),
             'pull' => $this->continueFetchOrPull($record, $state, true),
             'push' => $this->continuePush($record, $state),
+            'apply' => $this->continueApply($record, $state),
             default => throw new RuntimeException(sprintf('Async branch action "%s" is not supported.', $record->operationType)),
         };
     }
@@ -576,6 +620,79 @@ final class AsyncBranchOperationRunner
                     'progressMode' => 'determinate',
                     'progressCurrent' => (int) $state['progressCurrent'],
                     'progressTotal' => (int) $state['progressTotal'],
+                ],
+            ];
+        }
+
+        return [
+            'done' => false,
+            'state' => $state,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $state
+     * @return array{done: bool, state?: array<string, mixed>, finalResult?: array<string, mixed>}
+     */
+    private function continueApply(OperationRecord $record, array $state): array
+    {
+        $applyService = $this->requireApplyService($record->managedSetKey);
+        $settings = $this->settingsRepository->get();
+        $budget = self::CHUNK_NODE_LIMIT;
+
+        while ($budget > 0) {
+            if ((int) $state['applyIndex'] < count($state['orderedLogicalKeys'])) {
+                $logicalKey = (string) $state['orderedLogicalKeys'][(int) $state['applyIndex']];
+                $menuOrder = (int) $state['applyIndex'];
+                $result = $applyService->applyLogicalKey($settings, $logicalKey, $menuOrder);
+
+                if ($result['created']) {
+                    $state['createdCount']++;
+                } else {
+                    $state['updatedCount']++;
+                }
+
+                $state['appliedWpObjectIds'][] = $result['postId'];
+                $state['desiredLogicalKeys'][$logicalKey] = true;
+                $state['applyIndex']++;
+                $state['progressCurrent']++;
+                $state['progressMessage'] = sprintf(
+                    'Applied %s to WordPress. Processed %d of %d item(s).',
+                    $logicalKey,
+                    $state['applyIndex'],
+                    count($state['orderedLogicalKeys'])
+                );
+                $budget--;
+                continue;
+            }
+
+            $state['deletedLogicalKeys'] = $applyService->deleteMissingLogicalKeys($state['desiredLogicalKeys']);
+            $state['progressCurrent'] = (int) $state['progressTotal'];
+            $state['progressMessage'] = sprintf(
+                'Applied %d item(s) from local branch %s to WordPress.',
+                count($state['orderedLogicalKeys']),
+                $state['branch']
+            );
+
+            return [
+                'done' => true,
+                'finalResult' => [
+                    'summaryType' => 'success',
+                    'summaryMessage' => sprintf(
+                        'Applied repository commit %s to WordPress. Created %d item(s), updated %d item(s), and deleted %d missing item(s).',
+                        $state['sourceCommitHash'],
+                        $state['createdCount'],
+                        $state['updatedCount'],
+                        count($state['deletedLogicalKeys'])
+                    ),
+                    'progressMode' => 'determinate',
+                    'progressCurrent' => (int) $state['progressTotal'],
+                    'progressTotal' => (int) $state['progressTotal'],
+                    'createdCount' => $state['createdCount'],
+                    'updatedCount' => $state['updatedCount'],
+                    'appliedWpObjectIds' => $state['appliedWpObjectIds'],
+                    'deletedLogicalKeys' => $state['deletedLogicalKeys'],
+                    'redirectManagedSetKey' => $record->managedSetKey,
                 ],
             ];
         }
@@ -1277,5 +1394,14 @@ final class AsyncBranchOperationRunner
             'progressCurrent' => 0,
             'progressTotal' => 0,
         ];
+    }
+
+    private function requireApplyService(string $managedSetKey): ManagedSetApplyService
+    {
+        if (! isset($this->applyServicesByManagedSetKey[$managedSetKey])) {
+            throw new RuntimeException(sprintf('Managed set "%s" cannot be applied asynchronously.', $managedSetKey));
+        }
+
+        return $this->applyServicesByManagedSetKey[$managedSetKey];
     }
 }

@@ -153,7 +153,7 @@ if (! function_exists('site_url')) {
 if (! function_exists('post_type_exists')) {
     function post_type_exists(string $postType): bool
     {
-        return in_array($postType, ['gblocks_styles', 'gblocks_condition', 'wp_block', 'custom_css', 'page', 'attachment'], true);
+        return in_array($postType, ['gblocks_styles', 'gblocks_condition', 'wp_block', 'custom_css', 'gp_elements', 'page', 'post', 'attachment'], true);
     }
 }
 
@@ -405,6 +405,32 @@ if (! function_exists('wp_delete_post')) {
         unset($GLOBALS['pushpull_test_object_terms'][$postId]);
 
         return true;
+    }
+}
+
+if (! function_exists('wp_generate_attachment_metadata')) {
+    function wp_generate_attachment_metadata(int $attachmentId, string $file): array
+    {
+        $relativePath = (string) get_post_meta($attachmentId, '_wp_attached_file', true);
+
+        return [
+            'file' => $relativePath !== '' ? $relativePath : basename($file),
+            'generated' => true,
+            'sizes' => [
+                'thumbnail' => [
+                    'file' => 'thumb-' . basename($file),
+                    'width' => 150,
+                    'height' => 150,
+                ],
+            ],
+        ];
+    }
+}
+
+if (! function_exists('wp_update_attachment_metadata')) {
+    function wp_update_attachment_metadata(int $attachmentId, array $data): bool
+    {
+        return update_post_meta($attachmentId, '_wp_attachment_metadata', $data);
     }
 }
 

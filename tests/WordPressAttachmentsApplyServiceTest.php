@@ -103,6 +103,9 @@ final class WordPressAttachmentsApplyServiceTest extends TestCase
         self::assertSame('2026/03/bali.jpg', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_wp_attached_file']);
         self::assertSame('Bali beach', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_wp_attachment_image_alt']);
         self::assertSame('1', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['pushpull_sync_attachment']);
+        self::assertSame('2026/03/bali.jpg', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_wp_attachment_metadata']['file']);
+        self::assertTrue((bool) ($GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_wp_attachment_metadata']['generated'] ?? false));
+        self::assertSame('thumb-bali.jpg', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_wp_attachment_metadata']['sizes']['thumbnail']['file']);
         self::assertSame('JPEGDATA', file_get_contents($this->uploadsBaseDir . '/2026/03/bali.jpg'));
     }
 

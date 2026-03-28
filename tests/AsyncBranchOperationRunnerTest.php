@@ -224,6 +224,81 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertNotNull($repository->getCommit('provider-commit-2'));
     }
 
+    public function testChunkedApplyProcessesManagedSetAndRedirectsBackToDetailView(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new AsyncInMemoryProvider();
+        $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $workingStateRepository = new WorkingStateRepository($wpdb);
+        $applyService = new ManagedSetApplyService(
+            $adapter,
+            new RepositoryStateReader($repository),
+            new ContentMapRepository($wpdb),
+            $workingStateRepository
+        );
+
+        $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
+        $snapshot = $adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => 1,
+                'post_title' => '.gbp-section',
+                'post_name' => 'gbp-section',
+                'post_status' => 'publish',
+                'menu_order' => 0,
+                'gb_style_selector' => '.gbp-section',
+                'gb_style_data' => serialize(['paddingTop' => '7rem']),
+                'gb_style_css' => '.gbp-section { color: red; }',
+            ],
+            [
+                'wp_object_id' => 2,
+                'post_title' => '.gbp-card',
+                'post_name' => 'gbp-card',
+                'post_status' => 'publish',
+                'menu_order' => 1,
+                'gb_style_selector' => '.gbp-card',
+                'gb_style_data' => serialize(['borderTopWidth' => '1px']),
+                'gb_style_css' => '.gbp-card { border-top-width: 1px; }',
+            ],
+        ]);
+        $committer->commitSnapshot($snapshot, new \PushPull\Domain\Sync\CommitManagedSetRequest('main', 'Local change', 'Jane Doe', 'jane@example.com'));
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [];
+        $GLOBALS['pushpull_test_generateblocks_meta'] = [];
+        $GLOBALS['pushpull_test_next_post_id'] = 1;
+
+        $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
+        $runner = new AsyncBranchOperationRunner(
+            new OperationLogRepository($wpdb),
+            new OperationLockService(),
+            $settingsRepository,
+            $repository,
+            new AsyncInMemoryProviderFactory($provider),
+            $syncService,
+            [$adapter->getManagedSetKey() => $applyService]
+        );
+
+        $started = $runner->start('generateblocks_global_styles', 'apply');
+        self::assertSame('determinate', $started['progress']['mode']);
+        $response = null;
+
+        for ($index = 0; $index < 20; $index++) {
+            $response = $runner->continue($started['operationId']);
+
+            if ($response['done']) {
+                break;
+            }
+        }
+
+        self::assertNotNull($response);
+        self::assertTrue($response['done']);
+        self::assertSame('success', $response['status']);
+        self::assertSame('determinate', $response['progress']['mode']);
+        self::assertSame('generateblocks_global_styles', $response['redirectManagedSetKey']);
+        self::assertCount(2, $GLOBALS['pushpull_test_generateblocks_posts']);
+    }
+
     private function settingsRepositoryWithStylesEnabled(): SettingsRepository
     {
         $settingsRepository = new SettingsRepository();

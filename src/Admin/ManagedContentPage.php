@@ -104,7 +104,7 @@ final class ManagedContentPage
         echo '<div class="wrap pushpull-admin">';
         echo '<h1>' . esc_html__('Managed Content', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('Review managed content state across all enabled domains, then drill into a specific managed set for fetch, merge, apply, commit, and push actions.', 'pushpull') . '</p>';
-        $this->renderPrimaryNavigation();
+        $this->renderPrimaryNavigation($settings);
         $this->renderManagedSetTabs($this->requestManagedSetKey());
         if ($commitNotice !== null) {
             printf(
@@ -122,8 +122,12 @@ final class ManagedContentPage
         echo '</div>';
     }
 
-    private function renderPrimaryNavigation(): void
+    private function renderPrimaryNavigation(\PushPull\Settings\PushPullSettings $settings): void
     {
+        $managedSetKey = $this->branchActionManagedSetKey($settings);
+        $enabled = $managedSetKey !== null;
+
+        echo '<div class="pushpull-page-nav-row">';
         echo '<nav class="nav-tab-wrapper wp-clearfix pushpull-page-nav">';
         printf(
             '<a href="%s" class="nav-tab">%s</a>',
@@ -141,6 +145,12 @@ final class ManagedContentPage
             esc_html__('Audit Log', 'pushpull')
         );
         echo '</nav>';
+        echo '<div class="pushpull-top-actions">';
+        $this->renderPullButton($managedSetKey, $enabled);
+        $this->renderFetchButton($managedSetKey, $enabled);
+        $this->renderPushButton($managedSetKey, $enabled);
+        echo '</div>';
+        echo '</div>';
     }
 
     private function renderManagedSetDetail(\PushPull\Settings\PushPullSettings $settings, ManifestManagedContentAdapterInterface $managedContentAdapter): void
@@ -221,8 +231,6 @@ final class ManagedContentPage
         $this->statusCard(__('Last local commit', 'pushpull'), $this->localRepository->getHeadCommit($settings->branch)?->hash ?? __('None recorded', 'pushpull'));
         $this->statusCard(__('Branch', 'pushpull'), $settings->branch);
         echo '</div>';
-
-        $this->renderOverviewBranchActions($settings);
 
         echo '<div class="pushpull-panel">';
         echo '<h2>' . esc_html__('All Managed Sets', 'pushpull') . '</h2>';
@@ -320,27 +328,6 @@ final class ManagedContentPage
             }
 
             echo '</details>';
-        }
-
-        echo '</div>';
-    }
-
-    private function renderOverviewBranchActions(\PushPull\Settings\PushPullSettings $settings): void
-    {
-        $managedSetKey = $this->branchActionManagedSetKey($settings);
-        $enabled = $managedSetKey !== null;
-
-        echo '<div class="pushpull-panel">';
-        echo '<h2>' . esc_html__('Branch Actions', 'pushpull') . '</h2>';
-        echo '<p class="description">' . esc_html__('These actions operate on the whole local branch and remote-tracking state across all managed sets.', 'pushpull') . '</p>';
-        echo '<div class="pushpull-button-grid">';
-        $this->renderPullButton($managedSetKey, $enabled);
-        $this->renderFetchButton($managedSetKey, $enabled);
-        $this->renderPushButton($managedSetKey, $enabled);
-        echo '</div>';
-
-        if (! $enabled) {
-            echo '<p class="description">' . esc_html__('Enable at least one managed set in Settings before running branch actions.', 'pushpull') . '</p>';
         }
 
         echo '</div>';
@@ -950,7 +937,13 @@ final class ManagedContentPage
         }
 
         wp_send_json_success($response + [
-            'redirectUrl' => $this->noticeUrl($response['status'], $response['message'], null),
+            'redirectUrl' => $this->noticeUrl(
+                $response['status'],
+                $response['message'],
+                isset($response['redirectManagedSetKey']) && is_string($response['redirectManagedSetKey'])
+                    ? $response['redirectManagedSetKey']
+                    : null
+            ),
         ]);
     }
 
@@ -1335,7 +1328,7 @@ final class ManagedContentPage
             return;
         }
 
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Apply the local repository state back into WordPress? This will update existing managed styles and remove local styles that are not present in the repository.\');">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="apply" data-pushpull-async-label="' . esc_attr__('Apply repo to WordPress', 'pushpull') . '" data-pushpull-confirm="' . esc_attr__('Apply the local repository state back into WordPress? This will update existing managed content and remove WordPress items that are not present in the repository.', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::APPLY_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::APPLY_ACTION);
@@ -1642,7 +1635,6 @@ final class ManagedContentPage
         echo '</div>';
         echo '<p class="pushpull-async-modal__progress-label"></p>';
         echo '</div>';
-        echo '<div class="pushpull-async-modal__spinner" aria-hidden="true"></div>';
         echo '<button type="button" class="button button-secondary pushpull-async-modal__close" hidden="hidden">' . esc_html__('Close', 'pushpull') . '</button>';
         echo '</div>';
         echo '</div>';

@@ -194,8 +194,14 @@ final class SettingsPage
         if ($settings->isManagedSetEnabled('wordpress_custom_css')) {
             $managedSets[] = 'WordPress custom CSS';
         }
+        if ($settings->isManagedSetEnabled('generatepress_elements')) {
+            $managedSets[] = 'GeneratePress elements';
+        }
         if ($settings->isManagedSetEnabled('wordpress_pages')) {
             $managedSets[] = 'WordPress pages';
+        }
+        if ($settings->isManagedSetEnabled('wordpress_posts')) {
+            $managedSets[] = 'WordPress posts';
         }
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Managed sets', 'pushpull'), esc_html($managedSets !== [] ? implode(', ', $managedSets) : 'Not enabled'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Token', 'pushpull'), esc_html($settings->maskedApiToken() !== '' ? $settings->maskedApiToken() : 'Not stored'));

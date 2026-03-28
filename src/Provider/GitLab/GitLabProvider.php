@@ -30,6 +30,7 @@ final class GitLabProvider implements GitProviderInterface
     private const EMPTY_TREE_HASH = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
     private const ROOT_TREE_PREFIX = 'gitlab-root-tree-';
     private const MAX_ATTEMPTS = 3;
+    private const TREE_PAGE_SIZE = 100;
 
     /** @var array<string, string> */
     private array $stagedBlobs = [];
@@ -814,7 +815,7 @@ final class GitLabProvider implements GitProviderInterface
             $response = $this->requestResponse(
                 'GET',
                 $config,
-                '/projects/' . $this->projectPath($config) . '/repository/tree?ref=' . rawurlencode($ref) . '&recursive=true&per_page=100&page=' . $page,
+                '/projects/' . $this->projectPath($config) . '/repository/tree?ref=' . rawurlencode($ref) . '&recursive=true&per_page=' . self::TREE_PAGE_SIZE . '&page=' . $page,
                 'get_tree',
                 [
                     404 => ProviderException::REPOSITORY_NOT_FOUND,
@@ -842,7 +843,10 @@ final class GitLabProvider implements GitProviderInterface
                 ];
             }
 
-            $page = (int) ($response->headers['X-Next-Page'] ?? $response->headers['x-next-page'] ?? 0);
+            $nextPage = (int) ($response->headers['X-Next-Page'] ?? $response->headers['x-next-page'] ?? 0);
+            $page = $nextPage > 0
+                ? $nextPage
+                : (count($decoded) >= self::TREE_PAGE_SIZE ? $page + 1 : 0);
         } while ($page > 0);
 
         return $entries;

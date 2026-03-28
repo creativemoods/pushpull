@@ -293,8 +293,15 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
         update_post_meta($postId, self::SYNC_META_KEY, '1');
 
         $attachmentMetadata = $item->metadata['attachmentMetadata'] ?? null;
+        $generatedAttachmentMetadata = $this->generateAttachmentMetadata($postId, $targetPath, $relativePath);
 
-        if ($attachmentMetadata !== null) {
+        if ($generatedAttachmentMetadata !== null) {
+            if (function_exists('wp_update_attachment_metadata')) {
+                wp_update_attachment_metadata($postId, $generatedAttachmentMetadata);
+            } else {
+                update_post_meta($postId, '_wp_attachment_metadata', $generatedAttachmentMetadata);
+            }
+        } elseif ($attachmentMetadata !== null) {
             update_post_meta($postId, '_wp_attachment_metadata', $attachmentMetadata);
         } else {
             delete_post_meta($postId, '_wp_attachment_metadata');
@@ -307,6 +314,39 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
         } else {
             delete_post_meta($postId, '_wp_attachment_image_alt');
         }
+    }
+
+    /**
+     * Regenerate attachment metadata on the target site when WordPress image helpers are available.
+     * This keeps thumbnails and sub-sizes aligned with the files that actually exist locally.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function generateAttachmentMetadata(int $postId, string $targetPath, string $relativePath): ?array
+    {
+        if (! function_exists('wp_generate_attachment_metadata')) {
+            $imageFunctions = defined('ABSPATH') ? ABSPATH . 'wp-admin/includes/image.php' : '';
+
+            if ($imageFunctions !== '' && is_readable($imageFunctions)) {
+                require_once $imageFunctions;
+            }
+        }
+
+        if (! function_exists('wp_generate_attachment_metadata')) {
+            return null;
+        }
+
+        $generatedMetadata = wp_generate_attachment_metadata($postId, $targetPath);
+
+        if (! is_array($generatedMetadata)) {
+            return null;
+        }
+
+        if (($generatedMetadata['file'] ?? '') === '') {
+            $generatedMetadata['file'] = $relativePath;
+        }
+
+        return $generatedMetadata;
     }
 
     public function deleteMissingItems(array $desiredLogicalKeys): array

@@ -116,6 +116,11 @@
             const managedSetInput = form.querySelector('input[name="managed_set"]');
             const operationType = form.getAttribute('data-pushpull-async-operation') || '';
             const label = form.getAttribute('data-pushpull-async-label') || config.strings.working;
+            const confirmationMessage = form.getAttribute('data-pushpull-confirm');
+
+            if (confirmationMessage && !window.confirm(confirmationMessage)) {
+                return;
+            }
 
             openModal(label, config.strings.working);
 

@@ -425,6 +425,49 @@ final class GitProviderTest extends TestCase
         self::assertCount(4, $transport->requests);
         self::assertSame('Flatten merge', $transport->requests[3]->json['commit_message'] ?? null);
     }
+
+    public function testGitlabRecursiveTreePaginationFallsBackWhenNextPageHeaderIsMissing(): void
+    {
+        $firstPage = [];
+
+        for ($index = 1; $index <= 100; $index++) {
+            $firstPage[] = [
+                'path' => 'wordpress/pages/page-' . $index . '.json',
+                'type' => 'blob',
+                'id' => 'blob-' . $index,
+                'mode' => '100644',
+            ];
+        }
+
+        $provider = new GitLabProvider(new FakeTransport([
+            new HttpResponse(200, '{"id":"commit-1","parent_ids":[],"message":"Hello"}'),
+            new HttpResponse(200, json_encode($firstPage)),
+            new HttpResponse(200, json_encode([
+                [
+                    'path' => 'wordpress/pages/premium.json',
+                    'type' => 'blob',
+                    'id' => 'blob-premium',
+                    'mode' => '100644',
+                ],
+            ])),
+        ]));
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+
+        $commit = $provider->getCommit($config, 'commit-1');
+        $tree = $provider->getTree($config, $commit?->treeHash ?? '');
+
+        self::assertNotNull($tree);
+        self::assertCount(101, $tree->entries);
+        self::assertContains(
+            [
+                'path' => 'wordpress/pages/premium.json',
+                'type' => 'blob',
+                'hash' => 'blob-premium',
+                'mode' => '100644',
+            ],
+            $tree->entries
+        );
+    }
 }
 
 final class FakeTransport implements HttpTransportInterface

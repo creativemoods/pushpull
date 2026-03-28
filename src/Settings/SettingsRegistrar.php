@@ -180,7 +180,9 @@ final class SettingsRegistrar
             'wordpress_block_patterns' => 'WordPress block patterns',
             'wordpress_attachments' => 'WordPress attachments',
             'wordpress_custom_css' => 'WordPress custom CSS',
+            'generatepress_elements' => 'GeneratePress elements',
             'wordpress_pages' => 'WordPress pages',
+            'wordpress_posts' => 'WordPress posts',
         ];
 
         foreach ($options as $managedSetKey => $label) {

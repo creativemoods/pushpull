@@ -26,24 +26,7 @@ final class ManagedSetApplyService
 
     public function apply(PushPullSettings $settings): ApplyManagedSetResult
     {
-        $workingState = $this->workingStateRepository->get($this->adapter->getManagedSetKey(), $settings->branch);
-
-        if ($workingState !== null && $workingState->hasConflicts()) {
-            throw new RuntimeException('Cannot apply repository content while merge conflicts are pending.');
-        }
-
-        $state = $this->repositoryStateReader->read('local', 'refs/heads/' . $settings->branch);
-
-        if ($state->commitHash === null) {
-            throw new RuntimeException(sprintf('Local branch %s does not have a commit to apply.', $settings->branch));
-        }
-
-        $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($this->managedSetFiles($state->files));
-        $items = [];
-
-        foreach ($snapshot->items as $item) {
-            $items[$item->logicalKey] = $item;
-        }
+        ['commitHash' => $commitHash, 'snapshot' => $snapshot, 'items' => $items] = $this->loadSnapshot($settings);
 
         $createdCount = 0;
         $updatedCount = 0;
@@ -83,12 +66,63 @@ final class ManagedSetApplyService
         return new ApplyManagedSetResult(
             $this->adapter->getManagedSetKey(),
             $settings->branch,
-            $state->commitHash,
+            $commitHash,
             $createdCount,
             $updatedCount,
             $appliedIds,
             $deletedLogicalKeys
         );
+    }
+
+    /**
+     * @return array{commitHash: string, orderedLogicalKeys: string[]}
+     */
+    public function prepareApply(PushPullSettings $settings): array
+    {
+        ['commitHash' => $commitHash, 'snapshot' => $snapshot] = $this->loadSnapshot($settings);
+
+        return [
+            'commitHash' => $commitHash,
+            'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
+        ];
+    }
+
+    /**
+     * @return array{created: bool, postId: int}
+     */
+    public function applyLogicalKey(PushPullSettings $settings, string $logicalKey, int $menuOrder): array
+    {
+        ['snapshot' => $snapshot, 'items' => $items] = $this->loadSnapshot($settings);
+        $item = $items[$logicalKey] ?? null;
+
+        if ($item === null) {
+            throw new RuntimeException(sprintf('Manifest references missing item %s.', $logicalKey));
+        }
+
+        $existingId = $this->resolveExistingWpObjectId($item);
+        $postId = $this->adapter->upsertItem($item, $menuOrder, $existingId);
+        $this->adapter->persistItemMeta($postId, $item, $snapshot->files);
+        $this->contentMapRepository->upsert(
+            $item->managedSetKey,
+            $item->contentType,
+            $item->logicalKey,
+            $postId,
+            $this->adapter->hashItem($item)
+        );
+
+        return [
+            'created' => $existingId === null,
+            'postId' => $postId,
+        ];
+    }
+
+    /**
+     * @param array<string, true> $desiredLogicalKeys
+     * @return string[]
+     */
+    public function deleteMissingLogicalKeys(array $desiredLogicalKeys): array
+    {
+        return $this->deleteMissingPosts($desiredLogicalKeys);
     }
 
     /**
@@ -136,5 +170,36 @@ final class ManagedSetApplyService
         }
 
         return $deletedLogicalKeys;
+    }
+
+    /**
+     * @return array{commitHash: string, snapshot: \PushPull\Content\ManagedContentSnapshot, items: array<string, ManagedContentItem>}
+     */
+    private function loadSnapshot(PushPullSettings $settings): array
+    {
+        $workingState = $this->workingStateRepository->get($this->adapter->getManagedSetKey(), $settings->branch);
+
+        if ($workingState !== null && $workingState->hasConflicts()) {
+            throw new RuntimeException('Cannot apply repository content while merge conflicts are pending.');
+        }
+
+        $state = $this->repositoryStateReader->read('local', 'refs/heads/' . $settings->branch);
+
+        if ($state->commitHash === null) {
+            throw new RuntimeException(sprintf('Local branch %s does not have a commit to apply.', $settings->branch));
+        }
+
+        $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($this->managedSetFiles($state->files));
+        $items = [];
+
+        foreach ($snapshot->items as $item) {
+            $items[$item->logicalKey] = $item;
+        }
+
+        return [
+            'commitHash' => $state->commitHash,
+            'snapshot' => $snapshot,
+            'items' => $items,
+        ];
     }
 }

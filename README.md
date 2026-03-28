@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.10
+Stable tag: 0.0.11
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -166,6 +166,14 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 11. Verify after upload that WordPress shows the new plugin version correctly.
 
 ## Changelog
+
+### 0.0.11
+
+1. Added new managed content domains for WordPress posts and GeneratePress elements.
+2. Added asynchronous, chunked `Apply repo to WordPress` operations with modal progress so large apply actions no longer rely on one long blocking request.
+3. Moved `Pull`, `Fetch`, and `Push` to the top Managed Content navigation row so branch actions stay available while working inside a specific managed set.
+4. Fixed GitLab recursive tree fetching so repositories with more than one page of files no longer silently miss later entries during fetch.
+5. Improved attachment apply so WordPress regenerates target-side attachment metadata and image sub-sizes instead of reusing stale source-site thumbnail metadata.
 
 ### 0.0.10
 

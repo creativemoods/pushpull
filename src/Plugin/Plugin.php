@@ -18,7 +18,9 @@ use PushPull\Admin\SettingsPage;
 use PushPull\Content\GenerateBlocks\WordPressBlockPatternsAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCustomCssAdapter;
+use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
+use PushPull\Content\WordPress\WordPressPostsAdapter;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Diff\ManagedSetDiffService;
 use PushPull\Domain\Diff\RepositoryStateReader;
@@ -69,7 +71,9 @@ final class Plugin
         $wordPressBlockPatternsAdapter = new WordPressBlockPatternsAdapter();
         $wordPressAttachmentsAdapter = new WordPressAttachmentsAdapter();
         $wordPressCustomCssAdapter = new WordPressCustomCssAdapter();
+        $generatePressElementsAdapter = new GeneratePressElementsAdapter();
         $wordPressPagesAdapter = new WordPressPagesAdapter();
+        $wordPressPostsAdapter = new WordPressPostsAdapter();
         $workingStateRepository = new WorkingStateRepository($wpdb);
         $contentMapRepository = new ContentMapRepository($wpdb);
         $stateReader = new RepositoryStateReader($localRepository);
@@ -79,7 +83,9 @@ final class Plugin
             $wordPressBlockPatternsAdapter,
             $wordPressAttachmentsAdapter,
             $wordPressCustomCssAdapter,
+            $generatePressElementsAdapter,
             $wordPressPagesAdapter,
+            $wordPressPostsAdapter,
         ]);
         $managedSetCommitters = [];
         $managedSetDiffServices = [];
@@ -144,7 +150,8 @@ final class Plugin
                 $settingsRepository,
                 $localRepository,
                 $providerFactory,
-                $syncService
+                $syncService,
+                $managedSetApplyServices
             )
         );
         $attachmentSyncField = new AttachmentSyncField();
