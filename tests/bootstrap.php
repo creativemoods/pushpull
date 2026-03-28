@@ -45,6 +45,19 @@ if (! function_exists('sanitize_text_field')) {
     }
 }
 
+if (! function_exists('wp_strip_all_tags')) {
+    function wp_strip_all_tags(string $value, bool $remove_breaks = false): string
+    {
+        $value = strip_tags($value);
+
+        if ($remove_breaks) {
+            $value = preg_replace('/[\r\n\t ]+/', ' ', $value) ?? $value;
+        }
+
+        return trim($value);
+    }
+}
+
 if (! function_exists('wp_unslash')) {
     function wp_unslash(mixed $value): mixed
     {

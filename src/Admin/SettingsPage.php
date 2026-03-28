@@ -310,7 +310,7 @@ final class SettingsPage
                 ['branch' => $settings->branch],
                 fn () => $this->remoteRepositoryInitializer->initialize('generateblocks_global_styles', $settings)
             );
-        } catch (\RuntimeException | ProviderException $exception) {
+        } catch (\Throwable $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message);
         }

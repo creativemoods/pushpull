@@ -30,7 +30,8 @@ final class SettingsRegistrar
             'pushpull_provider',
             __('Provider Selection', 'pushpull'),
             static function (): void {
-                echo '<p>Select the remote Git provider and repository coordinates.</p>';
+                echo '<p>' . esc_html__('Select the remote Git provider and repository coordinates.', 'pushpull') . '</p>';
+                echo '<p class="description">' . esc_html__('GitLab currently linearizes pushed merge results into normal commits instead of preserving merge topology on the remote branch.', 'pushpull') . '</p>';
             },
             self::SETTINGS_PAGE_SLUG
         );
@@ -48,7 +49,8 @@ final class SettingsRegistrar
             'pushpull_auth',
             __('Authentication', 'pushpull'),
             static function (): void {
-                echo '<p>Store the provider token here. The field remains masked after save.</p>';
+                echo '<p>' . esc_html__('Store the provider token here. The field remains masked after save.', 'pushpull') . '</p>';
+                echo '<p class="description">' . esc_html__('For GitLab fine-grained personal access tokens, grant Project: Read, Branch: Read, Commit: Read, Commit: Create, and Repository: Read.', 'pushpull') . '</p>';
             },
             self::SETTINGS_PAGE_SLUG
         );

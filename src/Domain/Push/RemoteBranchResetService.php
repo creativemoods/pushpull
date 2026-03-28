@@ -55,20 +55,21 @@ final class RemoteBranchResetService
             throw new RuntimeException(sprintf('Remote branch %s could not be reset.', $settings->branch));
         }
 
+        $finalRemoteCommitHash = $update->commitHash !== '' ? $update->commitHash : $remoteCommitHash;
         $this->localRepository->importRemoteTree(new RemoteTree($remoteTreeHash, []));
         $this->localRepository->importRemoteCommit(new RemoteCommit(
-            $remoteCommitHash,
+            $finalRemoteCommitHash,
             $remoteTreeHash,
             [$currentRemoteRef->commitHash],
             sprintf('Reset remote branch %s contents', $settings->branch)
         ));
-        $this->localRepository->updateRef('refs/remotes/origin/' . $settings->branch, $remoteCommitHash);
+        $this->localRepository->updateRef('refs/remotes/origin/' . $settings->branch, $finalRemoteCommitHash);
 
         return new ResetRemoteBranchResult(
             $managedSetKey,
             $settings->branch,
             $currentRemoteRef->commitHash,
-            $remoteCommitHash,
+            $finalRemoteCommitHash,
             $remoteTreeHash
         );
     }

@@ -14,6 +14,7 @@ use PushPull\Provider\CreateRemoteCommitRequest;
 use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\GitProviderFactoryInterface;
 use PushPull\Provider\GitProviderInterface;
+use PushPull\Provider\GitLab\GitLabProvider;
 use PushPull\Provider\GitRemoteConfig;
 use PushPull\Provider\RemoteBlob;
 use PushPull\Provider\RemoteCommit;
@@ -412,6 +413,7 @@ final class AsyncBranchOperationRunner
     private function continuePush(OperationRecord $record, array $state): array
     {
         [$provider, $remoteConfig] = $this->resolveProvider();
+        $this->rehydrateGitLabPushState($provider, $remoteConfig, $state);
         $budget = self::CHUNK_NODE_LIMIT;
 
         while ($budget > 0) {
@@ -544,9 +546,11 @@ final class AsyncBranchOperationRunner
                 throw new RuntimeException(sprintf('Remote branch %s could not be updated.', $state['branch']));
             }
 
-            $this->localRepository->updateRef('refs/heads/' . $state['branch'], $remoteHeadHash);
-            $this->localRepository->updateRef('refs/remotes/origin/' . $state['branch'], $remoteHeadHash);
-            $this->localRepository->updateRef('HEAD', $remoteHeadHash);
+            $finalRemoteHeadHash = $update->commitHash !== '' ? $update->commitHash : $remoteHeadHash;
+            $this->aliasRemoteCommitHash($remoteHeadHash, $finalRemoteHeadHash);
+            $this->localRepository->updateRef('refs/heads/' . $state['branch'], $finalRemoteHeadHash);
+            $this->localRepository->updateRef('refs/remotes/origin/' . $state['branch'], $finalRemoteHeadHash);
+            $this->localRepository->updateRef('HEAD', $finalRemoteHeadHash);
             $state['progressCurrent']++;
 
             return [
@@ -556,7 +560,7 @@ final class AsyncBranchOperationRunner
                     'summaryMessage' => sprintf(
                         'Pushed local branch %s to remote commit %s. Uploaded %d commit(s), %d tree(s), and %d blob(s).',
                         $state['branch'],
-                        $remoteHeadHash,
+                        $finalRemoteHeadHash,
                         count($state['pushedCommitHashes']),
                         count($state['pushedTreeHashes']),
                         count($state['pushedBlobHashes'])
@@ -565,7 +569,7 @@ final class AsyncBranchOperationRunner
                     'managedSetKey' => $record->managedSetKey,
                     'branch' => $state['branch'],
                     'status' => 'pushed',
-                    'remoteCommitHash' => $remoteHeadHash,
+                    'remoteCommitHash' => $finalRemoteHeadHash,
                     'pushedCommitHashes' => array_values(array_unique($state['pushedCommitHashes'])),
                     'pushedTreeHashes' => array_values(array_unique($state['pushedTreeHashes'])),
                     'pushedBlobHashes' => array_values(array_unique($state['pushedBlobHashes'])),
@@ -580,6 +584,98 @@ final class AsyncBranchOperationRunner
             'done' => false,
             'state' => $state,
         ];
+    }
+
+    /**
+     * Rebuild GitLab's synthetic staged objects when async push continues in a new request.
+     *
+     * @param array<string, mixed> $state
+     */
+    private function rehydrateGitLabPushState(GitProviderInterface $provider, GitRemoteConfig $remoteConfig, array $state): void
+    {
+        if (! $provider instanceof GitLabProvider) {
+            return;
+        }
+
+        foreach (($state['blobMap'] ?? []) as $localBlobHash => $remoteBlobHash) {
+            if (! is_string($localBlobHash) || ! is_string($remoteBlobHash) || $localBlobHash === '' || $remoteBlobHash === '') {
+                continue;
+            }
+
+            $blob = $this->localRepository->getBlob($localBlobHash);
+
+            if ($blob === null) {
+                throw new RuntimeException(sprintf('Local blob %s could not be found while restoring GitLab push state.', $localBlobHash));
+            }
+
+            $provider->createBlob($remoteConfig, $blob->content);
+        }
+
+        foreach (($state['treeMap'] ?? []) as $localTreeHash => $remoteTreeHash) {
+            if (! is_string($localTreeHash) || ! is_string($remoteTreeHash) || $localTreeHash === '' || $remoteTreeHash === '') {
+                continue;
+            }
+
+            $tree = $this->localRepository->getTree($localTreeHash);
+
+            if ($tree === null) {
+                throw new RuntimeException(sprintf('Local tree %s could not be found while restoring GitLab push state.', $localTreeHash));
+            }
+
+            $entries = [];
+
+            foreach ($tree->entries as $entry) {
+                $remoteHash = $entry->type === 'blob'
+                    ? (string) (($state['blobMap'][$entry->hash] ?? '') ?: $entry->hash)
+                    : (string) (($state['treeMap'][$entry->hash] ?? '') ?: $entry->hash);
+
+                $entries[] = [
+                    'path' => $entry->path,
+                    'type' => $entry->type,
+                    'hash' => $remoteHash,
+                ];
+            }
+
+            $provider->createTree($remoteConfig, $entries);
+        }
+
+        foreach (($state['commitMap'] ?? []) as $localCommitHash => $remoteCommitHash) {
+            if (! is_string($localCommitHash) || ! is_string($remoteCommitHash) || $localCommitHash === '' || $remoteCommitHash === '') {
+                continue;
+            }
+
+            $localCommit = $this->localRepository->getCommit($localCommitHash);
+
+            if ($localCommit === null) {
+                throw new RuntimeException(sprintf('Local commit %s could not be found while restoring GitLab push state.', $localCommitHash));
+            }
+
+            $remoteParentHashes = [];
+
+            foreach ([$localCommit->parentHash, $localCommit->secondParentHash] as $parentHash) {
+                if ($parentHash === null || $parentHash === '') {
+                    continue;
+                }
+
+                if ($parentHash === ($state['stopAtRemoteHash'] ?? null)) {
+                    $remoteParentHashes[] = $parentHash;
+                    continue;
+                }
+
+                $mappedParentHash = (string) (($state['commitMap'][$parentHash] ?? '') ?: $parentHash);
+                $remoteParentHashes[] = $mappedParentHash;
+            }
+
+            $remoteTreeHash = (string) (($state['treeMap'][$localCommit->treeHash] ?? '') ?: $localCommit->treeHash);
+
+            $provider->createCommit($remoteConfig, new CreateRemoteCommitRequest(
+                $remoteTreeHash,
+                $remoteParentHashes,
+                $localCommit->message,
+                $localCommit->authorName !== '' ? $localCommit->authorName : 'PushPull',
+                $localCommit->authorEmail
+            ));
+        }
     }
 
     /**
@@ -860,6 +956,26 @@ final class AsyncBranchOperationRunner
             'current' => (int) ($state['progressCurrent'] ?? 0),
             'total' => (int) ($state['progressTotal'] ?? 0),
         ];
+    }
+
+    private function aliasRemoteCommitHash(string $stagedRemoteHash, string $finalRemoteHash): void
+    {
+        if ($stagedRemoteHash === $finalRemoteHash) {
+            return;
+        }
+
+        $stagedCommit = $this->localRepository->getCommit($stagedRemoteHash);
+
+        if ($stagedCommit === null) {
+            return;
+        }
+
+        $this->localRepository->importRemoteCommit(new RemoteCommit(
+            $finalRemoteHash,
+            $stagedCommit->treeHash,
+            array_values(array_filter([$stagedCommit->parentHash, $stagedCommit->secondParentHash])),
+            $stagedCommit->message
+        ));
     }
 
     private function noticeUrl(string $status, string $message): string

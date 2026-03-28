@@ -168,6 +168,62 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertSame($provider->refs['refs/heads/main']->commitHash, $repository->getRef('refs/remotes/origin/main')?->commitHash);
     }
 
+    public function testChunkedPushUsesActualProviderCommitHashWhenUpdateReturnsDifferentHash(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new AsyncInMemoryPushProvider();
+        $provider->updatedCommitHashOverride = 'provider-commit-2';
+        $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+
+        $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
+        $snapshot = $adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => 1,
+                'post_title' => '.gbp-section',
+                'post_name' => 'gbp-section',
+                'post_status' => 'publish',
+                'menu_order' => 0,
+                'gb_style_selector' => '.gbp-section',
+                'gb_style_data' => serialize(['paddingTop' => '7rem']),
+                'gb_style_css' => '.gbp-section { color: red; }',
+            ],
+        ]);
+        $committer->commitSnapshot($snapshot, new \PushPull\Domain\Sync\CommitManagedSetRequest('main', 'Local change', 'Jane Doe', 'jane@example.com'));
+        $provider->trees['remote-tree-base'] = new \PushPull\Provider\RemoteTree('remote-tree-base', []);
+        $provider->commits['remote-base'] = new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base');
+        $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
+        $repository->updateRef('refs/remotes/origin/main', 'remote-base');
+
+        $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
+        $runner = new AsyncBranchOperationRunner(
+            new OperationLogRepository($wpdb),
+            new OperationLockService(),
+            $settingsRepository,
+            $repository,
+            new AsyncInMemoryProviderFactory($provider),
+            $syncService
+        );
+
+        $started = $runner->start('generateblocks_global_styles', 'push');
+        $response = null;
+
+        for ($index = 0; $index < 20; $index++) {
+            $response = $runner->continue($started['operationId']);
+
+            if ($response['done']) {
+                break;
+            }
+        }
+
+        self::assertNotNull($response);
+        self::assertTrue($response['done']);
+        self::assertSame('provider-commit-2', $repository->getRef('refs/heads/main')?->commitHash);
+        self::assertSame('provider-commit-2', $repository->getRef('refs/remotes/origin/main')?->commitHash);
+        self::assertNotNull($repository->getCommit('provider-commit-2'));
+    }
+
     private function settingsRepositoryWithStylesEnabled(): SettingsRepository
     {
         $settingsRepository = new SettingsRepository();
@@ -310,6 +366,8 @@ class AsyncInMemoryProvider implements \PushPull\Provider\GitProviderInterface
 
 final class AsyncInMemoryPushProvider extends AsyncInMemoryProvider
 {
+    public ?string $updatedCommitHashOverride = null;
+
     public function createBlob(\PushPull\Provider\GitRemoteConfig $config, string $content): string
     {
         $hash = 'remote-blob-' . sha1($content);
@@ -336,8 +394,9 @@ final class AsyncInMemoryPushProvider extends AsyncInMemoryProvider
 
     public function updateRef(\PushPull\Provider\GitRemoteConfig $config, \PushPull\Provider\UpdateRemoteRefRequest $request): \PushPull\Provider\UpdateRefResult
     {
-        $this->refs[$request->refName] = new \PushPull\Provider\RemoteRef($request->refName, $request->newHash);
+        $finalCommitHash = $this->updatedCommitHashOverride ?? $request->newCommitHash;
+        $this->refs[$request->refName] = new \PushPull\Provider\RemoteRef($request->refName, $finalCommitHash);
 
-        return new \PushPull\Provider\UpdateRefResult(true, $request->newHash);
+        return new \PushPull\Provider\UpdateRefResult(true, $request->refName, $finalCommitHash);
     }
 }

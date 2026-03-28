@@ -109,16 +109,18 @@ final class ManagedSetPushService
             throw new RuntimeException(sprintf('Remote branch %s could not be updated.', $settings->branch));
         }
 
-        $this->localRepository->updateRef('refs/heads/' . $settings->branch, $remoteHeadHash);
-        $this->localRepository->updateRef('refs/remotes/origin/' . $settings->branch, $remoteHeadHash);
-        $this->localRepository->updateRef('HEAD', $remoteHeadHash);
+        $finalRemoteHeadHash = $update->commitHash !== '' ? $update->commitHash : $remoteHeadHash;
+        $this->aliasRemoteCommitHash($remoteHeadHash, $finalRemoteHeadHash);
+        $this->localRepository->updateRef('refs/heads/' . $settings->branch, $finalRemoteHeadHash);
+        $this->localRepository->updateRef('refs/remotes/origin/' . $settings->branch, $finalRemoteHeadHash);
+        $this->localRepository->updateRef('HEAD', $finalRemoteHeadHash);
 
         return new PushManagedSetResult(
             $managedSetKey,
             $settings->branch,
             'pushed',
             $localRef->commitHash,
-            $remoteHeadHash,
+            $finalRemoteHeadHash,
             array_values(array_unique($this->pushedCommits)),
             array_values(array_unique($this->pushedTrees)),
             array_values(array_unique($this->pushedBlobs))
@@ -286,5 +288,25 @@ final class ManagedSetPushService
         }
 
         return $seen;
+    }
+
+    private function aliasRemoteCommitHash(string $stagedRemoteHash, string $finalRemoteHash): void
+    {
+        if ($stagedRemoteHash === $finalRemoteHash) {
+            return;
+        }
+
+        $stagedCommit = $this->localRepository->getCommit($stagedRemoteHash);
+
+        if ($stagedCommit === null) {
+            return;
+        }
+
+        $this->localRepository->importRemoteCommit(new RemoteCommit(
+            $finalRemoteHash,
+            $stagedCommit->treeHash,
+            array_values(array_filter([$stagedCommit->parentHash, $stagedCommit->secondParentHash])),
+            $stagedCommit->message
+        ));
     }
 }

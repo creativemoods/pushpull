@@ -4,7 +4,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.9
+Stable tag: 0.0.10
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -29,7 +29,7 @@ The current release supports these managed content domains:
 
 PushPull keeps a local Git-like repository inside WordPress database tables and supports the following workflow directly from WordPress admin:
 
-1. Test the remote GitHub connection
+1. Test the remote GitHub or GitLab connection
 2. Commit live managed content into the local repository
 3. Initialize an empty remote repository
 4. Fetch remote commits into a local tracking ref
@@ -38,7 +38,7 @@ PushPull keeps a local Git-like repository inside WordPress database tables and 
 7. Merge remote changes into the local branch
 8. Resolve conflicts when needed
 9. Apply repository content back into WordPress
-10. Push local commits to GitHub
+10. Push local commits to GitHub or GitLab
 
 The plugin also includes:
 
@@ -51,7 +51,7 @@ The plugin also includes:
 
 This is an early, focused release. At the moment, PushPull is intentionally limited to:
 
-1. GitHub as the implemented remote provider
+1. GitHub and GitLab as implemented remote providers
 2. Six managed content domains:
    `generateblocks/global-styles/`
    `generateblocks/conditions/`
@@ -94,16 +94,24 @@ For the currently supported managed sets it stores:
 
 == Configuration ==
 
-PushPull currently supports GitHub repositories through the GitHub Git Database REST API.
+PushPull currently supports GitHub and GitLab repositories.
 
-Create a fine-grained personal access token or installation token with access to the target repository. The token should allow:
+For GitHub, grant:
 
 1. Repository metadata read access
 2. Repository contents read and write access
 
+For GitLab fine-grained personal access tokens, grant:
+
+1. `Project: Read`
+2. `Branch: Read`
+3. `Commit: Read`
+4. `Commit: Create`
+5. `Repository: Read`
+
 In PushPull > Settings:
 
-1. Select `GitHub` as the provider
+1. Select `GitHub` or `GitLab` as the provider
 2. Enter the repository owner and repository name
 3. Enter the target branch
 4. Enter the API token
@@ -120,13 +128,15 @@ The normal workflow is:
 3. Inspect the live/local and local/remote diff views if needed
 4. `Pull` for the common fetch + merge flow, or `Merge` manually after fetch when you want review first
 5. `Apply repo to WordPress` when you want the local branch state written back into WordPress
-6. `Push` when you want local commits published to GitHub
+6. `Push` when you want local commits published to GitHub or GitLab
 
 If both local and remote changed, PushPull can persist conflicts, let you resolve them in the admin UI, and then finalize a merge commit.
 
+When pushing to GitLab, PushPull currently linearizes local merge results into a normal commit on the remote branch instead of preserving merge topology. The merged tree content is preserved; only the remote Git history shape is flattened.
+
 = Empty repositories =
 
-If the configured GitHub repository exists but has no commits yet, `Test connection` will report that the repository is reachable but empty.
+If the configured GitHub or GitLab repository exists but has no commits yet, `Test connection` will report that the repository is reachable but empty.
 
 In that case, click `Initialize remote repository`. PushPull will:
 
@@ -134,34 +144,44 @@ In that case, click `Initialize remote repository`. PushPull will:
 2. fetch that initial commit into the local remote-tracking ref
 3. make the repository ready for normal commit, fetch, merge, apply, and push workflows
 
-You do not need to create the first commit manually on GitHub before using PushPull.
+You do not need to create the first commit manually on the provider before using PushPull.
 
 == External services ==
 
-PushPull connects to the GitHub API for the repository you configure in the plugin settings.
+PushPull connects to the GitHub or GitLab API for the repository you configure in the plugin settings.
 
-The plugin uses GitHub's REST API to:
+The plugin uses the provider REST API to:
 
 1. Read repository metadata and the default branch
 2. Read and update branch refs
-3. Read and create Git blobs, trees, and commits
+3. Read and create Git objects or provider-equivalent commit actions
 4. Test repository access before sync operations
 
-PushPull sends the following information to GitHub over HTTPS:
+PushPull sends the following information to the configured provider over HTTPS:
 
 1. The repository owner, repository name, branch, and API base URL
-2. Your configured API token in the `Authorization` header
+2. Your configured API token in the provider-specific authentication header
 3. Canonical JSON representations of the managed content you choose to commit and push
 4. Commit metadata such as commit messages and, if configured, author name and email
 
-In the current release, the managed content sent to GitHub is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Pages, WordPress Custom CSS, and explicitly opted-in WordPress Attachments.
+In the current release, the managed content sent to the provider is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Pages, WordPress Custom CSS, and explicitly opted-in WordPress Attachments.
 
-PushPull does not send your whole WordPress database to GitHub. It only sends the managed content represented by the enabled adapters.
+PushPull does not send your whole WordPress database to the provider. It only sends the managed content represented by the enabled adapters.
 
 GitHub terms of service: https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
 GitHub privacy statement: https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
+GitLab terms: https://about.gitlab.com/terms/
+GitLab privacy statement: https://about.gitlab.com/privacy/
 
 == Changelog ==
+
+= 0.0.10 =
+
+1. Added a GitLab provider with project, branch, commit, tree, and blob support plus linearized push support for merge results.
+2. Added GitLab-specific settings and documentation, including fine-grained PAT permission guidance and a note that remote merge topology is flattened on push.
+3. Fixed GitLab push ref tracking so follow-up commits and pushes no longer fail after the first successful push.
+4. Fixed chunked GitLab fetch and pull so synthetic root trees survive across async requests.
+5. Fixed chunked GitLab push so staged synthetic blobs, trees, and commits are restored correctly across async requests.
 
 = 0.0.9 =
 

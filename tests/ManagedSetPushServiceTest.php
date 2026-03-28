@@ -117,6 +117,44 @@ final class ManagedSetPushServiceTest extends TestCase
         self::assertSame([], $result->pushedCommitHashes);
     }
 
+    public function testPushRepointsLocalRefsToActualUpdatedRemoteHashWhenProviderReturnsDifferentHash(): void
+    {
+        $baseSnapshot = $this->snapshot([
+            $this->runtimeRecord('.gbp-section', 'gbp-section', 0, ['paddingTop' => '7rem']),
+        ]);
+        $localSnapshot = $this->snapshot([
+            $this->runtimeRecord('.gbp-section', 'gbp-section', 0, ['paddingTop' => '8rem']),
+        ]);
+
+        $this->importRemoteBase($baseSnapshot, 'remote-base');
+        $this->provider->refs['refs/heads/main'] = new RemoteRef('refs/heads/main', 'remote-base');
+        $this->provider->updatedCommitHashOverride = 'provider-commit-2';
+
+        $this->committer->commitSnapshot(
+            $localSnapshot,
+            new CommitManagedSetRequest('main', 'Local change', 'Jane Doe', 'jane@example.com')
+        );
+
+        $result = $this->pushService->push('generateblocks_global_styles', new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['generateblocks_global_styles']
+        ));
+
+        self::assertSame('provider-commit-2', $result->remoteCommitHash);
+        self::assertSame('provider-commit-2', $this->repository->getRef('refs/heads/main')?->commitHash);
+        self::assertSame('provider-commit-2', $this->repository->getRef('refs/remotes/origin/main')?->commitHash);
+        self::assertNotNull($this->repository->getCommit('provider-commit-2'));
+    }
+
     /**
      * @param array<int, array<string, mixed>> $records
      */
@@ -196,6 +234,7 @@ final class InMemoryPushProvider implements GitProviderInterface
     public array $trees = [];
     /** @var array<string, RemoteBlob> */
     public array $blobs = [];
+    public ?string $updatedCommitHashOverride = null;
 
     public function getKey(): string
     {
@@ -277,9 +316,10 @@ final class InMemoryPushProvider implements GitProviderInterface
 
     public function updateRef(GitRemoteConfig $config, UpdateRemoteRefRequest $request): UpdateRefResult
     {
-        $this->refs[$request->refName] = new RemoteRef($request->refName, $request->newCommitHash);
+        $finalCommitHash = $this->updatedCommitHashOverride ?? $request->newCommitHash;
+        $this->refs[$request->refName] = new RemoteRef($request->refName, $finalCommitHash);
 
-        return new UpdateRefResult(true, $request->refName, $request->newCommitHash);
+        return new UpdateRefResult(true, $request->refName, $finalCommitHash);
     }
 
     public function initializeEmptyRepository(GitRemoteConfig $config, string $commitMessage): RemoteRef

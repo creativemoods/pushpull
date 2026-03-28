@@ -10,6 +10,7 @@ use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\Exception\UnsupportedProviderException;
 use PushPull\Provider\GitProviderFactory;
 use PushPull\Provider\GitHub\GitHubProvider;
+use PushPull\Provider\GitLab\GitLabProvider;
 use PushPull\Provider\GitRemoteConfig;
 use PushPull\Provider\Http\HttpRequest;
 use PushPull\Provider\Http\HttpResponse;
@@ -25,12 +26,11 @@ final class GitProviderTest extends TestCase
         self::assertInstanceOf(GitHubProvider::class, $factory->make('github'));
     }
 
-    public function testFactoryRejectsSelectableButUnimplementedProviders(): void
+    public function testFactoryReturnsGitlabProvider(): void
     {
         $factory = new GitProviderFactory();
 
-        $this->expectException(UnsupportedProviderException::class);
-        $factory->make('gitlab');
+        self::assertInstanceOf(GitLabProvider::class, $factory->make('gitlab'));
     }
 
     public function testFactoryRejectsUnknownProviders(): void
@@ -278,6 +278,152 @@ final class GitProviderTest extends TestCase
             'main',
             $provider->getDefaultBranch(new GitRemoteConfig('github', 'owner', 'repo', 'main', 'token', null))
         );
+    }
+
+    public function testGitlabValidationFlagsMissingFields(): void
+    {
+        $provider = new GitLabProvider(new FakeTransport([]));
+        $validation = $provider->validateConfig(new GitRemoteConfig('gitlab', '', '', '', '', 'https://gitlab.example.com'));
+
+        self::assertFalse($validation->isValid());
+        self::assertContains('Owner / workspace is required.', $validation->messages);
+        self::assertContains('Repository name is required.', $validation->messages);
+        self::assertContains('Branch is required.', $validation->messages);
+        self::assertContains('API token is required before remote operations can run.', $validation->messages);
+    }
+
+    public function testGitlabConnectionSuccessIsNormalized(): void
+    {
+        $provider = new GitLabProvider(new FakeTransport([
+            new HttpResponse(200, '{"default_branch":"main","empty_repo":false}'),
+            new HttpResponse(200, '{"name":"main","commit":{"id":"abc123"}}'),
+        ]));
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+
+        $result = $provider->testConnection($config);
+
+        self::assertTrue($result->success);
+        self::assertSame('main', $result->defaultBranch);
+        self::assertSame('main', $result->resolvedBranch);
+    }
+
+    public function testGitlabConnectionTreatsEmptyRepositoryAsReachableButUninitialized(): void
+    {
+        $provider = new GitLabProvider(new FakeTransport([
+            new HttpResponse(200, '{"default_branch":"main","empty_repo":true}'),
+        ]));
+
+        $result = $provider->testConnection(new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com'));
+
+        self::assertTrue($result->success);
+        self::assertTrue($result->emptyRepository);
+        self::assertSame('main', $result->resolvedBranch);
+    }
+
+    public function testGitlabReadBlobTreeAndCommitAreNormalized(): void
+    {
+        $provider = new GitLabProvider(new FakeTransport([
+            new HttpResponse(200, '{"id":"commit-1","parent_ids":["parent-1"],"message":"Hello","author_name":"Jane","author_email":"jane@example.com","committer_name":"Jane","committer_email":"jane@example.com"}'),
+            new HttpResponse(200, '[{"path":"file.json","type":"blob","id":"blob-1","mode":"100644"}]', ['X-Next-Page' => '']),
+            new HttpResponse(200, 'hello'),
+        ]));
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+        $commit = $provider->getCommit($config, 'commit-1');
+        $tree = $provider->getTree($config, $commit?->treeHash ?? '');
+        $blob = $provider->getBlob($config, 'blob-1');
+
+        self::assertSame('commit-1', $commit?->hash);
+        self::assertSame(['parent-1'], $commit?->parents);
+        self::assertSame('Jane', $commit?->author['name']);
+        self::assertSame('file.json', $tree?->entries[0]['path']);
+        self::assertSame('hello', $blob?->content);
+    }
+
+    public function testGitlabRegistersNestedTreesFromRecursiveCommitSnapshot(): void
+    {
+        $provider = new GitLabProvider(new FakeTransport([
+            new HttpResponse(200, '{"id":"commit-1","parent_ids":[],"message":"Hello"}'),
+            new HttpResponse(200, '[{"path":"dir","type":"tree","id":"tree-dir","mode":"040000"},{"path":"dir/file.json","type":"blob","id":"blob-1","mode":"100644"}]', ['X-Next-Page' => '']),
+        ]));
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+
+        $commit = $provider->getCommit($config, 'commit-1');
+        $rootTree = $provider->getTree($config, $commit?->treeHash ?? '');
+
+        self::assertSame('dir/file.json', $rootTree?->entries[0]['path']);
+        self::assertSame('blob', $rootTree?->entries[0]['type']);
+        self::assertSame('blob-1', $rootTree?->entries[0]['hash']);
+    }
+
+    public function testGitlabUpdateRefMaterializesLinearCommitIntoRepositoryCommitActions(): void
+    {
+        $transport = new RecordingFakeTransport([
+            new HttpResponse(200, '{"name":"main","commit":{"id":"remote-1"}}'),
+            new HttpResponse(200, '{"id":"remote-1","parent_ids":[],"message":"Remote base"}'),
+            new HttpResponse(200, '[]', ['X-Next-Page' => '']),
+            new HttpResponse(201, '{"id":"remote-2"}'),
+        ]);
+        $provider = new GitLabProvider($transport);
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+        $blobHash = $provider->createBlob($config, 'hello');
+        $treeHash = $provider->createTree($config, [[
+            'path' => 'file.json',
+            'type' => 'blob',
+            'hash' => $blobHash,
+        ]]);
+        $commitHash = $provider->createCommit($config, new CreateRemoteCommitRequest(
+            $treeHash,
+            ['remote-1'],
+            'Add file',
+            'PushPull',
+            'pushpull@example.com'
+        ));
+
+        $result = $provider->updateRef(
+            $config,
+            new UpdateRemoteRefRequest('refs/heads/main', $commitHash, 'remote-1')
+        );
+
+        self::assertTrue($result->success);
+        self::assertSame('remote-2', $result->commitHash);
+        self::assertCount(4, $transport->requests);
+        self::assertSame('POST', $transport->requests[3]->method);
+        self::assertSame('main', $transport->requests[3]->json['branch'] ?? null);
+        self::assertSame('Add file', $transport->requests[3]->json['commit_message'] ?? null);
+        self::assertSame('create', $transport->requests[3]->json['actions'][0]['action'] ?? null);
+        self::assertSame('file.json', $transport->requests[3]->json['actions'][0]['file_path'] ?? null);
+    }
+
+    public function testGitlabFlattensMergeCommitPushesIntoLinearCommitActions(): void
+    {
+        $transport = new RecordingFakeTransport([
+            new HttpResponse(200, '{"name":"main","commit":{"id":"remote-1"}}'),
+            new HttpResponse(200, '{"id":"remote-1","parent_ids":[],"message":"Remote base"}'),
+            new HttpResponse(200, '[]', ['X-Next-Page' => '']),
+            new HttpResponse(201, '{"id":"remote-2"}'),
+        ]);
+        $provider = new GitLabProvider($transport);
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+        $blobHash = $provider->createBlob($config, 'merged');
+        $treeHash = $provider->createTree($config, [[
+            'path' => 'merged.json',
+            'type' => 'blob',
+            'hash' => $blobHash,
+        ]]);
+        $commitHash = $provider->createCommit(
+            $config,
+            new CreateRemoteCommitRequest($treeHash, ['remote-1', 'other-parent'], 'Flatten merge', 'PushPull', 'pushpull@example.com')
+        );
+
+        $result = $provider->updateRef(
+            $config,
+            new UpdateRemoteRefRequest('refs/heads/main', $commitHash, 'remote-1')
+        );
+
+        self::assertTrue($result->success);
+        self::assertSame('remote-2', $result->commitHash);
+        self::assertCount(4, $transport->requests);
+        self::assertSame('Flatten merge', $transport->requests[3]->json['commit_message'] ?? null);
     }
 }
 

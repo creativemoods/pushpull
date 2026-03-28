@@ -20,6 +20,11 @@ use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Persistence\ContentMap\ContentMapRepository;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
+use PushPull\Provider\Exception\ProviderException;
+use PushPull\Provider\GitLab\GitLabProvider;
+use PushPull\Provider\Http\HttpRequest;
+use PushPull\Provider\Http\HttpResponse;
+use PushPull\Provider\Http\HttpTransportInterface;
 use PushPull\Settings\SettingsRepository;
 
 final class LocalSyncServicePullTest extends TestCase
@@ -114,5 +119,67 @@ final class LocalSyncServicePullTest extends TestCase
             'generateblocks_global_styles',
             new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
         );
+    }
+
+    public function testCommitRequiresFetchFirstWhenGitlabRemoteBranchAlreadyHasHistory(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new GitLabProvider(new GitLabGuardFakeTransport([
+            new HttpResponse(200, '{"name":"main","commit":{"id":"commit-1"}}'),
+        ]));
+
+        $settingsRepository = new SettingsRepository();
+        $settingsRepository->save($settingsRepository->sanitize([
+            'provider_key' => 'gitlab',
+            'owner_or_workspace' => 'group',
+            'repository' => 'repo',
+            'branch' => 'main',
+            'api_token' => 'token',
+            'base_url' => 'https://gitlab.example.com',
+            'enabled_managed_sets' => ['generateblocks_global_styles'],
+        ]));
+
+        $workingStateRepository = new WorkingStateRepository($wpdb);
+        $providerFactory = new InMemoryProviderFactory($provider);
+        $registry = new ManagedSetRegistry([$adapter]);
+        $syncService = new LocalSyncService(
+            $registry,
+            [$adapter->getManagedSetKey() => new ManagedSetRepositoryCommitter($repository, $adapter)],
+            [$adapter->getManagedSetKey() => new ManagedSetDiffService($adapter, new RepositoryStateReader($repository), $repository)],
+            [$adapter->getManagedSetKey() => new ManagedSetApplyService($adapter, new RepositoryStateReader($repository), new ContentMapRepository($wpdb), $workingStateRepository)],
+            new ManagedSetMergeService($repository, new RepositoryStateReader($repository), new JsonThreeWayMerger(), $workingStateRepository),
+            new ManagedSetPushService($repository, $providerFactory),
+            new RemoteBranchResetService($repository, $providerFactory),
+            $repository,
+            $settingsRepository,
+            $providerFactory
+        );
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Remote branch main already has commits. Fetch it before creating the first local commit.');
+
+        $syncService->commitManagedSet(
+            'generateblocks_global_styles',
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+    }
+}
+
+final class GitLabGuardFakeTransport implements HttpTransportInterface
+{
+    /** @param HttpResponse[] $responses */
+    public function __construct(private array $responses)
+    {
+    }
+
+    public function send(HttpRequest $request): HttpResponse
+    {
+        if ($this->responses === []) {
+            throw new ProviderException(ProviderException::TRANSPORT, 'No fake response queued.');
+        }
+
+        return array_shift($this->responses);
     }
 }
