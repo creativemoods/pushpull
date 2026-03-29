@@ -296,9 +296,16 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
         $existingGroup = $existingGroups[$item->logicalKey] ?? null;
         $trid = $existingGroup !== null ? (int) $existingGroup['trid'] : $this->nextTrid();
         $translations = $this->normalizeTranslations($item->payload['translations'] ?? []);
-        $desiredByElement = [];
+        $activeLanguages = $this->activeLanguages();
 
         foreach ($translations as $translation) {
+            if ($activeLanguages !== [] && ! isset($activeLanguages[$translation['language']])) {
+                throw new RuntimeException(sprintf(
+                    'Translation group references inactive WPML language "%s".',
+                    $translation['language']
+                ));
+            }
+
             $scope = self::SUPPORTED_DOMAINS[$translation['contentDomain']] ?? null;
 
             if ($scope === null) {
@@ -317,8 +324,6 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
 
             $elementType = 'post_' . $scope['postType'];
             $elementId = (int) $targetPost->ID;
-            $desiredByElement[$elementType . ':' . $elementId] = true;
-
             $existingRow = $this->findTranslationRow($elementType, $elementId);
             $row = [
                 'translation_id' => (int) ($existingRow['translation_id'] ?? $this->nextTranslationId()),
@@ -331,16 +336,6 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
             $this->persistTranslationRow($row);
         }
 
-        if ($existingGroup !== null) {
-            foreach ($existingGroup['rows'] as $row) {
-                $key = (string) $row['element_type'] . ':' . (string) $row['element_id'];
-
-                if (! isset($desiredByElement[$key])) {
-                    $this->deleteTranslationRow((int) $row['translation_id']);
-                }
-            }
-        }
-
         return $existingGroup === null;
     }
 
@@ -350,23 +345,7 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
      */
     public function deleteMissingGroups(array $desiredLogicalKeys): array
     {
-        $deleted = [];
-
-        foreach ($this->translationGroupsInScope() as $group) {
-            if (isset($desiredLogicalKeys[$group['logicalKey']])) {
-                continue;
-            }
-
-            foreach ($group['rows'] as $row) {
-                $this->deleteTranslationRow((int) $row['translation_id']);
-            }
-
-            $deleted[] = $group['logicalKey'];
-        }
-
-        sort($deleted);
-
-        return $deleted;
+        return [];
     }
 
     /**
@@ -539,6 +518,31 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
     }
 
     /**
+     * @return array<string, true>
+     */
+    private function activeLanguages(): array
+    {
+        $settings = $this->wpmlSettings();
+        $languages = $settings['active_languages'] ?? [];
+
+        if (! is_array($languages)) {
+            return [];
+        }
+
+        $active = [];
+
+        foreach ($languages as $languageCode) {
+            $languageCode = (string) $languageCode;
+
+            if ($languageCode !== '') {
+                $active[$languageCode] = true;
+            }
+        }
+
+        return $active;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function wpmlSettings(): array
@@ -612,27 +616,6 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery -- Writing WPML-managed translation rows is intentional here.
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- Cache invalidated immediately after the write.
         $wpdb->replace($table, $row, ['%d', '%s', '%d', '%d', '%s', '%s']);
-        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery
-        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
-        wp_cache_delete(self::CACHE_KEY_TRANSLATION_ROWS, self::CACHE_GROUP);
-    }
-
-    private function deleteTranslationRow(int $translationId): void
-    {
-        if (isset($GLOBALS['pushpull_test_wpml_translations']) && is_array($GLOBALS['pushpull_test_wpml_translations'])) {
-            $GLOBALS['pushpull_test_wpml_translations'] = array_values(array_filter(
-                $GLOBALS['pushpull_test_wpml_translations'],
-                static fn (array $row): bool => (int) ($row['translation_id'] ?? 0) !== $translationId
-            ));
-
-            return;
-        }
-
-        global $wpdb;
-        $table = $wpdb->prefix . 'icl_translations';
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery -- Deleting WPML-managed translation rows is intentional here.
-        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- Cache invalidated immediately after the delete.
-        $wpdb->delete($table, ['translation_id' => $translationId], ['%d']);
         // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery
         // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
         wp_cache_delete(self::CACHE_KEY_TRANSLATION_ROWS, self::CACHE_GROUP);
@@ -719,7 +702,11 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
      */
     private function postsByType(string $postType): array
     {
-        $posts = get_posts(['post_type' => $postType]);
+        $posts = get_posts([
+            'post_type' => $postType,
+            'numberposts' => -1,
+            'post_status' => 'any',
+        ]);
 
         return array_values(array_filter($posts, static fn (mixed $post): bool => $post instanceof WP_Post));
     }

@@ -18,10 +18,12 @@ use PushPull\Admin\SettingsPage;
 use PushPull\Content\GenerateBlocks\WordPressBlockPatternsAdapter;
 use PushPull\Content\Translation\WpmlTranslationManagementAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
+use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
 use PushPull\Content\WordPress\WordPressCustomCssAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Content\WordPress\WordPressPostsAdapter;
+use PushPull\Domain\Apply\ConfigManagedSetApplyService;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Apply\OverlayManagedSetApplyService;
 use PushPull\Domain\Diff\ManagedSetDiffService;
@@ -72,6 +74,7 @@ final class Plugin
         $generateBlocksConditionsAdapter = new GenerateBlocksConditionsAdapter();
         $wordPressBlockPatternsAdapter = new WordPressBlockPatternsAdapter();
         $wordPressAttachmentsAdapter = new WordPressAttachmentsAdapter();
+        $wordPressCoreConfigurationAdapter = new WordPressCoreConfigurationAdapter();
         $wordPressCustomCssAdapter = new WordPressCustomCssAdapter();
         $generatePressElementsAdapter = new GeneratePressElementsAdapter();
         $wordPressPagesAdapter = new WordPressPagesAdapter();
@@ -85,6 +88,7 @@ final class Plugin
             $generateBlocksConditionsAdapter,
             $wordPressBlockPatternsAdapter,
             $wordPressAttachmentsAdapter,
+            $wordPressCoreConfigurationAdapter,
             $wordPressCustomCssAdapter,
             $generatePressElementsAdapter,
             $wordPressPagesAdapter,
@@ -100,6 +104,12 @@ final class Plugin
             $managedSetDiffServices[$managedSetKey] = new ManagedSetDiffService($adapter, $stateReader, $localRepository);
             if ($adapter instanceof WpmlTranslationManagementAdapter) {
                 $managedSetApplyServices[$managedSetKey] = new OverlayManagedSetApplyService(
+                    $adapter,
+                    $stateReader,
+                    $workingStateRepository
+                );
+            } elseif ($adapter instanceof WordPressCoreConfigurationAdapter) {
+                $managedSetApplyServices[$managedSetKey] = new ConfigManagedSetApplyService(
                     $adapter,
                     $stateReader,
                     $workingStateRepository

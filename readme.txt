@@ -4,7 +4,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.12
+Stable tag: 0.0.13
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -174,6 +174,14 @@ GitLab terms: https://about.gitlab.com/terms/
 GitLab privacy statement: https://about.gitlab.com/privacy/
 
 == Changelog ==
+
+= 0.0.13 =
+
+1. Added a first core config domain, `WordPress core configuration`, with `wordpress_reading_settings` support for `show_on_front`, `page_on_front`, and `page_for_posts`.
+2. Added canonical page logical-key references for reading settings so front-page and posts-page options can round-trip across environments without leaking WordPress IDs.
+3. Added a dedicated config-domain apply path so non-post WordPress configuration can be applied cleanly without pretending to be posts or overlays.
+4. Introduced `Config domains` as a separate UI family alongside `Primary domains` and `Overlay domains` in settings and Managed Content.
+5. Changed the Managed Content screen to show only enabled domains, so disabled managed sets no longer clutter the tabs or overview.
 
 = 0.0.12 =
 

@@ -47,7 +47,7 @@ final class SettingsRepositoryTest extends TestCase
     {
         $repository = new SettingsRepository();
         $settings = $repository->sanitize([
-            'enabled_managed_sets' => ['generateblocks_global_styles', 'generateblocks_conditions', 'wordpress_block_patterns', 'wordpress_attachments', 'wordpress_custom_css', 'generatepress_elements', 'wordpress_pages', 'wordpress_posts'],
+            'enabled_managed_sets' => ['generateblocks_global_styles', 'generateblocks_conditions', 'wordpress_block_patterns', 'wordpress_attachments', 'wordpress_core_configuration', 'wordpress_custom_css', 'generatepress_elements', 'wordpress_pages', 'wordpress_posts'],
             'auto_apply_enabled' => '',
         ]);
 
@@ -55,6 +55,7 @@ final class SettingsRepositoryTest extends TestCase
         self::assertTrue($settings->isManagedSetEnabled('generateblocks_conditions'));
         self::assertTrue($settings->isManagedSetEnabled('wordpress_block_patterns'));
         self::assertTrue($settings->isManagedSetEnabled('wordpress_attachments'));
+        self::assertTrue($settings->isManagedSetEnabled('wordpress_core_configuration'));
         self::assertTrue($settings->isManagedSetEnabled('wordpress_custom_css'));
         self::assertTrue($settings->isManagedSetEnabled('generatepress_elements'));
         self::assertTrue($settings->isManagedSetEnabled('wordpress_pages'));

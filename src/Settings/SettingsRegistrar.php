@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PushPull\Settings;
 
+use PushPull\Content\ConfigManagedSetInterface;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\OverlayManagedSetInterface;
 
@@ -180,15 +181,22 @@ final class SettingsRegistrar
     private function renderManagedSetCheckboxes(string $name, PushPullSettings $settings): void
     {
         $primary = [];
+        $config = [];
         $overlay = [];
 
         foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
-            $target = $adapter instanceof OverlayManagedSetInterface && $adapter->isOverlayManagedSet()
-                ? 'overlay'
-                : 'primary';
+            if ($adapter instanceof OverlayManagedSetInterface && $adapter->isOverlayManagedSet()) {
+                $target = 'overlay';
+            } elseif ($adapter instanceof ConfigManagedSetInterface && $adapter->isConfigManagedSet()) {
+                $target = 'config';
+            } else {
+                $target = 'primary';
+            }
 
             if ($target === 'overlay') {
                 $overlay[$managedSetKey] = $adapter->getManagedSetLabel();
+            } elseif ($target === 'config') {
+                $config[$managedSetKey] = $adapter->getManagedSetLabel();
             } else {
                 $primary[$managedSetKey] = $adapter->getManagedSetLabel();
             }
@@ -197,6 +205,19 @@ final class SettingsRegistrar
         if ($primary !== []) {
             echo '<p><strong>' . esc_html__('Primary domains', 'pushpull') . '</strong></p>';
             foreach ($primary as $managedSetKey => $label) {
+                printf(
+                    '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
+                    esc_attr($name),
+                    esc_attr($managedSetKey),
+                    checked($settings->isManagedSetEnabled($managedSetKey), true, false),
+                    esc_html($label)
+                );
+            }
+        }
+
+        if ($config !== []) {
+            echo '<p><strong>' . esc_html__('Config domains', 'pushpull') . '</strong></p>';
+            foreach ($config as $managedSetKey => $label) {
                 printf(
                     '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
                     esc_attr($name),

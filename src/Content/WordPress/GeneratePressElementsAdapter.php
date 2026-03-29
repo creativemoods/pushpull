@@ -319,7 +319,11 @@ final class GeneratePressElementsAdapter extends AbstractWordPressPostTypeAdapte
      */
     private function postsByType(string $postType): array
     {
-        $posts = get_posts(['post_type' => $postType]);
+        $posts = get_posts([
+            'post_type' => $postType,
+            'numberposts' => -1,
+            'post_status' => 'any',
+        ]);
 
         return array_values(array_filter($posts, static fn (mixed $post): bool => $post instanceof WP_Post));
     }

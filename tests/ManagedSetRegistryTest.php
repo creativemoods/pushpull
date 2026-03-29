@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
+use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Content\WordPress\WordPressPostsAdapter;
 
@@ -45,13 +46,14 @@ final class ManagedSetRegistryTest extends TestCase
     {
         $registry = new ManagedSetRegistry([
             new WordPressAttachmentsAdapter(),
+            new WordPressCoreConfigurationAdapter(),
             new GeneratePressElementsAdapter(),
             new WordPressPostsAdapter(),
             new WordPressPagesAdapter(),
         ]);
 
         self::assertSame(
-            ['wordpress_attachments', 'wordpress_posts', 'wordpress_pages', 'generatepress_elements'],
+            ['wordpress_attachments', 'wordpress_posts', 'wordpress_pages', 'wordpress_core_configuration', 'generatepress_elements'],
             array_keys($registry->allInDependencyOrder())
         );
     }

@@ -260,6 +260,20 @@ if (! function_exists('get_posts')) {
             static fn (WP_Post $left, WP_Post $right): int => $left->ID <=> $right->ID
         );
 
+        $limit = null;
+
+        if (isset($args['posts_per_page'])) {
+            $limit = (int) $args['posts_per_page'];
+        } elseif (isset($args['numberposts'])) {
+            $limit = (int) $args['numberposts'];
+        } else {
+            $limit = 5;
+        }
+
+        if ($limit >= 0) {
+            $posts = array_slice($posts, 0, $limit);
+        }
+
         return $posts;
     }
 }

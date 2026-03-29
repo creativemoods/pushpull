@@ -6,7 +6,6 @@ namespace PushPull\Support\Operations;
 
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
-use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Apply\ManagedSetApplyServiceInterface;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Domain\Sync\SyncServiceInterface;
@@ -1397,7 +1396,7 @@ final class AsyncBranchOperationRunner
         ];
     }
 
-    private function requireApplyService(string $managedSetKey): ManagedSetApplyService
+    private function requireApplyService(string $managedSetKey): ManagedSetApplyServiceInterface
     {
         if (! isset($this->applyServicesByManagedSetKey[$managedSetKey])) {
             throw new RuntimeException(sprintf('Managed set "%s" cannot be applied asynchronously.', $managedSetKey));

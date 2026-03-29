@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PushPull\Admin;
 
+use PushPull\Content\ConfigManagedSetInterface;
 use PushPull\Content\OverlayManagedSetInterface;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Content\ManagedSetRegistry;
@@ -101,12 +102,14 @@ final class ManagedContentPage
 
         $settings = $this->settingsRepository->get();
         $commitNotice = $this->commitNotice();
+        $requestedManagedSetKey = $this->requestManagedSetKey();
+        $activeManagedSetKey = $this->visibleManagedSetKey($settings, $requestedManagedSetKey);
 
         echo '<div class="wrap pushpull-admin">';
         echo '<h1>' . esc_html__('Managed Content', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('Review managed content state across all enabled domains, then drill into a specific managed set for fetch, merge, apply, commit, and push actions.', 'pushpull') . '</p>';
         $this->renderPrimaryNavigation($settings);
-        $this->renderManagedSetTabs($this->requestManagedSetKey());
+        $this->renderManagedSetTabs($settings, $activeManagedSetKey);
         if ($commitNotice !== null) {
             printf(
                 '<div class="notice notice-%1$s"><p>%2$s</p></div>',
@@ -114,10 +117,10 @@ final class ManagedContentPage
                 esc_html($commitNotice['message'])
             );
         }
-        if ($this->isOverviewMode()) {
+        if ($activeManagedSetKey === null) {
             $this->renderOverview($settings);
         } else {
-            $this->renderManagedSetDetail($settings, $this->currentAdapter());
+            $this->renderManagedSetDetail($settings, $this->managedSetRegistry->get($activeManagedSetKey));
         }
         $this->renderAsyncOperationModal();
         echo '</div>';
@@ -197,16 +200,15 @@ final class ManagedContentPage
     {
         $overviewRows = [];
         $primaryRows = [];
+        $configRows = [];
         $overlayRows = [];
         $changedSetCount = 0;
         $conflictedSetCount = 0;
-        $enabledSetCount = 0;
+        $enabledAdapters = $this->enabledManagedSetAdapters($settings);
+        $enabledSetCount = count($enabledAdapters);
 
-        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
-            $enabled = $this->isManagedSetEnabled($settings, $managedSetKey);
-            if ($enabled) {
-                $enabledSetCount++;
-            }
+        foreach ($enabledAdapters as $managedSetKey => $adapter) {
+            $enabled = true;
 
             $diffResult = $this->buildDiffResult($managedSetKey);
             $workingState = $this->workingStateRepository->get($managedSetKey, $settings->branch);
@@ -233,6 +235,8 @@ final class ManagedContentPage
 
             if ($this->isOverlayAdapter($adapter)) {
                 $overlayRows[] = $row;
+            } elseif ($this->isConfigAdapter($adapter)) {
+                $configRows[] = $row;
             } else {
                 $primaryRows[] = $row;
             }
@@ -252,6 +256,7 @@ final class ManagedContentPage
         echo '<p class="description">' . esc_html__('Use this overview to review all enabled domains quickly, then open a focused domain view to act on one managed set.', 'pushpull') . '</p>';
 
         $this->renderOverviewSection(__('Primary domains', 'pushpull'), $primaryRows);
+        $this->renderOverviewSection(__('Config domains', 'pushpull'), $configRows);
         $this->renderOverviewSection(__('Overlay domains', 'pushpull'), $overlayRows);
 
         echo '</div>';
@@ -278,13 +283,14 @@ final class ManagedContentPage
             /** @var \PushPull\Persistence\WorkingState\WorkingStateRecord|null $workingState */
             $workingState = $row['workingState'];
 
-            echo '<details class="pushpull-tree-browser' . ($this->isOverlayAdapter($adapter) ? ' pushpull-overlay-domain' : '') . '">';
+            printf(
+                '<details class="%s">',
+                esc_attr('pushpull-tree-browser' . $this->managedSetFamilyClass($adapter))
+            );
             printf(
                 '<summary>%s%s <span class="pushpull-diff-badge pushpull-diff-badge-%s">%s</span></summary>',
                 esc_html($adapter->getManagedSetLabel()),
-                $this->isOverlayAdapter($adapter)
-                    ? ' <span class="pushpull-domain-badge pushpull-domain-badge-overlay">' . esc_html__('Overlay', 'pushpull') . '</span>'
-                    : ' <span class="pushpull-domain-badge pushpull-domain-badge-primary">' . esc_html__('Primary', 'pushpull') . '</span>',
+                wp_kses($this->managedSetBadgeMarkup($adapter, false), ['span' => ['class' => true]]),
                 esc_attr($this->overviewBadgeClass($row['enabled'], $diffResult, $workingState)),
                 esc_html($this->overviewBadgeText($row['enabled'], $adapter, $diffResult, $workingState))
             );
@@ -374,9 +380,7 @@ final class ManagedContentPage
         printf(
             '<h2>%s%s</h2>',
             esc_html(sprintf('Diff Summary: %s', $managedContentAdapter->getManagedSetLabel())),
-            $this->isOverlayAdapter($managedContentAdapter)
-                ? ' <span class="pushpull-domain-badge pushpull-domain-badge-overlay">' . esc_html__('Overlay domain', 'pushpull') . '</span>'
-                : ' <span class="pushpull-domain-badge pushpull-domain-badge-primary">' . esc_html__('Primary domain', 'pushpull') . '</span>'
+            wp_kses($this->managedSetBadgeMarkup($managedContentAdapter, true), ['span' => ['class' => true]])
         );
         printf('<p>%s</p>', esc_html(sprintf(
             'Live vs local: %d changed file(s). Local vs remote: %d changed file(s).',
@@ -1404,18 +1408,23 @@ final class ManagedContentPage
         );
     }
 
-    private function renderManagedSetTabs(?string $activeManagedSetKey): void
+    private function renderManagedSetTabs(\PushPull\Settings\PushPullSettings $settings, ?string $activeManagedSetKey): void
     {
-        if (count($this->managedSetRegistry->allInDependencyOrder()) < 2) {
+        $enabledAdapters = $this->enabledManagedSetAdapters($settings);
+
+        if (count($enabledAdapters) < 2) {
             return;
         }
 
         $primaryAdapters = [];
+        $configAdapters = [];
         $overlayAdapters = [];
 
-        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
+        foreach ($enabledAdapters as $managedSetKey => $adapter) {
             if ($this->isOverlayAdapter($adapter)) {
                 $overlayAdapters[$managedSetKey] = $adapter;
+            } elseif ($this->isConfigAdapter($adapter)) {
+                $configAdapters[$managedSetKey] = $adapter;
             } else {
                 $primaryAdapters[$managedSetKey] = $adapter;
             }
@@ -1435,6 +1444,27 @@ final class ManagedContentPage
         }
 
         foreach ($primaryAdapters as $managedSetKey => $adapter) {
+            $url = add_query_arg(
+                [
+                    'page' => self::MENU_SLUG,
+                    'managed_set' => $managedSetKey,
+                ],
+                admin_url('admin.php')
+            );
+            $class = $managedSetKey === $activeManagedSetKey ? 'button button-primary' : 'button button-secondary';
+            printf(
+                '<a class="%s" href="%s">%s</a> ',
+                esc_attr($class),
+                esc_url($url),
+                esc_html($adapter->getManagedSetLabel())
+            );
+        }
+
+        if ($configAdapters !== []) {
+            echo '<span class="pushpull-tab-separator">' . esc_html__('Config domains', 'pushpull') . '</span>';
+        }
+
+        foreach ($configAdapters as $managedSetKey => $adapter) {
             $url = add_query_arg(
                 [
                     'page' => self::MENU_SLUG,
@@ -1552,10 +1582,22 @@ final class ManagedContentPage
 
     private function currentAdapter(): ManifestManagedContentAdapterInterface
     {
+        $settings = $this->settingsRepository->get();
         $requestedManagedSetKey = $this->requestManagedSetKey();
 
-        if ($requestedManagedSetKey !== null && $this->managedSetRegistry->has($requestedManagedSetKey)) {
+        if (
+            $requestedManagedSetKey !== null
+            && $this->managedSetRegistry->has($requestedManagedSetKey)
+            && $this->isManagedSetEnabled($settings, $requestedManagedSetKey)
+        ) {
             return $this->managedSetRegistry->get($requestedManagedSetKey);
+        }
+
+        $enabledAdapters = $this->enabledManagedSetAdapters($settings);
+        $firstEnabled = reset($enabledAdapters);
+
+        if ($firstEnabled instanceof ManifestManagedContentAdapterInterface) {
+            return $firstEnabled;
         }
 
         return $this->managedSetRegistry->first();
@@ -1578,7 +1620,7 @@ final class ManagedContentPage
 
     private function isOverviewMode(): bool
     {
-        return $this->requestManagedSetKey() === null;
+        return $this->visibleManagedSetKey($this->settingsRepository->get(), $this->requestManagedSetKey()) === null;
     }
 
     private function selectedManagedSetKeyOrFail(): string
@@ -1595,13 +1637,10 @@ final class ManagedContentPage
 
     private function branchActionManagedSetKey(\PushPull\Settings\PushPullSettings $settings): ?string
     {
-        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $_adapter) {
-            if ($this->isManagedSetEnabled($settings, $managedSetKey)) {
-                return $managedSetKey;
-            }
-        }
+        $enabledAdapters = $this->enabledManagedSetAdapters($settings);
+        $firstKey = array_key_first($enabledAdapters);
 
-        return null;
+        return is_string($firstKey) ? $firstKey : null;
     }
 
     private function isManagedSetEnabled(\PushPull\Settings\PushPullSettings $settings, string $managedSetKey): bool
@@ -1609,9 +1648,69 @@ final class ManagedContentPage
         return $settings->isManagedSetEnabled($managedSetKey);
     }
 
+    /**
+     * @return array<string, ManifestManagedContentAdapterInterface>
+     */
+    private function enabledManagedSetAdapters(\PushPull\Settings\PushPullSettings $settings): array
+    {
+        $enabledAdapters = [];
+
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
+            if ($this->isManagedSetEnabled($settings, $managedSetKey)) {
+                $enabledAdapters[$managedSetKey] = $adapter;
+            }
+        }
+
+        return $enabledAdapters;
+    }
+
+    private function visibleManagedSetKey(\PushPull\Settings\PushPullSettings $settings, ?string $requestedManagedSetKey): ?string
+    {
+        if ($requestedManagedSetKey === null || $requestedManagedSetKey === '') {
+            return null;
+        }
+
+        if (! $this->managedSetRegistry->has($requestedManagedSetKey)) {
+            return null;
+        }
+
+        return $this->isManagedSetEnabled($settings, $requestedManagedSetKey) ? $requestedManagedSetKey : null;
+    }
+
     private function isOverlayAdapter(ManifestManagedContentAdapterInterface $adapter): bool
     {
         return $adapter instanceof OverlayManagedSetInterface && $adapter->isOverlayManagedSet();
+    }
+
+    private function isConfigAdapter(ManifestManagedContentAdapterInterface $adapter): bool
+    {
+        return $adapter instanceof ConfigManagedSetInterface && $adapter->isConfigManagedSet();
+    }
+
+    private function managedSetFamilyClass(ManifestManagedContentAdapterInterface $adapter): string
+    {
+        if ($this->isOverlayAdapter($adapter)) {
+            return ' pushpull-overlay-domain';
+        }
+
+        if ($this->isConfigAdapter($adapter)) {
+            return ' pushpull-config-domain';
+        }
+
+        return '';
+    }
+
+    private function managedSetBadgeMarkup(ManifestManagedContentAdapterInterface $adapter, bool $longLabel): string
+    {
+        if ($this->isOverlayAdapter($adapter)) {
+            return ' <span class="pushpull-domain-badge pushpull-domain-badge-overlay">' . esc_html($longLabel ? __('Overlay domain', 'pushpull') : __('Overlay', 'pushpull')) . '</span>';
+        }
+
+        if ($this->isConfigAdapter($adapter)) {
+            return ' <span class="pushpull-domain-badge pushpull-domain-badge-config">' . esc_html($longLabel ? __('Config domain', 'pushpull') : __('Config', 'pushpull')) . '</span>';
+        }
+
+        return ' <span class="pushpull-domain-badge pushpull-domain-badge-primary">' . esc_html($longLabel ? __('Primary domain', 'pushpull') : __('Primary', 'pushpull')) . '</span>';
     }
 
     private function overviewBadgeText(

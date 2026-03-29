@@ -131,9 +131,19 @@
     color: #0d5c63;
 }
 
+.pushpull-domain-badge-config {
+    background: #f3f0e8;
+    color: #7a5d12;
+}
+
 .pushpull-tree-browser.pushpull-overlay-domain {
     background: #fcfaff;
     border-color: #ddd1f5;
+}
+
+.pushpull-tree-browser.pushpull-config-domain {
+    background: #fffdf7;
+    border-color: #e7d9aa;
 }
 
 .pushpull-button-grid {
