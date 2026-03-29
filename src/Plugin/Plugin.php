@@ -23,6 +23,7 @@ use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
 use PushPull\Content\WordPress\WordPressCustomCssAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
+use PushPull\Content\WordPress\WordPressMenusAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Content\WordPress\WordPressPostsAdapter;
 use PushPull\Domain\Apply\ConfigManagedSetApplyService;
@@ -75,6 +76,7 @@ final class Plugin
         $wordPressCoreConfigurationAdapter = new WordPressCoreConfigurationAdapter();
         $wordPressCustomCssAdapter = new WordPressCustomCssAdapter();
         $generatePressElementsAdapter = new GeneratePressElementsAdapter();
+        $wordPressMenusAdapter = new WordPressMenusAdapter();
         $wordPressPagesAdapter = new WordPressPagesAdapter();
         $wordPressPostsAdapter = new WordPressPostsAdapter();
         $wpmlTranslationManagementAdapter = new WpmlTranslationManagementAdapter($settingsRepository);
@@ -90,6 +92,7 @@ final class Plugin
             $wordPressCoreConfigurationAdapter,
             $wordPressCustomCssAdapter,
             $generatePressElementsAdapter,
+            $wordPressMenusAdapter,
             $wordPressPagesAdapter,
             $wordPressPostsAdapter,
             $rmlMediaOrganizationAdapter,

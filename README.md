@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.14
+Stable tag: 0.0.15
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,14 +17,23 @@ Git-backed content workflows for selected WordPress content domains.
 
 PushPull stores selected WordPress content in a Git repository using a canonical JSON representation instead of raw database dumps.
 
-The current release supports these managed content domains:
+The current release supports these managed domains:
 
-1. GenerateBlocks Global Styles (`gblocks_styles`)
-2. GenerateBlocks Conditions (`gblocks_condition`)
-3. WordPress Block Patterns (`wp_block`)
-4. WordPress Pages (`page`)
-5. WordPress Custom CSS (`custom_css`)
-6. WordPress Attachments (`attachment`, explicit opt-in only)
+1. Primary domains:
+   `generateblocks_global_styles`
+   `generateblocks_conditions`
+   `wordpress_block_patterns`
+   `wordpress_menus`
+   `wordpress_pages`
+   `wordpress_posts`
+   `wordpress_custom_css`
+   `generatepress_elements`
+   `wordpress_attachments` (explicit opt-in only)
+2. Config domains:
+   `wordpress_core_configuration`
+3. Overlay domains:
+   `translation_management` (WPML-backed)
+   `media_organization` (Real Media Library-backed)
 
 PushPull keeps a local Git-like repository inside WordPress database tables, lets you compare live WordPress content against local and remote snapshots, and supports the full workflow from WordPress:
 
@@ -45,23 +54,33 @@ The plugin also includes:
 2. Local repository reset tooling
 3. Remote branch reset tooling that creates one commit removing all tracked files from the branch
 4. Global and per-domain managed-content views in the admin UI
+5. Primary, config, and overlay domain separation in settings and Managed Content
+6. A high-level PushPull status dropdown in the WordPress admin bar
+7. Menu structure export and apply with hierarchy and theme location assignment
 
 ## Current scope
 
 This is an early, focused release. At the moment, PushPull is intentionally limited to:
 
 1. GitHub and GitLab as implemented remote providers
-2. Six managed content domains:
+2. Managed domains across three families:
    `generateblocks/global-styles/`
    `generateblocks/conditions/`
    `wordpress/block-patterns/`
+   `wordpress/menus/`
    `wordpress/pages/`
+   `wordpress/posts/`
    `wordpress/custom-css/`
    `wordpress/attachments/`
+   `wordpress/configuration/`
+   `wordpress/generatepress-elements/`
+   `translations/management/`
+   `media/organization/`
 3. Canonical JSON storage with one file per managed item for manifest-backed sets, plus directory-backed storage for attachments using `attachment.json` and the binary file
 4. Explicit opt-in attachment sync through a media-library checkbox
+5. Overlay domains that scope themselves to enabled compatible base domains rather than exporting every backend row blindly
 
-It does not yet manage general posts, menus, forms, `wp_options`, or arbitrary plugin data.
+It does not yet manage forms, arbitrary `wp_options`, or arbitrary plugin data.
 
 ## How PushPull represents content
 
@@ -73,7 +92,8 @@ For the currently supported managed sets it stores:
 2. One separate `manifest.json` file for manifest-backed sets that preserve logical ordering
 3. One directory per attachment for the attachments set, containing `attachment.json` and the binary file
 4. Stable logical keys instead of environment-specific database IDs
-5. Recursive placeholder normalization for current-site absolute URLs in post-type-backed content
+5. Canonical logical-key references for cross-domain relationships such as reading settings, translation groups, media folders, GeneratePress condition targets, and menu object references
+6. Recursive placeholder normalization for current-site absolute URLs in post-type-backed content
 
 That design keeps content stable across environments and makes reorder-only changes isolated and easy to review.
 
@@ -174,6 +194,14 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 
 ## Changelog
 
+### 0.0.15
+
+1. Added a new primary `wordpress_menus` domain with canonical JSON export and apply for WordPress menus.
+2. Added v1 menu location support so theme menu assignments round-trip alongside menu structure.
+3. Added canonical menu item references for pages, posts, taxonomies, post-type archives, and custom links, with hierarchy preserved through `parentItemKey`.
+4. Added focused menu export/apply coverage and nav-menu bootstrap support in the test suite.
+5. Updated the readme functionality description so WordPress menus are listed as a supported primary domain.
+
 ### 0.0.14
 
 1. Added a new `media_organization` overlay domain with a first Real Media Library-backed adapter that stores canonical attachment-to-folder path assignments instead of plugin-specific folder IDs.
@@ -269,7 +297,7 @@ PushPull sends the following information to the configured provider over HTTPS:
 3. Canonical JSON representations of the managed content you choose to commit and push
 4. Commit metadata such as commit messages and, if configured, author name and email
 
-In the current release, the managed content sent to the provider is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Pages, WordPress Custom CSS, and explicitly opted-in WordPress Attachments.
+In the current release, the managed content sent to the provider is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Menus, WordPress Pages, WordPress Posts, WordPress Custom CSS, GeneratePress Elements, explicitly opted-in WordPress Attachments, WordPress core configuration, WPML-backed translation management, and Real Media Library-backed media organization.
 
 PushPull does not send your whole WordPress database to the provider. It only sends the managed content represented by the enabled adapters.
 

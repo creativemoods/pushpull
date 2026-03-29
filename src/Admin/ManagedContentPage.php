@@ -88,6 +88,7 @@ final class ManagedContentPage
                 'working' => __('Working…', 'pushpull'),
                 'close' => __('Close', 'pushpull'),
                 'failed' => __('The PushPull operation could not be completed.', 'pushpull'),
+                'checkingStatus' => __('Connection interrupted while checking PushPull progress. Retrying operation status…', 'pushpull'),
                 /* translators: %d: completion percentage. */
                 'progressPercent' => __('%d% complete', 'pushpull'),
             ],

@@ -91,28 +91,44 @@
         return data.data;
     };
 
-    const continueOperation = async function (operationId, label) {
-        const data = await postJson('pushpull_continue_branch_action', {
-            operation_id: String(operationId)
-        });
+    const continueOperation = async function (operationId, label, retryCount) {
+        const currentRetryCount = retryCount || 0;
 
-        message.textContent = data.message || config.strings.working;
-        updateProgress(data.progress);
+        try {
+            const data = await postJson('pushpull_continue_branch_action', {
+                operation_id: String(operationId)
+            });
 
-        if (!data.done) {
-            window.setTimeout(function () {
-                continueOperation(operationId, label).catch(handleFailure);
-            }, 50);
-            return;
+            message.textContent = data.message || config.strings.working;
+            updateProgress(data.progress);
+
+            if (!data.done) {
+                window.setTimeout(function () {
+                    continueOperation(operationId, label, 0).catch(handleFailure);
+                }, 50);
+                return;
+            }
+
+            if (data.redirectUrl) {
+                window.location.assign(data.redirectUrl);
+                return;
+            }
+
+            title.textContent = label;
+            closeButton.hidden = false;
+        } catch (error) {
+            if (currentRetryCount < 5) {
+                title.textContent = label;
+                message.textContent = config.strings.checkingStatus || config.strings.working;
+
+                window.setTimeout(function () {
+                    continueOperation(operationId, label, currentRetryCount + 1).catch(handleFailure);
+                }, 2000);
+                return;
+            }
+
+            throw error;
         }
-
-        if (data.redirectUrl) {
-            window.location.assign(data.redirectUrl);
-            return;
-        }
-
-        title.textContent = label;
-        closeButton.hidden = false;
     };
 
     const handleFailure = function (error) {
@@ -148,7 +164,7 @@
                     return null;
                 }
 
-                return continueOperation(data.operationId, label);
+                return continueOperation(data.operationId, label, 0);
             }).catch(handleFailure);
         });
     });
