@@ -6,6 +6,7 @@ namespace PushPull\Tests;
 
 use PHPUnit\Framework\TestCase;
 use PushPull\Content\ManagedSetRegistry;
+use PushPull\Content\Media\RmlMediaOrganizationAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
@@ -46,6 +47,7 @@ final class ManagedSetRegistryTest extends TestCase
     {
         $registry = new ManagedSetRegistry([
             new WordPressAttachmentsAdapter(),
+            new RmlMediaOrganizationAdapter(new \PushPull\Settings\SettingsRepository()),
             new WordPressCoreConfigurationAdapter(),
             new GeneratePressElementsAdapter(),
             new WordPressPostsAdapter(),
@@ -53,7 +55,7 @@ final class ManagedSetRegistryTest extends TestCase
         ]);
 
         self::assertSame(
-            ['wordpress_attachments', 'wordpress_posts', 'wordpress_pages', 'wordpress_core_configuration', 'generatepress_elements'],
+            ['wordpress_attachments', 'media_organization', 'wordpress_posts', 'wordpress_pages', 'wordpress_core_configuration', 'generatepress_elements'],
             array_keys($registry->allInDependencyOrder())
         );
     }

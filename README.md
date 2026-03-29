@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.13
+Stable tag: 0.0.14
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -165,7 +165,22 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 10. Download the ZIP artifact from the tag pipeline and upload it in WordPress.
 11. Verify after upload that WordPress shows the new plugin version correctly.
 
+## TODO
+
+1. Cache the admin-bar PushPull status summary so the high-level live/local and local/remote aggregation is not recomputed on every page view.
+2. Move chunked async provider resumability fully into the provider layer so `AsyncBranchOperationRunner` no longer needs provider-specific GitLab staging rehydration logic.
+3. Improve push progress and recap reporting to distinguish newly uploaded objects from objects reused from the remote history.
+4. Surface unresolved logical-reference mapping issues, such as GeneratePress condition IDs that could not be converted to logical placeholders, instead of silently leaving mixed raw IDs and canonical refs.
+
 ## Changelog
+
+### 0.0.14
+
+1. Added a new `media_organization` overlay domain with a first Real Media Library-backed adapter that stores canonical attachment-to-folder path assignments instead of plugin-specific folder IDs.
+2. Expanded `WordPress core configuration` with `wordpress_permalink_settings` support for the site's permalink structure.
+3. Added a PushPull status dropdown in the WordPress admin bar with high-level live vs local and local vs remote summaries plus quick links into Managed Content and the Audit Log.
+4. Extended the WordPress pages and posts domains to own GeneratePress layout override meta, including legacy page-editor keys used for sidebar layout, footer widgets, full-width content, and disabled elements.
+5. Hardened the admin and provider integration edges with safer admin-bar status fallback behavior and PHPStan bootstrap stubs for Real Media Library functions.
 
 ### 0.0.13
 

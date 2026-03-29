@@ -17,7 +17,7 @@ final class WordPressPostsAdapterTest extends TestCase
         self::assertSame('hello-world', $adapter->computeLogicalKey(['post_name' => 'hello-world']));
     }
 
-    public function testSerializationCapturesPostContentWithoutRawMetaNoise(): void
+    public function testSerializationCapturesPostContentAndOwnedLayoutMetaWithoutRawMetaNoise(): void
     {
         $adapter = new WordPressPostsAdapter();
         $item = $adapter->buildItemFromRuntimeRecord($this->runtimeRecord());
@@ -27,7 +27,10 @@ final class WordPressPostsAdapterTest extends TestCase
         self::assertStringContainsString('"postContent"', $json);
         self::assertStringContainsString('Hello Lisbon', $json);
         self::assertStringContainsString('"restoration"', $json);
-        self::assertStringNotContainsString('"postMeta"', $json);
+        self::assertStringContainsString('"postMeta"', $json);
+        self::assertStringContainsString('"_generate-sidebar-layout-meta"', $json);
+        self::assertStringContainsString('"_generate-disable-post-image"', $json);
+        self::assertStringNotContainsString('"_edit_lock"', $json);
         self::assertStringNotContainsString('"terms"', $json);
     }
 
@@ -69,6 +72,8 @@ final class WordPressPostsAdapterTest extends TestCase
             'post_status' => 'publish',
             'post_content' => "<!-- wp:paragraph --><p>Hello Lisbon.</p><!-- /wp:paragraph -->",
             'post_meta' => [
+                ['meta_key' => '_generate-sidebar-layout-meta', 'meta_value' => 'no-sidebar'],
+                ['meta_key' => '_generate-disable-post-image', 'meta_value' => 'true'],
                 ['meta_key' => '_edit_lock', 'meta_value' => '1'],
             ],
             'terms' => [],

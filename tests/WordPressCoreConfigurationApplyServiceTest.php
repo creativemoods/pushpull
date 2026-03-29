@@ -46,6 +46,7 @@ final class WordPressCoreConfigurationApplyServiceTest extends TestCase
         update_option('show_on_front', 'page');
         update_option('page_on_front', 10);
         update_option('page_for_posts', 11);
+        update_option('permalink_structure', '/archives/%postname%/');
         $GLOBALS['pushpull_test_generateblocks_posts'] = [
             new \WP_Post(10, 'Home', 'home', 'publish', 0, 'page'),
             new \WP_Post(11, 'Blog', 'blog', 'publish', 0, 'page'),
@@ -60,6 +61,7 @@ final class WordPressCoreConfigurationApplyServiceTest extends TestCase
         update_option('show_on_front', 'posts');
         update_option('page_on_front', 0);
         update_option('page_for_posts', 0);
+        update_option('permalink_structure', '');
         $GLOBALS['pushpull_test_generateblocks_posts'] = [
             new \WP_Post(91, 'Home', 'home', 'publish', 0, 'page'),
             new \WP_Post(92, 'Blog', 'blog', 'publish', 0, 'page'),
@@ -80,9 +82,10 @@ final class WordPressCoreConfigurationApplyServiceTest extends TestCase
         ));
 
         self::assertSame(0, $result->createdCount);
-        self::assertSame(1, $result->updatedCount);
+        self::assertSame(2, $result->updatedCount);
         self::assertSame('page', get_option('show_on_front'));
         self::assertSame(91, get_option('page_on_front'));
         self::assertSame(92, get_option('page_for_posts'));
+        self::assertSame('/archives/%postname%/', get_option('permalink_structure'));
     }
 }

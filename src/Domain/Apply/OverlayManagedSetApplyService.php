@@ -7,7 +7,7 @@ namespace PushPull\Domain\Apply;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Content\ManagedContentItem;
-use PushPull\Content\Translation\WpmlTranslationManagementAdapter;
+use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Settings\PushPullSettings;
@@ -16,7 +16,7 @@ use RuntimeException;
 final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInterface
 {
     public function __construct(
-        private readonly WpmlTranslationManagementAdapter $adapter,
+        private readonly OverlayManagedContentAdapterInterface $adapter,
         private readonly RepositoryStateReader $repositoryStateReader,
         private readonly WorkingStateRepository $workingStateRepository
     ) {
@@ -37,7 +37,7 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
             }
 
             $desiredLogicalKeys[$logicalKey] = true;
-            $created = $this->adapter->applyGroup($item);
+            $created = $this->adapter->applyOverlayItem($item);
 
             if ($created) {
                 $createdCount++;
@@ -46,7 +46,7 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
             }
         }
 
-        $deletedLogicalKeys = $this->adapter->deleteMissingGroups($desiredLogicalKeys);
+        $deletedLogicalKeys = $this->adapter->deleteMissingOverlayItems($desiredLogicalKeys);
 
         return new ApplyManagedSetResult(
             $this->adapter->getManagedSetKey(),
@@ -79,14 +79,14 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
         }
 
         return [
-            'created' => $this->adapter->applyGroup($item),
+            'created' => $this->adapter->applyOverlayItem($item),
             'postId' => null,
         ];
     }
 
     public function deleteMissingLogicalKeys(array $desiredLogicalKeys): array
     {
-        return $this->adapter->deleteMissingGroups($desiredLogicalKeys);
+        return $this->adapter->deleteMissingOverlayItems($desiredLogicalKeys);
     }
 
     /**

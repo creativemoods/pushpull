@@ -11,6 +11,7 @@ use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedContentItem;
 use PushPull\Content\ManagedSetDependencyAwareInterface;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
+use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Content\OverlayManagedSetInterface;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
@@ -18,7 +19,7 @@ use PushPull\Settings\SettingsRepository;
 use RuntimeException;
 use WP_Post;
 
-final class WpmlTranslationManagementAdapter implements ManifestManagedContentAdapterInterface, ManagedSetDependencyAwareInterface, OverlayManagedSetInterface
+final class WpmlTranslationManagementAdapter implements OverlayManagedContentAdapterInterface, ManagedSetDependencyAwareInterface, OverlayManagedSetInterface
 {
     private const MANAGED_SET_KEY = 'translation_management';
     private const CONTENT_TYPE = 'translation_group';
@@ -346,6 +347,16 @@ final class WpmlTranslationManagementAdapter implements ManifestManagedContentAd
     public function deleteMissingGroups(array $desiredLogicalKeys): array
     {
         return [];
+    }
+
+    public function applyOverlayItem(ManagedContentItem $item): bool
+    {
+        return $this->applyGroup($item);
+    }
+
+    public function deleteMissingOverlayItems(array $desiredLogicalKeys): array
+    {
+        return $this->deleteMissingGroups($desiredLogicalKeys);
     }
 
     /**

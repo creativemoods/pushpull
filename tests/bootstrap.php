@@ -104,10 +104,52 @@ if (! function_exists('sanitize_email')) {
     }
 }
 
+if (! function_exists('__')) {
+    function __(string $text, ?string $domain = null): string
+    {
+        return $text;
+    }
+}
+
+if (! function_exists('esc_html__')) {
+    function esc_html__(string $text, ?string $domain = null): string
+    {
+        return $text;
+    }
+}
+
+if (! function_exists('esc_html')) {
+    function esc_html(string $text): string
+    {
+        return $text;
+    }
+}
+
 if (! function_exists('esc_url_raw')) {
     function esc_url_raw(string $url): string
     {
         return filter_var($url, FILTER_SANITIZE_URL) ?: '';
+    }
+}
+
+if (! function_exists('admin_url')) {
+    function admin_url(string $path = ''): string
+    {
+        return 'https://source.example.test/wp-admin/' . ltrim($path, '/');
+    }
+}
+
+if (! function_exists('current_user_can')) {
+    function current_user_can(string $capability): bool
+    {
+        return $GLOBALS['pushpull_test_current_user_can'] ?? true;
+    }
+}
+
+if (! function_exists('is_admin_bar_showing')) {
+    function is_admin_bar_showing(): bool
+    {
+        return $GLOBALS['pushpull_test_admin_bar_showing'] ?? true;
     }
 }
 
@@ -238,6 +280,47 @@ if (! class_exists('WP_Term')) {
             public string $description = '',
             public int $parent = 0
         ) {
+        }
+    }
+}
+
+if (! class_exists('WP_Admin_Bar')) {
+    class WP_Admin_Bar
+    {
+        /** @var array<string, array<string, mixed>> */
+        public array $nodes = [];
+
+        /**
+         * @param array<string, mixed> $node
+         */
+        public function add_node(array $node): void
+        {
+            if (! isset($node['id']) || ! is_string($node['id'])) {
+                return;
+            }
+
+            $this->nodes[$node['id']] = $node;
+        }
+    }
+}
+
+if (! class_exists('PushPull_Test_RmlFolder')) {
+    class PushPull_Test_RmlFolder
+    {
+        public function __construct(
+            private readonly int $id,
+            private readonly string $absolutePath
+        ) {
+        }
+
+        public function getId(): int
+        {
+            return $this->id;
+        }
+
+        public function getAbsolutePath(): string
+        {
+            return $this->absolutePath;
         }
     }
 }
@@ -443,6 +526,122 @@ if (! function_exists('wp_delete_post')) {
         ));
         unset($GLOBALS['pushpull_test_generateblocks_meta'][$postId]);
         unset($GLOBALS['pushpull_test_object_terms'][$postId]);
+
+        return true;
+    }
+}
+
+if (! function_exists('_wp_rml_root')) {
+    function _wp_rml_root(): int
+    {
+        return -1;
+    }
+}
+
+if (! defined('RML_TYPE_FOLDER')) {
+    define('RML_TYPE_FOLDER', 0);
+}
+
+if (! function_exists('wp_attachment_folder')) {
+    function wp_attachment_folder(int|array $attachmentId, mixed $default = null): mixed
+    {
+        if (is_array($attachmentId)) {
+            $result = [];
+
+            foreach ($attachmentId as $id) {
+                $result[(int) $id] = $GLOBALS['pushpull_test_rml_attachment_folders'][(int) $id] ?? $default;
+            }
+
+            return $result;
+        }
+
+        return $GLOBALS['pushpull_test_rml_attachment_folders'][(int) $attachmentId] ?? $default;
+    }
+}
+
+if (! function_exists('wp_rml_get_by_id')) {
+    function wp_rml_get_by_id(int $id, ?array $allowed = null, bool $mustBeFolderObject = false, bool $nullForRoot = true): ?PushPull_Test_RmlFolder
+    {
+        if ($id === _wp_rml_root()) {
+            return $nullForRoot ? null : new PushPull_Test_RmlFolder(_wp_rml_root(), '/');
+        }
+
+        $path = $GLOBALS['pushpull_test_rml_folders'][$id] ?? null;
+
+        if (! is_string($path)) {
+            return null;
+        }
+
+        return new PushPull_Test_RmlFolder($id, $path);
+    }
+}
+
+if (! function_exists('wp_rml_get_by_absolute_path')) {
+    function wp_rml_get_by_absolute_path(string $path, ?array $allowed = null): ?PushPull_Test_RmlFolder
+    {
+        $normalized = '/' . trim($path, '/');
+
+        if ($normalized === '/') {
+            return new PushPull_Test_RmlFolder(_wp_rml_root(), '/');
+        }
+
+        foreach (($GLOBALS['pushpull_test_rml_folders'] ?? []) as $id => $folderPath) {
+            if ($folderPath === $normalized) {
+                return new PushPull_Test_RmlFolder((int) $id, $folderPath);
+            }
+        }
+
+        return null;
+    }
+}
+
+if (! function_exists('wp_rml_create_or_return_existing_id')) {
+    function wp_rml_create_or_return_existing_id(string $name, int $parent, int $type, array $restrictions = [], bool $supress_validation = false): int|array
+    {
+        $name = trim($name);
+
+        if ($name === '') {
+            return ['Folder name cannot be empty.'];
+        }
+
+        $parentPath = '/';
+
+        if ($parent !== _wp_rml_root()) {
+            $parentPath = $GLOBALS['pushpull_test_rml_folders'][$parent] ?? null;
+
+            if (! is_string($parentPath)) {
+                return ['Parent folder does not exist.'];
+            }
+        }
+
+        $path = rtrim($parentPath, '/');
+        $path = ($path !== '' ? $path : '') . '/' . $name;
+        $path = '/' . trim($path, '/');
+
+        foreach (($GLOBALS['pushpull_test_rml_folders'] ?? []) as $id => $existingPath) {
+            if ($existingPath === $path) {
+                return (int) $id;
+            }
+        }
+
+        $id = (int) ($GLOBALS['pushpull_test_next_rml_folder_id'] ?? 2);
+        $GLOBALS['pushpull_test_next_rml_folder_id'] = $id + 1;
+        $GLOBALS['pushpull_test_rml_folders'][$id] = $path;
+
+        return $id;
+    }
+}
+
+if (! function_exists('wp_rml_move')) {
+    function wp_rml_move(int $folderId, array $attachmentIds, bool $supress_validation = false, bool $isShortcut = false): bool|array
+    {
+        if ($folderId !== _wp_rml_root() && ! isset($GLOBALS['pushpull_test_rml_folders'][$folderId])) {
+            return ['Target folder does not exist.'];
+        }
+
+        foreach ($attachmentIds as $attachmentId) {
+            $GLOBALS['pushpull_test_rml_attachment_folders'][(int) $attachmentId] = $folderId;
+        }
 
         return true;
     }

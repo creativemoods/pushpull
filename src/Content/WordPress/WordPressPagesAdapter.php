@@ -10,6 +10,34 @@ use PushPull\Content\ManagedContentSnapshot;
 
 final class WordPressPagesAdapter extends AbstractWordPressPostTypeAdapter
 {
+    /**
+     * @var array<string, true>
+     */
+    private const OWNED_POST_META_KEYS = [
+        '_generate_sidebar_layout' => true,
+        '_generate_footer_widgets' => true,
+        '_generate_content_area' => true,
+        '_generate_content_width' => true,
+        '_generate_disable_site_header' => true,
+        '_generate_disable_top_bar' => true,
+        '_generate_disable_primary_navigation' => true,
+        '_generate_disable_secondary_navigation' => true,
+        '_generate_disable_featured_image' => true,
+        '_generate_disable_content_title' => true,
+        '_generate_disable_title' => true,
+        '_generate_disable_footer' => true,
+        '_generate-sidebar-layout-meta' => true,
+        '_generate-footer-widget-meta' => true,
+        '_generate-full-width-content' => true,
+        '_generate-disable-top-bar' => true,
+        '_generate-disable-header' => true,
+        '_generate-disable-nav' => true,
+        '_generate-disable-secondary-nav' => true,
+        '_generate-disable-headline' => true,
+        '_generate-disable-footer' => true,
+        '_generate-disable-post-image' => true,
+    ];
+
     private const MANAGED_SET_KEY = 'wordpress_pages';
     private const CONTENT_TYPE = 'wordpress_page';
     private const MANIFEST_TYPE = 'wordpress_pages_manifest';
@@ -53,7 +81,7 @@ final class WordPressPagesAdapter extends AbstractWordPressPostTypeAdapter
 
     protected function shouldExportPostMetaKey(string $metaKey): bool
     {
-        return false;
+        return isset(self::OWNED_POST_META_KEYS[$metaKey]);
     }
 
     /**
@@ -62,11 +90,19 @@ final class WordPressPagesAdapter extends AbstractWordPressPostTypeAdapter
      */
     protected function buildMetadata(array $record): array
     {
-        return [
+        $metadata = [
             'restoration' => [
                 'postType' => $this->postType(),
             ],
         ];
+
+        $postMeta = $this->normalizePostMetaEntries($record['post_meta'] ?? []);
+
+        if ($postMeta !== []) {
+            $metadata['postMeta'] = $postMeta;
+        }
+
+        return $metadata;
     }
 
     /**

@@ -21,9 +21,11 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
 {
     private const MANAGED_SET_KEY = 'wordpress_core_configuration';
     private const CONTENT_TYPE_READING = 'wordpress_reading_settings';
+    private const CONTENT_TYPE_PERMALINK = 'wordpress_permalink_settings';
     private const MANIFEST_TYPE = 'wordpress_core_configuration_manifest';
     private const PATH_PREFIX = 'wordpress/configuration';
     private const LOGICAL_KEY_READING = 'reading-settings';
+    private const LOGICAL_KEY_PERMALINK = 'permalink-settings';
 
     public function getManagedSetKey(): string
     {
@@ -68,16 +70,24 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
 
     public function exportSnapshot(): ManagedContentSnapshot
     {
-        $item = $this->buildReadingSettingsItem();
-        $files = [
-            $this->getRepositoryPath($item) => $this->serialize($item),
+        $items = [
+            $this->buildPermalinkSettingsItem(),
+            $this->buildReadingSettingsItem(),
         ];
-        $orderedLogicalKeys = [$item->logicalKey];
+        usort($items, static fn (ManagedContentItem $left, ManagedContentItem $right): int => $left->logicalKey <=> $right->logicalKey);
+        $files = [];
+        $orderedLogicalKeys = [];
+
+        foreach ($items as $item) {
+            $orderedLogicalKeys[] = $item->logicalKey;
+            $files[$this->getRepositoryPath($item)] = $this->serialize($item);
+        }
+
         $manifest = new ManagedCollectionManifest(self::MANAGED_SET_KEY, self::MANIFEST_TYPE, $orderedLogicalKeys);
         $files[$this->getManifestPath()] = $this->serializeManifest($manifest);
         ksort($files);
 
-        return new WordPressCoreConfigurationSnapshot([$item], $manifest, $files, $orderedLogicalKeys);
+        return new WordPressCoreConfigurationSnapshot($items, $manifest, $files, $orderedLogicalKeys);
     }
 
     /**
@@ -111,11 +121,11 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
 
     public function exportByLogicalKey(string $logicalKey): ?ManagedContentItem
     {
-        if ($logicalKey !== self::LOGICAL_KEY_READING) {
-            return null;
-        }
-
-        return $this->buildReadingSettingsItem();
+        return match ($logicalKey) {
+            self::LOGICAL_KEY_READING => $this->buildReadingSettingsItem(),
+            self::LOGICAL_KEY_PERMALINK => $this->buildPermalinkSettingsItem(),
+            default => null,
+        };
     }
 
     /**
@@ -246,16 +256,28 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
     {
         $this->validateItem($item);
 
-        $payload = $item->payload;
-        $showOnFront = (string) ($payload['showOnFront'] ?? 'posts');
+        if ($item->contentType === self::CONTENT_TYPE_READING) {
+            $payload = $item->payload;
+            $showOnFront = (string) ($payload['showOnFront'] ?? 'posts');
 
-        if (! in_array($showOnFront, ['posts', 'page'], true)) {
-            throw new RuntimeException(sprintf('Unsupported show_on_front value "%s".', $showOnFront));
+            if (! in_array($showOnFront, ['posts', 'page'], true)) {
+                throw new RuntimeException(sprintf('Unsupported show_on_front value "%s".', $showOnFront));
+            }
+
+            update_option('show_on_front', $showOnFront, false);
+            update_option('page_on_front', $this->resolvePageOptionValue($payload['frontPageRef'] ?? null), false);
+            update_option('page_for_posts', $this->resolvePageOptionValue($payload['postsPageRef'] ?? null), false);
+
+            return;
         }
 
-        update_option('show_on_front', $showOnFront, false);
-        update_option('page_on_front', $this->resolvePageOptionValue($payload['frontPageRef'] ?? null), false);
-        update_option('page_for_posts', $this->resolvePageOptionValue($payload['postsPageRef'] ?? null), false);
+        if ($item->contentType === self::CONTENT_TYPE_PERMALINK) {
+            update_option('permalink_structure', (string) ($item->payload['permalinkStructure'] ?? ''), false);
+
+            return;
+        }
+
+        throw new RuntimeException(sprintf('Unsupported WordPress core configuration content type "%s".', $item->contentType));
     }
 
     private function buildReadingSettingsItem(): ManagedContentItem
@@ -276,6 +298,27 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
             [
                 'restoration' => [
                     'optionNames' => ['show_on_front', 'page_on_front', 'page_for_posts'],
+                ],
+            ]
+        );
+    }
+
+    private function buildPermalinkSettingsItem(): ManagedContentItem
+    {
+        return new ManagedContentItem(
+            self::MANAGED_SET_KEY,
+            self::CONTENT_TYPE_PERMALINK,
+            self::LOGICAL_KEY_PERMALINK,
+            'Permalink settings',
+            self::LOGICAL_KEY_PERMALINK,
+            self::LOGICAL_KEY_PERMALINK,
+            [
+                'permalinkStructure' => (string) get_option('permalink_structure', ''),
+            ],
+            'publish',
+            [
+                'restoration' => [
+                    'optionNames' => ['permalink_structure'],
                 ],
             ]
         );
@@ -374,7 +417,7 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
             throw new ManagedContentExportException('Managed content item belongs to an unexpected managed set.');
         }
 
-        if ($item->contentType !== self::CONTENT_TYPE_READING) {
+        if (! in_array($item->contentType, [self::CONTENT_TYPE_READING, self::CONTENT_TYPE_PERMALINK], true)) {
             throw new ManagedContentExportException('Managed content item has an unexpected content type.');
         }
 

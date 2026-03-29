@@ -11,9 +11,11 @@ if (! defined('ABSPATH')) {
 use PushPull\Admin\ManagedContentPage;
 use PushPull\Admin\OperationsPage;
 use PushPull\Admin\AttachmentSyncField;
+use PushPull\Admin\AdminBarStatus;
 use PushPull\Content\GenerateBlocks\GenerateBlocksConditionsAdapter;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
 use PushPull\Content\ManagedSetRegistry;
+use PushPull\Content\Media\RmlMediaOrganizationAdapter;
 use PushPull\Admin\SettingsPage;
 use PushPull\Content\GenerateBlocks\WordPressBlockPatternsAdapter;
 use PushPull\Content\Translation\WpmlTranslationManagementAdapter;
@@ -58,10 +60,6 @@ final class Plugin
 
         global $wpdb;
 
-        if (! is_admin()) {
-            return;
-        }
-
         $settingsRepository = new SettingsRepository();
         $providerFactory = new GitProviderFactory();
         $localRepository = new DatabaseLocalRepository($wpdb);
@@ -80,6 +78,7 @@ final class Plugin
         $wordPressPagesAdapter = new WordPressPagesAdapter();
         $wordPressPostsAdapter = new WordPressPostsAdapter();
         $wpmlTranslationManagementAdapter = new WpmlTranslationManagementAdapter($settingsRepository);
+        $rmlMediaOrganizationAdapter = new RmlMediaOrganizationAdapter($settingsRepository);
         $workingStateRepository = new WorkingStateRepository($wpdb);
         $contentMapRepository = new ContentMapRepository($wpdb);
         $stateReader = new RepositoryStateReader($localRepository);
@@ -93,6 +92,7 @@ final class Plugin
             $generatePressElementsAdapter,
             $wordPressPagesAdapter,
             $wordPressPostsAdapter,
+            $rmlMediaOrganizationAdapter,
             $wpmlTranslationManagementAdapter,
         ]);
         $managedSetCommitters = [];
@@ -102,7 +102,7 @@ final class Plugin
         foreach ($managedSetRegistry->all() as $managedSetKey => $adapter) {
             $managedSetCommitters[$managedSetKey] = new ManagedSetRepositoryCommitter($localRepository, $adapter);
             $managedSetDiffServices[$managedSetKey] = new ManagedSetDiffService($adapter, $stateReader, $localRepository);
-            if ($adapter instanceof WpmlTranslationManagementAdapter) {
+            if ($adapter instanceof \PushPull\Content\OverlayManagedContentAdapterInterface) {
                 $managedSetApplyServices[$managedSetKey] = new OverlayManagedSetApplyService(
                     $adapter,
                     $stateReader,
@@ -158,6 +158,18 @@ final class Plugin
             $operationExecutor
         );
         $operationsPage = new OperationsPage($operationLogRepository);
+        $adminBarStatus = new AdminBarStatus(
+            $settingsRepository,
+            $managedSetRegistry,
+            $syncService
+        );
+
+        add_action('admin_bar_menu', [$adminBarStatus, 'register'], 90);
+
+        if (! is_admin()) {
+            return;
+        }
+
         $managedContentPage = new ManagedContentPage(
             $settingsRepository,
             $localRepository,

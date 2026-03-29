@@ -54,7 +54,10 @@ final class WordPressPostsApplyServiceTest extends TestCase
                 'post_name' => 'hello-world',
                 'post_status' => 'publish',
                 'post_content' => '<!-- wp:paragraph --><p>Hello Lisbon.</p><!-- /wp:paragraph -->',
-                'post_meta' => [],
+                'post_meta' => [
+                    ['meta_key' => '_generate-sidebar-layout-meta', 'meta_value' => 'no-sidebar'],
+                    ['meta_key' => '_generate-disable-post-image', 'meta_value' => 'true'],
+                ],
                 'terms' => [],
             ],
         ]);
@@ -85,7 +88,8 @@ final class WordPressPostsApplyServiceTest extends TestCase
         self::assertSame('post', $post->post_type);
         self::assertSame('hello-world', $post->post_name);
         self::assertStringContainsString('Hello Lisbon', $post->post_content);
-        self::assertArrayNotHasKey($post->ID, $GLOBALS['pushpull_test_generateblocks_meta']);
+        self::assertSame(['no-sidebar'], $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_generate-sidebar-layout-meta']);
+        self::assertSame(['true'], $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID]['_generate-disable-post-image']);
     }
 
     public function testApplyUpdatesExistingPost(): void
@@ -101,6 +105,7 @@ final class WordPressPostsApplyServiceTest extends TestCase
         );
         $GLOBALS['pushpull_test_generateblocks_meta'][42] = [
             '_edit_lock' => ['1'],
+            '_generate-sidebar-layout-meta' => ['left-sidebar'],
         ];
 
         $snapshot = $this->adapter->snapshotFromRuntimeRecords([
@@ -110,7 +115,10 @@ final class WordPressPostsApplyServiceTest extends TestCase
                 'post_name' => 'hello-world',
                 'post_status' => 'publish',
                 'post_content' => '<!-- wp:paragraph --><p>Hello Lisbon.</p><!-- /wp:paragraph -->',
-                'post_meta' => [],
+                'post_meta' => [
+                    ['meta_key' => '_generate-sidebar-layout-meta', 'meta_value' => 'no-sidebar'],
+                    ['meta_key' => '_generate-disable-post-image', 'meta_value' => 'true'],
+                ],
                 'terms' => [],
             ],
         ]);
@@ -138,5 +146,7 @@ final class WordPressPostsApplyServiceTest extends TestCase
         self::assertCount(1, $GLOBALS['pushpull_test_generateblocks_posts']);
         self::assertStringContainsString('Hello Lisbon', $GLOBALS['pushpull_test_generateblocks_posts'][0]->post_content);
         self::assertSame(['1'], $GLOBALS['pushpull_test_generateblocks_meta'][42]['_edit_lock']);
+        self::assertSame(['no-sidebar'], $GLOBALS['pushpull_test_generateblocks_meta'][42]['_generate-sidebar-layout-meta']);
+        self::assertSame(['true'], $GLOBALS['pushpull_test_generateblocks_meta'][42]['_generate-disable-post-image']);
     }
 }

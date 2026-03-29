@@ -23,6 +23,7 @@ final class WordPressCoreConfigurationAdapterTest extends TestCase
         update_option('show_on_front', 'page');
         update_option('page_on_front', 10);
         update_option('page_for_posts', 11);
+        update_option('permalink_structure', '/%postname%/');
 
         $GLOBALS['pushpull_test_generateblocks_posts'] = [
             new \WP_Post(10, 'Home', 'home', 'publish', 0, 'page'),
@@ -32,10 +33,13 @@ final class WordPressCoreConfigurationAdapterTest extends TestCase
         $adapter = new WordPressCoreConfigurationAdapter();
         $snapshot = $adapter->exportSnapshot();
 
-        self::assertSame(['reading-settings'], $snapshot->orderedLogicalKeys);
-        self::assertCount(1, $snapshot->items);
+        self::assertSame(['permalink-settings', 'reading-settings'], $snapshot->orderedLogicalKeys);
+        self::assertCount(2, $snapshot->items);
 
-        $item = $snapshot->items[0];
+        self::assertSame('wordpress_permalink_settings', $snapshot->items[0]->contentType);
+        self::assertSame('/%postname%/', $snapshot->items[0]->payload['permalinkStructure']);
+
+        $item = $snapshot->items[1];
         self::assertSame('wordpress_core_configuration', $item->managedSetKey);
         self::assertSame('wordpress_reading_settings', $item->contentType);
         self::assertSame('page', $item->payload['showOnFront']);
