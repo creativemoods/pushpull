@@ -13,11 +13,13 @@ use PushPull\Content\ManagedSetDependencyAwareInterface;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Content\OverlayManagedSetInterface;
+use PushPull\Content\WordPress\WordPressMenusAdapter;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use PushPull\Settings\SettingsRepository;
 use RuntimeException;
 use WP_Post;
+use WP_Term;
 
 final class WpmlTranslationManagementAdapter implements OverlayManagedContentAdapterInterface, ManagedSetDependencyAwareInterface, OverlayManagedSetInterface
 {
@@ -29,13 +31,14 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
     private const CACHE_GROUP = 'pushpull_wpml';
     private const CACHE_KEY_TRANSLATION_ROWS = 'translation_rows';
     /**
-     * @var array<string, array{postType: string, contentType: string}>
+     * @var array<string, array{entityType: string, postType?: string, taxonomy?: string, contentType: string}>
      */
     private const SUPPORTED_DOMAINS = [
-        'wordpress_pages' => ['postType' => 'page', 'contentType' => 'wordpress_page'],
-        'wordpress_posts' => ['postType' => 'post', 'contentType' => 'wordpress_post'],
-        'wordpress_block_patterns' => ['postType' => 'wp_block', 'contentType' => 'wordpress_block_pattern'],
-        'generatepress_elements' => ['postType' => 'gp_elements', 'contentType' => 'generatepress_element'],
+        'wordpress_pages' => ['entityType' => 'post', 'postType' => 'page', 'contentType' => 'wordpress_page'],
+        'wordpress_posts' => ['entityType' => 'post', 'postType' => 'post', 'contentType' => 'wordpress_post'],
+        'wordpress_block_patterns' => ['entityType' => 'post', 'postType' => 'wp_block', 'contentType' => 'wordpress_block_pattern'],
+        'generatepress_elements' => ['entityType' => 'post', 'postType' => 'gp_elements', 'contentType' => 'generatepress_element'],
+        'wordpress_menus' => ['entityType' => 'taxonomy', 'taxonomy' => 'nav_menu', 'contentType' => 'wordpress_menu'],
     ];
 
     public function __construct(private readonly SettingsRepository $settingsRepository)
@@ -313,18 +316,36 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 throw new RuntimeException(sprintf('Unsupported translation content domain "%s".', $translation['contentDomain']));
             }
 
-            $targetPost = $this->findPostByLogicalKey($scope['postType'], $translation['contentLogicalKey']);
+            if (($scope['entityType'] ?? '') === 'taxonomy') {
+                $taxonomy = (string) ($scope['taxonomy'] ?? '');
+                $targetTerm = $this->findTermByLogicalKey($taxonomy, $translation['contentLogicalKey']);
 
-            if (! $targetPost instanceof WP_Post) {
-                throw new RuntimeException(sprintf(
-                    'Translation group references missing %s "%s".',
-                    $scope['postType'],
-                    $translation['contentLogicalKey']
-                ));
+                if (! $targetTerm instanceof WP_Term) {
+                    throw new RuntimeException(sprintf(
+                        'Translation group references missing %s "%s".',
+                        $taxonomy,
+                        $translation['contentLogicalKey']
+                    ));
+                }
+
+                $elementType = 'tax_' . $taxonomy;
+                $elementId = (int) $targetTerm->term_id;
+            } else {
+                $postType = (string) ($scope['postType'] ?? '');
+                $targetPost = $this->findPostByLogicalKey($postType, $translation['contentLogicalKey']);
+
+                if (! $targetPost instanceof WP_Post) {
+                    throw new RuntimeException(sprintf(
+                        'Translation group references missing %s "%s".',
+                        $postType,
+                        $translation['contentLogicalKey']
+                    ));
+                }
+
+                $elementType = 'post_' . $postType;
+                $elementId = (int) $targetPost->ID;
             }
 
-            $elementType = 'post_' . $scope['postType'];
-            $elementId = (int) $targetPost->ID;
             $existingRow = $this->findTranslationRow($elementType, $elementId);
             $row = [
                 'translation_id' => (int) ($existingRow['translation_id'] ?? $this->nextTranslationId()),
@@ -479,6 +500,7 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
     {
         $settings = $this->settingsRepository->get();
         $translatablePostTypes = $this->wpmlTranslatablePostTypes();
+        $translatableTaxonomies = $this->wpmlTranslatableTaxonomies();
         $scopeMap = [];
 
         foreach (self::SUPPORTED_DOMAINS as $managedSetKey => $scope) {
@@ -486,17 +508,40 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 continue;
             }
 
-            if (! isset($translatablePostTypes[$scope['postType']])) {
+            if (($scope['entityType'] ?? '') === 'taxonomy') {
+                $taxonomy = (string) ($scope['taxonomy'] ?? '');
+
+                if (! isset($translatableTaxonomies[$taxonomy]) && ! $this->hasTranslationElementType('tax_' . $taxonomy)) {
+                    continue;
+                }
+
+                $elementType = 'tax_' . $taxonomy;
+                $scopeMap[$elementType] = [];
+
+                foreach ($this->termsByTaxonomy($taxonomy) as $term) {
+                    $scopeMap[$elementType][$term->term_id] = [
+                        'managedSetKey' => $managedSetKey,
+                        'contentType' => (string) $scope['contentType'],
+                        'logicalKey' => $this->computeTermLogicalKey($term),
+                    ];
+                }
+
                 continue;
             }
 
-            $elementType = 'post_' . $scope['postType'];
+            $postType = (string) ($scope['postType'] ?? '');
+
+            if (! isset($translatablePostTypes[$postType])) {
+                continue;
+            }
+
+            $elementType = 'post_' . $postType;
             $scopeMap[$elementType] = [];
 
-            foreach ($this->postsByType($scope['postType']) as $post) {
+            foreach ($this->postsByType($postType) as $post) {
                 $scopeMap[$elementType][$post->ID] = [
                     'managedSetKey' => $managedSetKey,
-                    'contentType' => $scope['contentType'],
+                    'contentType' => (string) $scope['contentType'],
                     'logicalKey' => $this->computePostLogicalKey($post),
                 ];
             }
@@ -522,6 +567,29 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
         foreach ($modes as $postType => $mode) {
             if ((string) $mode !== '0') {
                 $enabled[(string) $postType] = true;
+            }
+        }
+
+        return $enabled;
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function wpmlTranslatableTaxonomies(): array
+    {
+        $settings = $this->wpmlSettings();
+        $modes = $settings['taxonomies_sync_option'] ?? [];
+
+        if (! is_array($modes)) {
+            return [];
+        }
+
+        $enabled = [];
+
+        foreach ($modes as $taxonomy => $mode) {
+            if ((string) $mode !== '0') {
+                $enabled[(string) $taxonomy] = true;
             }
         }
 
@@ -668,6 +736,17 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
         return $max + 1;
     }
 
+    private function hasTranslationElementType(string $elementType): bool
+    {
+        foreach ($this->translationRows() as $row) {
+            if ((string) ($row['element_type'] ?? '') === $elementType) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param mixed $translations
      * @return array<int, array{language: string, contentDomain: string, contentType: string, contentLogicalKey: string, sourceLanguage: string|null}>
@@ -734,11 +813,62 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
         return $logicalKey;
     }
 
+    private function computeTermLogicalKey(WP_Term $term): string
+    {
+        $identifier = trim($term->slug !== '' ? $term->slug : $term->name);
+        $logicalKey = sanitize_title($identifier);
+
+        if ($logicalKey === '') {
+            throw new ManagedContentExportException(sprintf('Translated term %d has an empty logical key.', $term->term_id));
+        }
+
+        return $logicalKey;
+    }
+
     private function findPostByLogicalKey(string $postType, string $logicalKey): ?WP_Post
     {
         foreach ($this->postsByType($postType) as $post) {
             if ($this->computePostLogicalKey($post) === $logicalKey) {
                 return $post;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return WP_Term[]
+     */
+    private function termsByTaxonomy(string $taxonomy): array
+    {
+        if ($taxonomy === 'nav_menu') {
+            return array_values(array_filter(
+                wp_get_nav_menus(),
+                static fn (mixed $term): bool => $term instanceof WP_Term
+            ));
+        }
+
+        return [];
+    }
+
+    private function findTermByLogicalKey(string $taxonomy, string $logicalKey): ?WP_Term
+    {
+        if ($taxonomy === 'nav_menu') {
+            $adapter = new WordPressMenusAdapter();
+            $termId = $adapter->findExistingWpObjectIdByLogicalKey($logicalKey);
+
+            if ($termId === null) {
+                return null;
+            }
+
+            $term = get_term($termId, $taxonomy);
+
+            return $term instanceof WP_Term ? $term : null;
+        }
+
+        foreach ($this->termsByTaxonomy($taxonomy) as $term) {
+            if ($this->computeTermLogicalKey($term) === $logicalKey) {
+                return $term;
             }
         }
 

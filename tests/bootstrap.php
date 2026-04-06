@@ -5,6 +5,7 @@ declare(strict_types=1);
 global $pushpull_test_options;
 
 $pushpull_test_options ??= [];
+$GLOBALS['pushpull_test_cron_events'] ??= [];
 $GLOBALS['pushpull_test_generateblocks_posts'] ??= [];
 $GLOBALS['pushpull_test_generateblocks_meta'] ??= [];
 $GLOBALS['pushpull_test_terms'] ??= [];
@@ -14,6 +15,10 @@ $GLOBALS['pushpull_test_next_term_id'] ??= 1;
 $GLOBALS['pushpull_test_next_post_id'] ??= 1;
 $GLOBALS['pushpull_test_wpml_translations'] ??= [];
 $GLOBALS['pushpull_test_theme_mods'] ??= [];
+
+if (! defined('ABSPATH')) {
+    define('ABSPATH', dirname(__DIR__) . '/');
+}
 
 if (! defined('ARRAY_A')) {
     define('ARRAY_A', 'ARRAY_A');
@@ -900,6 +905,45 @@ if (! function_exists('delete_option')) {
     }
 }
 
+if (! function_exists('wp_next_scheduled')) {
+    function wp_next_scheduled(string $hook, array $args = []): int|false
+    {
+        $event = $GLOBALS['pushpull_test_cron_events'][$hook] ?? null;
+
+        if (! is_array($event) || ! isset($event['timestamp'])) {
+            return false;
+        }
+
+        return (int) $event['timestamp'];
+    }
+}
+
+if (! function_exists('wp_schedule_event')) {
+    function wp_schedule_event(int $timestamp, string $recurrence, string $hook, array $args = []): bool
+    {
+        $GLOBALS['pushpull_test_cron_events'][$hook] = [
+            'timestamp' => $timestamp,
+            'recurrence' => $recurrence,
+            'args' => $args,
+        ];
+
+        return true;
+    }
+}
+
+if (! function_exists('wp_clear_scheduled_hook')) {
+    function wp_clear_scheduled_hook(string $hook, array $args = []): int
+    {
+        if (! isset($GLOBALS['pushpull_test_cron_events'][$hook])) {
+            return 0;
+        }
+
+        unset($GLOBALS['pushpull_test_cron_events'][$hook]);
+
+        return 1;
+    }
+}
+
 if (! function_exists('get_theme_mod')) {
     function get_theme_mod(string $name, mixed $default = false): mixed
     {
@@ -1008,8 +1052,15 @@ if (! function_exists('wp_get_nav_menu_items')) {
             }
 
             $meta = $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID] ?? [];
+            $assignedTerms = $GLOBALS['pushpull_test_object_terms'][$post->ID]['nav_menu'] ?? [];
+            $assignedMenuIds = is_array($assignedTerms)
+                ? array_map('intval', $assignedTerms)
+                : [];
 
-            if ((int) ($meta['_menu_item_menu_term_id'] ?? 0) !== (int) $menuObject->term_id) {
+            if (
+                (int) ($meta['_menu_item_menu_term_id'] ?? 0) !== (int) $menuObject->term_id
+                && ! in_array((int) $menuObject->term_id, $assignedMenuIds, true)
+            ) {
                 continue;
             }
 
@@ -1067,6 +1118,7 @@ if (! function_exists('wp_update_nav_menu_item')) {
         update_post_meta($postId, '_menu_item_attr_title', (string) ($args['menu-item-attr-title'] ?? ''));
         update_post_meta($postId, '_menu_item_classes', (string) ($args['menu-item-classes'] ?? ''));
         update_post_meta($postId, '_menu_item_xfn', (string) ($args['menu-item-xfn'] ?? ''));
+        wp_set_object_terms($postId, [$menuId], 'nav_menu', false);
 
         return $postId;
     }

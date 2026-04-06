@@ -60,6 +60,7 @@ final class WordPressMenusAdapterTest extends TestCase
         self::assertCount(1, $snapshot->items);
         self::assertSame('wordpress_menu', $snapshot->items[0]->contentType);
         self::assertSame(['footer', 'primary'], $snapshot->items[0]->payload['locations']);
+        self::assertSame('page:home', $snapshot->items[0]->payload['items'][0]['itemKey']);
         self::assertSame('page', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['postType']);
         self::assertSame('home', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['logicalKey']);
         self::assertSame('{{pushpull.home_url}}/about', $snapshot->items[0]->payload['items'][1]['url']);

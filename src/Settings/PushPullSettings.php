@@ -20,7 +20,8 @@ final class PushPullSettings
         public readonly bool $diagnosticsEnabled,
         public readonly string $authorName,
         public readonly string $authorEmail,
-        public readonly array $enabledManagedSets = []
+        public readonly array $enabledManagedSets = [],
+        public readonly int $fetchAvailabilityCheckIntervalMinutes = 5
     ) {
     }
 
@@ -61,7 +62,8 @@ final class PushPullSettings
             (bool) ($values['diagnostics_enabled'] ?? true),
             (string) ($values['author_name'] ?? ''),
             (string) ($values['author_email'] ?? ''),
-            array_values(array_unique($enabledManagedSets))
+            array_values(array_unique($enabledManagedSets)),
+            (int) ($values['fetch_availability_check_interval_minutes'] ?? 5)
         );
     }
 
@@ -77,6 +79,7 @@ final class PushPullSettings
             'branch' => $this->branch,
             'api_token' => $this->apiToken,
             'base_url' => $this->baseUrl,
+            'fetch_availability_check_interval_minutes' => $this->fetchAvailabilityCheckIntervalMinutes,
             'enabled_managed_sets' => array_values($this->enabledManagedSets),
             'auto_apply_enabled' => $this->autoApplyEnabled,
             'diagnostics_enabled' => $this->diagnosticsEnabled,

@@ -33,6 +33,7 @@ final class SettingsRepository
             'branch' => 'main',
             'api_token' => '',
             'base_url' => '',
+            'fetch_availability_check_interval_minutes' => 5,
             'enabled_managed_sets' => [],
             'auto_apply_enabled' => false,
             'diagnostics_enabled' => true,
@@ -59,6 +60,12 @@ final class SettingsRepository
             $apiToken = $existing->apiToken;
         }
 
+        $fetchAvailabilityCheckIntervalMinutes = (int) ($input['fetch_availability_check_interval_minutes'] ?? $existing->fetchAvailabilityCheckIntervalMinutes);
+
+        if ($fetchAvailabilityCheckIntervalMinutes < 1) {
+            $fetchAvailabilityCheckIntervalMinutes = 5;
+        }
+
         return PushPullSettings::fromArray([
             'provider_key' => $providerKey,
             'owner_or_workspace' => sanitize_text_field((string) ($input['owner_or_workspace'] ?? '')),
@@ -66,6 +73,7 @@ final class SettingsRepository
             'branch' => sanitize_text_field((string) ($input['branch'] ?? 'main')),
             'api_token' => $apiToken,
             'base_url' => esc_url_raw((string) ($input['base_url'] ?? '')),
+            'fetch_availability_check_interval_minutes' => $fetchAvailabilityCheckIntervalMinutes,
             'enabled_managed_sets' => isset($input['enabled_managed_sets']) && is_array($input['enabled_managed_sets'])
                 ? array_values(array_filter(array_map(
                     static fn (mixed $value): string => sanitize_key((string) $value),

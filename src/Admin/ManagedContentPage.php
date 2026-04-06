@@ -20,6 +20,7 @@ use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\Exception\ProviderException;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Capabilities;
+use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use PushPull\Support\Operations\AsyncBranchOperationRunner;
 use PushPull\Support\Operations\OperationExecutor;
 use RuntimeException;
@@ -45,7 +46,8 @@ final class ManagedContentPage
         private readonly WorkingStateRepository $workingStateRepository,
         private readonly ManagedSetConflictResolutionService $conflictResolutionService,
         private readonly OperationExecutor $operationExecutor,
-        private readonly AsyncBranchOperationRunner $asyncBranchOperationRunner
+        private readonly AsyncBranchOperationRunner $asyncBranchOperationRunner,
+        private readonly FetchAvailabilityService $fetchAvailabilityService
     ) {
     }
 
@@ -129,8 +131,9 @@ final class ManagedContentPage
 
     private function renderPrimaryNavigation(\PushPull\Settings\PushPullSettings $settings): void
     {
-        $managedSetKey = $this->branchActionManagedSetKey($settings);
-        $enabled = $managedSetKey !== null;
+        $branchActionState = $this->branchActionState($settings);
+        $fetchAvailabilityState = $this->fetchAvailabilityService->getCachedState($settings);
+        $managedSetKey = $branchActionState['managedSetKey'];
 
         echo '<div class="pushpull-page-nav-row">';
         echo '<nav class="nav-tab-wrapper wp-clearfix pushpull-page-nav">';
@@ -151,10 +154,10 @@ final class ManagedContentPage
         );
         echo '</nav>';
         echo '<div class="pushpull-top-actions">';
-        $this->renderPullButton($managedSetKey, $enabled);
-        $this->renderFetchButton($managedSetKey, $enabled);
-        $this->renderTopLevelMergeButton($managedSetKey, $enabled);
-        $this->renderPushButton($managedSetKey, $enabled);
+        $this->renderPullButton($managedSetKey, $branchActionState['pull']['enabled'], $branchActionState['pull']['reason']);
+        $this->renderFetchButton($managedSetKey, $branchActionState['fetch']['enabled'], $branchActionState['fetch']['reason'], $fetchAvailabilityState);
+        $this->renderTopLevelMergeButton($managedSetKey, $branchActionState['merge']['enabled'], $branchActionState['merge']['reason']);
+        $this->renderPushButton($managedSetKey, $branchActionState['push']['enabled'], $branchActionState['push']['reason']);
         echo '</div>';
         echo '</div>';
         echo '<p class="description pushpull-top-actions-note">' . esc_html__('Branch actions operate on the whole branch. Pull runs Fetch + Merge, and Merge brings fetched remote-tracking changes into the local branch.', 'pushpull') . '</p>';
@@ -182,8 +185,10 @@ final class ManagedContentPage
         echo '<div class="pushpull-panel">';
         printf('<h2>%s</h2>', esc_html($managedContentAdapter->getManagedSetLabel()));
         echo '<div class="pushpull-button-grid">';
-        $this->renderCommitButton($managedContentAdapter, $managedSetEnabled && $managedContentAdapter->isAvailable());
-        $this->renderApplyButton($managedContentAdapter, $managedSetEnabled);
+        $commitState = $this->commitActionState($managedSetEnabled, $managedContentAdapter->isAvailable(), $diffResult);
+        $applyState = $this->applyActionState($managedSetEnabled, $managedContentAdapter->isAvailable(), $diffResult);
+        $this->renderCommitButton($managedContentAdapter, $commitState['enabled'], $commitState['reason']);
+        $this->renderApplyButton($managedContentAdapter, $applyState['enabled'], $applyState['reason']);
         $this->renderResolveConflictsButton($workingState);
         echo '</div>';
         echo '</div>';
@@ -1268,55 +1273,77 @@ final class ManagedContentPage
         ), $managedSetKey);
     }
 
-    private function renderCommitButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
+    private function renderCommitButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled, ?string $reason = null): void
     {
         if (! $enabled) {
-            printf(
-                '<button type="button" class="button button-primary" disabled="disabled">%s</button>',
-                esc_html__('Commit', 'pushpull')
+            $this->renderDisabledActionButton(
+                __('Commit', 'pushpull'),
+                __('Export the current live WordPress state for this domain into the local branch as a new commit.', 'pushpull'),
+                $reason,
+                'button button-primary'
             );
 
             return;
         }
 
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Commit', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Export the current live WordPress state for this domain into the local branch as a new commit.', 'pushpull') . '">';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::COMMIT_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::COMMIT_ACTION);
         submit_button(__('Commit', 'pushpull'), 'primary', 'submit', false);
         echo '</form>';
+        echo '</div>';
     }
 
-    private function renderFetchButton(?string $managedSetKey, bool $enabled): void
+    /**
+     * @param array{status: string, updatesAvailable: bool, checkedAt: ?int, remoteCommitHash: ?string, trackingCommitHash: ?string} $fetchAvailabilityState
+     */
+    private function renderFetchButton(?string $managedSetKey, bool $enabled, ?string $reason = null, array $fetchAvailabilityState = ['status' => 'unknown', 'updatesAvailable' => false, 'checkedAt' => null, 'remoteCommitHash' => null, 'trackingCommitHash' => null]): void
     {
+        $description = __('Check the remote branch and import its latest Git objects into local remote-tracking state.', 'pushpull');
+        $notice = $fetchAvailabilityState['updatesAvailable']
+            ? __('A newer remote branch head was detected by the latest scheduled check.', 'pushpull')
+            : '';
+
         if (! $enabled) {
-            printf(
-                '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
-                esc_html__('Fetch', 'pushpull')
+            $this->renderDisabledActionButton(
+                __('Fetch', 'pushpull'),
+                $description,
+                $reason
             );
 
             return;
         }
 
+        $controlClasses = 'pushpull-action-control';
+        if ($fetchAvailabilityState['updatesAvailable']) {
+            $controlClasses .= ' pushpull-action-control--attention';
+        }
+
+        echo '<div class="' . esc_attr($controlClasses) . '" data-pushpull-action-title="' . esc_attr__('Fetch', 'pushpull') . '" data-pushpull-action-description="' . esc_attr($description) . '" data-pushpull-action-notice="' . esc_attr($notice) . '">';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="fetch" data-pushpull-async-label="' . esc_attr__('Fetch', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::FETCH_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::FETCH_ACTION);
         submit_button(__('Fetch', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
+        echo '</div>';
     }
 
-    private function renderPullButton(?string $managedSetKey, bool $enabled): void
+    private function renderPullButton(?string $managedSetKey, bool $enabled, ?string $reason = null): void
     {
         if (! $enabled) {
-            printf(
-                '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
-                esc_html__('Pull', 'pushpull')
+            $this->renderDisabledActionButton(
+                __('Pull', 'pushpull'),
+                __('Fetch remote changes and merge the fetched remote-tracking state into the local branch.', 'pushpull'),
+                $reason
             );
 
             return;
         }
 
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Pull', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Fetch remote changes and merge the fetched remote-tracking state into the local branch.', 'pushpull') . '">';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="pull" data-pushpull-async-label="' . esc_attr__('Pull', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::PULL_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
@@ -1325,19 +1352,22 @@ final class ManagedContentPage
             'title' => __('Fetch remote changes and merge them into the local branch.', 'pushpull'),
         ]);
         echo '</form>';
+        echo '</div>';
     }
 
-    private function renderTopLevelMergeButton(?string $managedSetKey, bool $enabled): void
+    private function renderTopLevelMergeButton(?string $managedSetKey, bool $enabled, ?string $reason = null): void
     {
         if (! $enabled) {
-            printf(
-                '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
-                esc_html__('Merge Remote', 'pushpull')
+            $this->renderDisabledActionButton(
+                __('Merge Remote', 'pushpull'),
+                __('Merge the fetched remote-tracking state into the local branch without performing a new fetch first.', 'pushpull'),
+                $reason
             );
 
             return;
         }
 
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Merge Remote', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Merge the fetched remote-tracking state into the local branch without performing a new fetch first.', 'pushpull') . '">';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::MERGE_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
@@ -1346,67 +1376,248 @@ final class ManagedContentPage
             'title' => __('Merge fetched remote-tracking changes into the local branch.', 'pushpull'),
         ]);
         echo '</form>';
+        echo '</div>';
     }
 
-    private function renderPushButton(?string $managedSetKey, bool $enabled): void
+    private function renderPushButton(?string $managedSetKey, bool $enabled, ?string $reason = null): void
     {
         if (! $enabled) {
-            printf(
-                '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
-                esc_html__('Push', 'pushpull')
+            $this->renderDisabledActionButton(
+                __('Push', 'pushpull'),
+                __('Upload the current local branch state to the configured remote branch.', 'pushpull'),
+                $reason
             );
 
             return;
         }
 
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Push', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Upload the current local branch state to the configured remote branch.', 'pushpull') . '">';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="push" data-pushpull-async-label="' . esc_attr__('Push', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::PUSH_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
         wp_nonce_field(self::PUSH_ACTION);
         submit_button(__('Push', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
+        echo '</div>';
     }
 
-    private function renderApplyButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled): void
+    private function renderApplyButton(ManifestManagedContentAdapterInterface $managedContentAdapter, bool $enabled, ?string $reason = null): void
     {
         if (! $enabled) {
-            printf(
-                '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
-                esc_html__('Apply repo to WordPress', 'pushpull')
+            $this->renderDisabledActionButton(
+                __('Apply repo to WordPress', 'pushpull'),
+                __('Apply the current local repository state for this domain back into WordPress.', 'pushpull'),
+                $reason
             );
 
             return;
         }
 
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Apply repo to WordPress', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Apply the current local repository state for this domain back into WordPress.', 'pushpull') . '">';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="apply" data-pushpull-async-label="' . esc_attr__('Apply repo to WordPress', 'pushpull') . '" data-pushpull-confirm="' . esc_attr__('Apply the local repository state back into WordPress? This will update existing managed content and remove WordPress items that are not present in the repository.', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::APPLY_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
         wp_nonce_field(self::APPLY_ACTION);
         submit_button(__('Apply repo to WordPress', 'pushpull'), 'secondary', 'submit', false);
         echo '</form>';
+        echo '</div>';
     }
 
     private function renderResolveConflictsButton(?\PushPull\Persistence\WorkingState\WorkingStateRecord $workingState): void
     {
         if ($workingState === null || ($workingState->mergeTargetHash === null && ! $workingState->hasConflicts())) {
-            $this->renderDisabledActionButton(__('Resolve conflicts', 'pushpull'));
+            $this->renderDisabledActionButton(
+                __('Resolve conflicts', 'pushpull'),
+                __('Open the conflict resolution panel for this domain and choose how each merge conflict should be resolved.', 'pushpull'),
+                __('No merge conflicts are pending for this domain.', 'pushpull')
+            );
 
             return;
         }
 
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Resolve conflicts', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Open the conflict resolution panel for this domain and choose how each merge conflict should be resolved.', 'pushpull') . '">';
         printf(
             '<a class="button button-secondary" href="%s">%s</a>',
             esc_url('#pushpull-conflicts'),
             esc_html__('Resolve conflicts', 'pushpull')
         );
+        echo '</div>';
     }
 
-    private function renderDisabledActionButton(string $label): void
+    private function renderDisabledActionButton(string $label, string $description, ?string $reason = null, string $buttonClass = 'button button-secondary'): void
     {
-        printf(
-            '<button type="button" class="button button-secondary" disabled="disabled">%s</button>',
+        echo '<div class="pushpull-action-control pushpull-disabled-action" tabindex="0" data-pushpull-action-title="' . esc_attr($label) . '" data-pushpull-action-description="' . esc_attr($description) . '" data-pushpull-action-disabled-reason="' . esc_attr($reason ?? '') . '">';
+        $buttonMarkup = sprintf(
+            '<button type="button" class="%s" disabled="disabled"><span class="pushpull-action-control__label">%s</span></button>',
+            esc_attr($buttonClass),
             esc_html($label)
         );
+
+        echo wp_kses($buttonMarkup, [
+            'button' => [
+                'type' => true,
+                'class' => true,
+                'disabled' => true,
+            ],
+            'span' => [
+                'class' => true,
+            ],
+        ]);
+
+        echo '</div>';
+    }
+
+    /**
+     * @return array{
+     *   managedSetKey: ?string,
+     *   fetch: array{enabled: bool, reason: ?string},
+     *   pull: array{enabled: bool, reason: ?string},
+     *   merge: array{enabled: bool, reason: ?string},
+     *   push: array{enabled: bool, reason: ?string}
+     * }
+     */
+    private function branchActionState(\PushPull\Settings\PushPullSettings $settings): array
+    {
+        $managedSetKey = $this->branchActionManagedSetKey($settings);
+
+        if ($managedSetKey === null) {
+            $reason = __('Enable at least one managed domain to use branch actions.', 'pushpull');
+
+            return [
+                'managedSetKey' => null,
+                'fetch' => ['enabled' => false, 'reason' => $reason],
+                'pull' => ['enabled' => false, 'reason' => $reason],
+                'merge' => ['enabled' => false, 'reason' => $reason],
+                'push' => ['enabled' => false, 'reason' => $reason],
+            ];
+        }
+
+        $relationship = null;
+        $hasLiveToLocalChanges = false;
+        $hasLocalToRemoteChanges = false;
+        $hasAvailableDiff = false;
+
+        foreach ($this->enabledManagedSetAdapters($settings) as $enabledManagedSetKey => $_adapter) {
+            $diffResult = $this->buildDiffResult($enabledManagedSetKey);
+
+            if ($diffResult === null) {
+                continue;
+            }
+
+            $hasAvailableDiff = true;
+            $relationship ??= $diffResult->repositoryRelationship->status;
+            $hasLiveToLocalChanges = $hasLiveToLocalChanges || $diffResult->liveToLocal->hasChanges();
+            $hasLocalToRemoteChanges = $hasLocalToRemoteChanges || $diffResult->localToRemote->hasChanges();
+        }
+
+        if (! $hasAvailableDiff) {
+            $reason = __('Status is currently unavailable for the enabled domains.', 'pushpull');
+
+            return [
+                'managedSetKey' => $managedSetKey,
+                'fetch' => ['enabled' => true, 'reason' => null],
+                'pull' => ['enabled' => false, 'reason' => $reason],
+                'merge' => ['enabled' => false, 'reason' => $reason],
+                'push' => ['enabled' => false, 'reason' => $reason],
+            ];
+        }
+
+        $pullEnabled = in_array($relationship, ['behind', 'diverged'], true);
+        $mergeEnabled = in_array($relationship, ['behind', 'diverged'], true);
+        $pushEnabled = $relationship === 'ahead' && $hasLocalToRemoteChanges;
+
+        return [
+            'managedSetKey' => $managedSetKey,
+            'fetch' => ['enabled' => true, 'reason' => null],
+            'pull' => ['enabled' => $pullEnabled, 'reason' => $pullEnabled ? null : $this->pullDisabledReason((string) $relationship, $hasLocalToRemoteChanges)],
+            'merge' => ['enabled' => $mergeEnabled, 'reason' => $mergeEnabled ? null : $this->mergeDisabledReason((string) $relationship)],
+            'push' => ['enabled' => $pushEnabled, 'reason' => $pushEnabled ? null : $this->pushDisabledReason((string) $relationship, $hasLocalToRemoteChanges, $hasLiveToLocalChanges)],
+        ];
+    }
+
+    /**
+     * @return array{enabled: bool, reason: ?string}
+     */
+    private function commitActionState(bool $managedSetEnabled, bool $available, ?ManagedSetDiffResult $diffResult): array
+    {
+        if (! $managedSetEnabled) {
+            return ['enabled' => false, 'reason' => __('This domain is disabled in settings.', 'pushpull')];
+        }
+
+        if (! $available) {
+            return ['enabled' => false, 'reason' => __('This domain is not available on this site.', 'pushpull')];
+        }
+
+        if ($diffResult === null) {
+            return ['enabled' => false, 'reason' => __('Status is currently unavailable for this domain.', 'pushpull')];
+        }
+
+        if (! $diffResult->liveToLocal->hasChanges()) {
+            return ['enabled' => false, 'reason' => __('Nothing to commit. Live content already matches the local branch.', 'pushpull')];
+        }
+
+        return ['enabled' => true, 'reason' => null];
+    }
+
+    /**
+     * @return array{enabled: bool, reason: ?string}
+     */
+    private function applyActionState(bool $managedSetEnabled, bool $available, ?ManagedSetDiffResult $diffResult): array
+    {
+        if (! $managedSetEnabled) {
+            return ['enabled' => false, 'reason' => __('This domain is disabled in settings.', 'pushpull')];
+        }
+
+        if (! $available) {
+            return ['enabled' => false, 'reason' => __('This domain is not available on this site.', 'pushpull')];
+        }
+
+        if ($diffResult === null) {
+            return ['enabled' => false, 'reason' => __('Status is currently unavailable for this domain.', 'pushpull')];
+        }
+
+        if (! $diffResult->liveToLocal->hasChanges()) {
+            return ['enabled' => false, 'reason' => __('Nothing to apply. WordPress already matches the local repository state.', 'pushpull')];
+        }
+
+        return ['enabled' => true, 'reason' => null];
+    }
+
+    private function pullDisabledReason(string $relationship, bool $hasLocalToRemoteChanges): string
+    {
+        return match ($relationship) {
+            'in_sync' => __('Nothing to pull. The local branch already matches the fetched remote state.', 'pushpull'),
+            'ahead' => __('Nothing to pull. The local branch is ahead of the fetched remote state.', 'pushpull'),
+            'behind' => __('No remote changes are ready to pull.', 'pushpull'),
+            'diverged' => __('No remote changes are ready to pull.', 'pushpull'),
+            default => $hasLocalToRemoteChanges
+                ? __('Pull is not available for the current branch relationship.', 'pushpull')
+                : __('Nothing to pull. Fetch remote changes first.', 'pushpull'),
+        };
+    }
+
+    private function mergeDisabledReason(string $relationship): string
+    {
+        return match ($relationship) {
+            'in_sync' => __('Nothing to merge. Local already includes the fetched remote state.', 'pushpull'),
+            'ahead' => __('Nothing to merge. There are no fetched remote changes to bring into local.', 'pushpull'),
+            default => __('Nothing to merge. Fetch remote changes first.', 'pushpull'),
+        };
+    }
+
+    private function pushDisabledReason(string $relationship, bool $hasLocalToRemoteChanges, bool $hasLiveToLocalChanges): string
+    {
+        return match ($relationship) {
+            'in_sync' => __('Nothing to push. The local branch already matches the fetched remote state.', 'pushpull'),
+            'behind' => __('Push is blocked. Fetch or pull the latest remote changes first.', 'pushpull'),
+            'diverged' => __('Push is blocked. Merge the fetched remote changes into local first.', 'pushpull'),
+            'ahead' => $hasLocalToRemoteChanges
+                ? __('Push is temporarily unavailable.', 'pushpull')
+                : __('Nothing to push. The local branch already matches the fetched remote state.', 'pushpull'),
+            default => $hasLiveToLocalChanges
+                ? __('Push is blocked until local changes are committed onto the branch.', 'pushpull')
+                : __('Push is not available for the current branch relationship.', 'pushpull'),
+        };
     }
 
     private function renderManagedSetTabs(\PushPull\Settings\PushPullSettings $settings, ?string $activeManagedSetKey): void

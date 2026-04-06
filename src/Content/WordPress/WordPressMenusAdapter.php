@@ -235,11 +235,15 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
     public function findExistingWpObjectIdByLogicalKey(string $logicalKey): ?int
     {
         foreach ($this->allMenus() as $menu) {
+            $menuSlug = (string) ($menu->slug ?? '');
+            $menuName = (string) ($menu->name ?? '');
+
             if (
                 $this->computeLogicalKey([
-                    'slug' => (string) ($menu->slug ?? ''),
-                    'name' => (string) ($menu->name ?? ''),
+                    'slug' => $menuSlug,
+                    'name' => $menuName,
                 ]) === $logicalKey
+                || sanitize_title($menuName) === $logicalKey
             ) {
                 return (int) $menu->term_id;
             }
@@ -262,6 +266,10 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
     public function upsertItem(ManagedContentItem $item, int $menuOrder, ?int $existingId): int
     {
         $this->validateItem($item);
+
+        if ($existingId === null) {
+            $existingId = $this->findExistingMenuIdForItem($item);
+        }
 
         if ($existingId !== null) {
             wp_update_term($existingId, self::MENU_TAXONOMY, [
@@ -287,6 +295,22 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
         ]);
 
         return $menuId;
+    }
+
+    private function findExistingMenuIdForItem(ManagedContentItem $item): ?int
+    {
+        $normalizedDisplayName = sanitize_title($item->displayName);
+
+        foreach ($this->allMenus() as $menu) {
+            $menuSlug = (string) ($menu->slug ?? '');
+            $menuName = (string) ($menu->name ?? '');
+
+            if ($menuSlug === $item->slug || sanitize_title($menuName) === $normalizedDisplayName) {
+                return (int) $menu->term_id;
+            }
+        }
+
+        return null;
     }
 
     public function persistItemMeta(int $postId, ManagedContentItem $item, array $snapshotFiles = []): void
@@ -315,6 +339,10 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
                     (string) ($menuItem['itemKey'] ?? 'unknown'),
                     $item->logicalKey
                 ));
+            }
+
+            if (function_exists('wp_set_object_terms')) {
+                wp_set_object_terms((int) $menuItemId, [$postId], self::MENU_TAXONOMY, false);
             }
 
             if (is_string($menuItem['itemKey'] ?? null) && $menuItem['itemKey'] !== '') {
@@ -587,7 +615,11 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
             $ref = $this->postObjectReference((int) ($menuItem->object_id ?? 0), $objectType);
 
             if ($ref !== null) {
-                return $objectType . ':' . $ref['logicalKey'];
+                $objectRef = $ref['objectRef'] ?? null;
+
+                if (is_array($objectRef) && is_string($objectRef['logicalKey'] ?? null) && $objectRef['logicalKey'] !== '') {
+                    return $objectType . ':' . $objectRef['logicalKey'];
+                }
             }
         }
 

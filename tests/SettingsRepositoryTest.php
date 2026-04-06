@@ -71,6 +71,33 @@ final class SettingsRepositoryTest extends TestCase
         self::assertFalse($settingsWithoutDiagnostics->diagnosticsEnabled);
     }
 
+    public function testFetchAvailabilityIntervalDefaultsToFiveMinutes(): void
+    {
+        $repository = new SettingsRepository();
+
+        self::assertSame(5, $repository->defaults()->fetchAvailabilityCheckIntervalMinutes);
+    }
+
+    public function testFetchAvailabilityIntervalAcceptsPositiveIntegerValues(): void
+    {
+        $repository = new SettingsRepository();
+        $settings = $repository->sanitize([
+            'fetch_availability_check_interval_minutes' => '7',
+        ]);
+
+        self::assertSame(7, $settings->fetchAvailabilityCheckIntervalMinutes);
+    }
+
+    public function testFetchAvailabilityIntervalFallsBackToFiveWhenInvalid(): void
+    {
+        $repository = new SettingsRepository();
+        $fallback = $repository->sanitize([
+            'fetch_availability_check_interval_minutes' => '0',
+        ]);
+
+        self::assertSame(5, $fallback->fetchAvailabilityCheckIntervalMinutes);
+    }
+
     public function testTextAndEmailFieldsAreSanitized(): void
     {
         $repository = new SettingsRepository();

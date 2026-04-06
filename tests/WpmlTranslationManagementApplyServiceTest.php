@@ -193,4 +193,84 @@ final class WpmlTranslationManagementApplyServiceTest extends TestCase
         self::assertCount(3, $GLOBALS['pushpull_test_wpml_translations']);
         self::assertSame(93, $GLOBALS['pushpull_test_wpml_translations'][0]['element_id']);
     }
+
+    public function testApplyMapsTranslatedMenusToDestinationMenuIds(): void
+    {
+        update_option(SettingsRepository::OPTION_KEY, [
+            'enabled_managed_sets' => ['wordpress_menus', 'translation_management'],
+        ]);
+        update_option('icl_sitepress_settings', [
+            'active_languages' => ['en', 'fr'],
+            'taxonomies_sync_option' => [
+                'nav_menu' => '1',
+            ],
+        ]);
+
+        $this->wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($this->wpdb);
+        $adapter = new WpmlTranslationManagementAdapter(new SettingsRepository());
+        $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
+        $applyService = new OverlayManagedSetApplyService(
+            $adapter,
+            new RepositoryStateReader($repository),
+            new WorkingStateRepository($this->wpdb)
+        );
+
+        $menuEnId = (int) wp_create_nav_menu('Footer menu EN');
+        wp_update_term($menuEnId, 'nav_menu', ['slug' => 'footer-menu-en']);
+        $menuFrId = (int) wp_create_nav_menu('Footer menu FR');
+        wp_update_term($menuFrId, 'nav_menu', ['slug' => 'footer-menu-fr']);
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'tax_nav_menu',
+                'element_id' => $menuEnId,
+                'trid' => 100,
+                'language_code' => 'en',
+                'source_language_code' => null,
+            ],
+            [
+                'translation_id' => 2,
+                'element_type' => 'tax_nav_menu',
+                'element_id' => $menuFrId,
+                'trid' => 100,
+                'language_code' => 'fr',
+                'source_language_code' => 'en',
+            ],
+        ];
+
+        $snapshot = $adapter->exportSnapshot();
+        $committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $GLOBALS['pushpull_test_terms']['nav_menu'] = [];
+        $GLOBALS['pushpull_test_next_term_id'] = 1;
+        $destinationMenuEnId = (int) wp_create_nav_menu('Footer menu EN');
+        wp_update_term($destinationMenuEnId, 'nav_menu', ['slug' => 'footer-menu-en']);
+        $destinationMenuFrId = (int) wp_create_nav_menu('Footer menu FR');
+        wp_update_term($destinationMenuFrId, 'nav_menu', ['slug' => 'footer-menu-fr']);
+        $GLOBALS['pushpull_test_wpml_translations'] = [];
+
+        $result = $applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['wordpress_menus', 'translation_management']
+        ));
+
+        self::assertSame(1, $result->createdCount);
+        self::assertCount(2, $GLOBALS['pushpull_test_wpml_translations']);
+        self::assertSame('tax_nav_menu', $GLOBALS['pushpull_test_wpml_translations'][0]['element_type']);
+        self::assertSame($destinationMenuEnId, $GLOBALS['pushpull_test_wpml_translations'][0]['element_id']);
+        self::assertSame($destinationMenuFrId, $GLOBALS['pushpull_test_wpml_translations'][1]['element_id']);
+    }
 }

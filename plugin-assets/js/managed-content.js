@@ -4,6 +4,69 @@
     }
 
     const config = window.pushpullManagedContent;
+    const actionControls = document.querySelectorAll('.pushpull-action-control[data-pushpull-action-title]');
+    let actionPopover = null;
+
+    const ensureActionPopover = function () {
+        if (actionPopover) {
+            return actionPopover;
+        }
+
+        actionPopover = document.createElement('div');
+        actionPopover.className = 'pushpull-action-popover';
+        actionPopover.hidden = true;
+        actionPopover.innerHTML = '<strong class="pushpull-action-popover__title"></strong><p class="pushpull-action-popover__description"></p><p class="pushpull-action-popover__notice" hidden></p>';
+        document.body.appendChild(actionPopover);
+
+        return actionPopover;
+    };
+
+    const hideActionPopover = function () {
+        if (!actionPopover) {
+            return;
+        }
+
+        actionPopover.hidden = true;
+    };
+
+    const showActionPopover = function (control) {
+        const popover = ensureActionPopover();
+        const title = control.getAttribute('data-pushpull-action-title') || '';
+        const description = control.getAttribute('data-pushpull-action-description') || '';
+        const disabledReason = control.getAttribute('data-pushpull-action-disabled-reason') || '';
+        const notice = disabledReason || control.getAttribute('data-pushpull-action-notice') || '';
+        const titleNode = popover.querySelector('.pushpull-action-popover__title');
+        const descriptionNode = popover.querySelector('.pushpull-action-popover__description');
+        const noticeNode = popover.querySelector('.pushpull-action-popover__notice');
+        const rect = control.getBoundingClientRect();
+
+        titleNode.textContent = title;
+        descriptionNode.textContent = description;
+        noticeNode.textContent = notice;
+        noticeNode.hidden = notice === '';
+        popover.hidden = false;
+
+        const top = window.scrollY + rect.bottom + 10;
+        const left = window.scrollX + rect.left;
+        popover.style.top = top + 'px';
+        popover.style.left = left + 'px';
+    };
+
+    actionControls.forEach(function (control) {
+        control.addEventListener('mouseenter', function () {
+            showActionPopover(control);
+        });
+        control.addEventListener('focusin', function () {
+            showActionPopover(control);
+        });
+        control.addEventListener('mouseleave', hideActionPopover);
+        control.addEventListener('focusout', function (event) {
+            if (!control.contains(event.relatedTarget)) {
+                hideActionPopover();
+            }
+        });
+    });
+
     const modal = document.querySelector('.pushpull-async-modal');
 
     if (!modal) {
@@ -17,10 +80,12 @@
     const progressBar = modal.querySelector('.pushpull-async-modal__progress-bar');
     const progressFill = modal.querySelector('.pushpull-async-modal__progress-fill');
     const progressLabel = modal.querySelector('.pushpull-async-modal__progress-label');
+    let lastStableMessage = config.strings.working;
 
     const openModal = function (label, currentMessage) {
         title.textContent = label || config.strings.working;
-        message.textContent = currentMessage || config.strings.working;
+        lastStableMessage = currentMessage || config.strings.working;
+        message.textContent = lastStableMessage;
         closeButton.hidden = true;
         updateProgress({ mode: 'indeterminate', current: 0, total: 0 });
         modal.hidden = false;
@@ -99,7 +164,11 @@
                 operation_id: String(operationId)
             });
 
-            message.textContent = data.message || config.strings.working;
+            if (data.message) {
+                lastStableMessage = data.message;
+            }
+
+            message.textContent = lastStableMessage;
             updateProgress(data.progress);
 
             if (!data.done) {
@@ -156,7 +225,11 @@
                 operation_type: operationType,
                 managed_set: managedSetInput ? managedSetInput.value : ''
             }).then(function (data) {
-                message.textContent = data.message || config.strings.working;
+                if (data.message) {
+                    lastStableMessage = data.message;
+                }
+
+                message.textContent = lastStableMessage;
                 updateProgress(data.progress);
 
                 if (data.done && data.redirectUrl) {

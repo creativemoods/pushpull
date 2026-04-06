@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.15
+Stable tag: 0.0.16
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -57,6 +57,7 @@ The plugin also includes:
 5. Primary, config, and overlay domain separation in settings and Managed Content
 6. A high-level PushPull status dropdown in the WordPress admin bar
 7. Menu structure export and apply with hierarchy and theme location assignment
+8. A scheduled lightweight remote-head check that highlights when `Fetch` likely has updates available
 
 ## Current scope
 
@@ -79,6 +80,7 @@ This is an early, focused release. At the moment, PushPull is intentionally limi
 3. Canonical JSON storage with one file per managed item for manifest-backed sets, plus directory-backed storage for attachments using `attachment.json` and the binary file
 4. Explicit opt-in attachment sync through a media-library checkbox
 5. Overlay domains that scope themselves to enabled compatible base domains rather than exporting every backend row blindly
+6. A cached remote-head availability signal for `Fetch`, driven by a configurable recurring check instead of a live provider probe on every page load
 
 It does not yet manage forms, arbitrary `wp_options`, or arbitrary plugin data.
 
@@ -141,8 +143,9 @@ In PushPull > Settings:
 3. Enter the target branch
 4. Enter the API token
 5. Enable one or more managed content domains in the managed content settings
-6. Click `Test connection`
-7. Save the settings
+6. Optionally set the remote fetch check interval in minutes
+7. Click `Test connection`
+8. Save the settings
 
 ### Empty repositories
 
@@ -166,6 +169,8 @@ The normal workflow is:
 4. `Pull` for the common fetch + merge flow, or `Merge` manually after fetch when you want review first
 5. `Apply repo to WordPress` when you want the local branch state written back into WordPress
 6. `Push` when you want local commits published to GitHub
+
+PushPull also performs a lightweight recurring remote-head check and visually highlights `Fetch` when the latest scheduled check suggests the remote branch has advanced since the last fetch.
 
 If both local and remote changed, PushPull can persist conflicts, let you resolve them in the admin UI, and then finalize a merge commit.
 
@@ -193,6 +198,14 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 4. Surface unresolved logical-reference mapping issues, such as GeneratePress condition IDs that could not be converted to logical placeholders, instead of silently leaving mixed raw IDs and canonical refs.
 
 ## Changelog
+
+### 0.0.16
+
+1. Added a lightweight recurring remote-head availability check so PushPull can cheaply detect when the remote branch likely has updates available for `Fetch`.
+2. Added a configurable `Remote fetch check interval` setting with a default of `5` minutes.
+3. Updated the Managed Content UI so the `Fetch` button stays enabled but is visually highlighted when the latest scheduled check detects a newer remote head.
+4. Extended the action popover system so enabled actions like `Fetch` can surface contextual notices, not only disabled-state reasons.
+5. Added focused scheduler and fetch-availability tests covering cached state, settings changes, and cron rescheduling behavior.
 
 ### 0.0.15
 

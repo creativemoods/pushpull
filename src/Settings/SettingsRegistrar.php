@@ -86,6 +86,7 @@ final class SettingsRegistrar
         $this->registerField('pushpull_auth', 'api_token', __('API token', 'pushpull'));
         $this->registerField('pushpull_auth', 'base_url', __('Base URL', 'pushpull'));
         $this->registerField('pushpull_managed_sets', 'enabled_managed_sets', __('Enabled managed sets', 'pushpull'));
+        $this->registerField('pushpull_sync', 'fetch_availability_check_interval_minutes', __('Remote fetch check interval', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_name', __('Commit author name', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_email', __('Commit author email', 'pushpull'));
     }
@@ -124,6 +125,14 @@ final class SettingsRegistrar
 
                     case 'enabled_managed_sets':
                         $this->renderManagedSetCheckboxes(SettingsRepository::OPTION_KEY . '[enabled_managed_sets][]', $settings);
+                        break;
+
+                    case 'fetch_availability_check_interval_minutes':
+                        $this->renderInput($name, (string) $value, 'number', '', [
+                            'min' => '1',
+                            'step' => '1',
+                        ]);
+                        echo '<p class="description">' . esc_html__('How often PushPull should perform a lightweight remote head check to highlight when Fetch likely has updates available.', 'pushpull') . '</p>';
                         break;
 
                     case 'author_email':
@@ -242,14 +251,27 @@ final class SettingsRegistrar
         }
     }
 
-    private function renderInput(string $name, string $value, string $type = 'text', string $placeholder = ''): void
+    /**
+     * @param array<string, string> $attributes
+     */
+    private function renderInput(string $name, string $value, string $type = 'text', string $placeholder = '', array $attributes = []): void
     {
         printf(
-            '<input class="regular-text" type="%s" name="%s" value="%s" placeholder="%s" />',
+            '<input class="regular-text" type="%s" name="%s" value="%s" placeholder="%s"',
             esc_attr($type),
             esc_attr($name),
             esc_attr($value),
             esc_attr($placeholder)
         );
+
+        foreach ($attributes as $attributeName => $attributeValue) {
+            printf(
+                ' %s="%s"',
+                esc_attr($attributeName),
+                esc_attr($attributeValue)
+            );
+        }
+
+        echo ' />';
     }
 }

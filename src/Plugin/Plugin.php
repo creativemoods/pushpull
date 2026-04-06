@@ -50,6 +50,8 @@ use PushPull\Settings\SettingsRegistrar;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Operations\OperationExecutor;
 use PushPull\Support\Operations\AsyncBranchOperationRunner;
+use PushPull\Support\FetchAvailability\FetchAvailabilityScheduler;
+use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use PushPull\Support\Operations\OperationLockService;
 
 final class Plugin
@@ -64,6 +66,8 @@ final class Plugin
         $settingsRepository = new SettingsRepository();
         $providerFactory = new GitProviderFactory();
         $localRepository = new DatabaseLocalRepository($wpdb);
+        $fetchAvailabilityService = new FetchAvailabilityService($settingsRepository, $providerFactory, $localRepository);
+        $fetchAvailabilityScheduler = new FetchAvailabilityScheduler($settingsRepository);
         $localRepositoryResetService = new LocalRepositoryResetService($wpdb);
         $remoteRepositoryInitializer = new RemoteRepositoryInitializer($providerFactory, $localRepository);
         $operationLogRepository = new OperationLogRepository($wpdb);
@@ -168,6 +172,9 @@ final class Plugin
         );
 
         add_action('admin_bar_menu', [$adminBarStatus, 'register'], 90);
+        add_filter('cron_schedules', [$fetchAvailabilityScheduler, 'registerSchedule']);
+        add_action('init', [$fetchAvailabilityScheduler, 'ensureScheduled']);
+        add_action(FetchAvailabilityScheduler::CRON_HOOK, [$fetchAvailabilityService, 'checkAndStore']);
 
         if (! is_admin()) {
             return;
@@ -189,7 +196,8 @@ final class Plugin
                 $providerFactory,
                 $syncService,
                 $managedSetApplyServices
-            )
+            ),
+            $fetchAvailabilityService
         );
         $attachmentSyncField = new AttachmentSyncField();
 

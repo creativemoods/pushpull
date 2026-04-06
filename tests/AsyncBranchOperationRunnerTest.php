@@ -118,6 +118,11 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $adapter = new GenerateBlocksGlobalStylesAdapter();
         $provider = new AsyncInMemoryPushProvider();
         $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $repository->importRemoteTree(new \PushPull\Provider\RemoteTree('remote-tree-base', []));
+        $repository->importRemoteCommit(new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base'));
+        $repository->updateRef('refs/remotes/origin/main', 'remote-base');
+        $repository->updateRef('refs/heads/main', 'remote-base');
+        $repository->updateRef('HEAD', 'remote-base');
 
         $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
         $snapshot = $adapter->snapshotFromRuntimeRecords([
@@ -136,7 +141,6 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $provider->trees['remote-tree-base'] = new \PushPull\Provider\RemoteTree('remote-tree-base', []);
         $provider->commits['remote-base'] = new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base');
         $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
-        $repository->updateRef('refs/remotes/origin/main', 'remote-base');
 
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
         $runner = new AsyncBranchOperationRunner(
@@ -164,7 +168,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertTrue($response['done']);
         self::assertSame('success', $response['status']);
         self::assertSame('determinate', $response['progress']['mode']);
-        self::assertSame($commitResult->commit?->hash, $repository->getRef('refs/heads/main')?->commitHash);
+        self::assertSame($provider->refs['refs/heads/main']->commitHash, $repository->getRef('refs/heads/main')?->commitHash);
         self::assertSame($provider->refs['refs/heads/main']->commitHash, $repository->getRef('refs/remotes/origin/main')?->commitHash);
     }
 
@@ -176,6 +180,11 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $provider = new AsyncInMemoryPushProvider();
         $provider->updatedCommitHashOverride = 'provider-commit-2';
         $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $repository->importRemoteTree(new \PushPull\Provider\RemoteTree('remote-tree-base', []));
+        $repository->importRemoteCommit(new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base'));
+        $repository->updateRef('refs/remotes/origin/main', 'remote-base');
+        $repository->updateRef('refs/heads/main', 'remote-base');
+        $repository->updateRef('HEAD', 'remote-base');
 
         $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
         $snapshot = $adapter->snapshotFromRuntimeRecords([
@@ -194,7 +203,6 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $provider->trees['remote-tree-base'] = new \PushPull\Provider\RemoteTree('remote-tree-base', []);
         $provider->commits['remote-base'] = new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base');
         $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
-        $repository->updateRef('refs/remotes/origin/main', 'remote-base');
 
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
         $runner = new AsyncBranchOperationRunner(
