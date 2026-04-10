@@ -12,13 +12,17 @@ final class ManagedSetRegistry
 {
     /** @var array<string, ManifestManagedContentAdapterInterface> */
     private array $adaptersByManagedSetKey;
+    /** @var array<int, callable(): array<int, ManifestManagedContentAdapterInterface>> */
+    private array $dynamicAdapterResolvers;
 
     /**
      * @param ManifestManagedContentAdapterInterface[] $adapters
+     * @param array<int, callable(): array<int, ManifestManagedContentAdapterInterface>> $dynamicAdapterResolvers
      */
-    public function __construct(array $adapters)
+    public function __construct(array $adapters, array $dynamicAdapterResolvers = [])
     {
         $this->adaptersByManagedSetKey = [];
+        $this->dynamicAdapterResolvers = $dynamicAdapterResolvers;
 
         foreach ($adapters as $adapter) {
             $this->adaptersByManagedSetKey[$adapter->getManagedSetKey()] = $adapter;
@@ -30,7 +34,7 @@ final class ManagedSetRegistry
      */
     public function all(): array
     {
-        return $this->adaptersByManagedSetKey;
+        return $this->resolvedAdapters();
     }
 
     /**
@@ -38,10 +42,11 @@ final class ManagedSetRegistry
      */
     public function allInDependencyOrder(): array
     {
+        $resolved = $this->resolvedAdapters();
         $ordered = [];
 
-        foreach ($this->sortManagedSetKeysInDependencyOrder(array_keys($this->adaptersByManagedSetKey)) as $managedSetKey) {
-            $ordered[$managedSetKey] = $this->adaptersByManagedSetKey[$managedSetKey];
+        foreach ($this->sortManagedSetKeysInDependencyOrder(array_keys($resolved)) as $managedSetKey) {
+            $ordered[$managedSetKey] = $resolved[$managedSetKey];
         }
 
         return $ordered;
@@ -49,6 +54,10 @@ final class ManagedSetRegistry
 
     public function get(string $managedSetKey): ManifestManagedContentAdapterInterface
     {
+        if (! isset($this->adaptersByManagedSetKey[$managedSetKey])) {
+            $this->refreshDynamicAdapters();
+        }
+
         if (! isset($this->adaptersByManagedSetKey[$managedSetKey])) {
             throw new RuntimeException(sprintf('Managed set "%s" is not supported.', $managedSetKey));
         }
@@ -58,6 +67,8 @@ final class ManagedSetRegistry
 
     public function has(string $managedSetKey): bool
     {
+        $this->refreshDynamicAdapters();
+
         return isset($this->adaptersByManagedSetKey[$managedSetKey]);
     }
 
@@ -169,5 +180,28 @@ final class ManagedSetRegistry
         }
 
         return $resolved;
+    }
+
+    /**
+     * @return array<string, ManifestManagedContentAdapterInterface>
+     */
+    private function resolvedAdapters(): array
+    {
+        $this->refreshDynamicAdapters();
+
+        return $this->adaptersByManagedSetKey;
+    }
+
+    private function refreshDynamicAdapters(): void
+    {
+        foreach ($this->dynamicAdapterResolvers as $resolver) {
+            foreach ($resolver() as $adapter) {
+                if (! $adapter instanceof ManifestManagedContentAdapterInterface) {
+                    continue;
+                }
+
+                $this->adaptersByManagedSetKey[$adapter->getManagedSetKey()] = $adapter;
+            }
+        }
     }
 }

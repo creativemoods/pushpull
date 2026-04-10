@@ -18,6 +18,41 @@ if (! defined('ABSPATH')) {
     define('ABSPATH', __DIR__ . '/');
 }
 
+if (! class_exists('WP_CLI_Command')) {
+    class WP_CLI_Command
+    {
+    }
+}
+
+if (! class_exists('WP_CLI')) {
+    class WP_CLI
+    {
+        public static function line(string $message): void
+        {
+        }
+
+        public static function success(string $message): void
+        {
+        }
+
+        public static function warning(string $message): void
+        {
+        }
+
+        /**
+         * @return never
+         */
+        public static function error(string $message): void
+        {
+            throw new RuntimeException($message);
+        }
+
+        public static function add_command(string $name, object $command): void
+        {
+        }
+    }
+}
+
 if (! function_exists('dbDelta')) {
     function dbDelta(string $sql): array
     {

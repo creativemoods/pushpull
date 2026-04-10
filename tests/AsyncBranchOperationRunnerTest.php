@@ -47,7 +47,9 @@ final class AsyncBranchOperationRunnerTest extends TestCase
             $settingsRepository,
             $repository,
             new AsyncInMemoryProviderFactory($provider),
-            $syncService
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
         );
 
         $started = $runner->start('generateblocks_global_styles', 'fetch');
@@ -89,7 +91,9 @@ final class AsyncBranchOperationRunnerTest extends TestCase
             $settingsRepository,
             $repository,
             new AsyncInMemoryProviderFactory($provider),
-            $syncService
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
         );
 
         $started = $runner->start('generateblocks_global_styles', 'pull');
@@ -149,7 +153,9 @@ final class AsyncBranchOperationRunnerTest extends TestCase
             $settingsRepository,
             $repository,
             new AsyncInMemoryProviderFactory($provider),
-            $syncService
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
         );
 
         $started = $runner->start('generateblocks_global_styles', 'push');
@@ -211,7 +217,9 @@ final class AsyncBranchOperationRunnerTest extends TestCase
             $settingsRepository,
             $repository,
             new AsyncInMemoryProviderFactory($provider),
-            $syncService
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
         );
 
         $started = $runner->start('generateblocks_global_styles', 'push');
@@ -284,7 +292,8 @@ final class AsyncBranchOperationRunnerTest extends TestCase
             $repository,
             new AsyncInMemoryProviderFactory($provider),
             $syncService,
-            [$adapter->getManagedSetKey() => $applyService]
+            [$adapter->getManagedSetKey() => $applyService],
+            new ManagedSetRegistry([$adapter])
         );
 
         $started = $runner->start('generateblocks_global_styles', 'apply');
@@ -307,6 +316,179 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertCount(2, $GLOBALS['pushpull_test_generateblocks_posts']);
     }
 
+    public function testCommitPushAllCommitsAndPushesEnabledDomains(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new AsyncInMemoryPushProvider();
+        $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $repository->importRemoteTree(new \PushPull\Provider\RemoteTree('remote-tree-base', []));
+        $repository->importRemoteCommit(new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base'));
+        $repository->updateRef('refs/remotes/origin/main', 'remote-base');
+        $repository->updateRef('refs/heads/main', 'remote-base');
+        $repository->updateRef('HEAD', 'remote-base');
+
+        $provider->trees['remote-tree-base'] = new \PushPull\Provider\RemoteTree('remote-tree-base', []);
+        $provider->commits['remote-base'] = new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base');
+        $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(
+                1,
+                '.gbp-section',
+                'gbp-section',
+                'publish',
+                0,
+                'gblocks_styles'
+            ),
+        ];
+        $GLOBALS['pushpull_test_generateblocks_meta'] = [
+            1 => [
+                'gb_style_selector' => '.gbp-section',
+                'gb_style_data' => serialize(['paddingTop' => '7rem']),
+                'gb_style_css' => '.gbp-section { color: red; }',
+            ],
+        ];
+
+        $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
+        $runner = new AsyncBranchOperationRunner(
+            new OperationLogRepository($wpdb),
+            new OperationLockService(),
+            $settingsRepository,
+            $repository,
+            new AsyncInMemoryProviderFactory($provider),
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
+        );
+
+        $started = $runner->start('generateblocks_global_styles', 'commit_push_all');
+        self::assertSame('indeterminate', $started['progress']['mode']);
+        $response = null;
+
+        for ($index = 0; $index < 30; $index++) {
+            $response = $runner->continue($started['operationId']);
+
+            if ($response['done']) {
+                break;
+            }
+        }
+
+        self::assertNotNull($response);
+        self::assertTrue($response['done']);
+        self::assertSame('success', $response['status']);
+        self::assertStringContainsString('Committed 1 changed domain(s)', $response['message']);
+        self::assertSame($provider->refs['refs/heads/main']->commitHash, $repository->getRef('refs/heads/main')?->commitHash);
+    }
+
+    public function testPullApplyAllPullsAndAppliesEnabledDomains(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new AsyncInMemoryProvider();
+        $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $workingStateRepository = new WorkingStateRepository($wpdb);
+        $applyService = new ManagedSetApplyService(
+            $adapter,
+            new RepositoryStateReader($repository),
+            new ContentMapRepository($wpdb),
+            $workingStateRepository
+        );
+
+        $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
+        $snapshot = $adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => 1,
+                'post_title' => '.gbp-section',
+                'post_name' => 'gbp-section',
+                'post_status' => 'publish',
+                'menu_order' => 0,
+                'gb_style_selector' => '.gbp-section',
+                'gb_style_data' => serialize(['paddingTop' => '7rem']),
+                'gb_style_css' => '.gbp-section { color: red; }',
+            ],
+            [
+                'wp_object_id' => 2,
+                'post_title' => '.gbp-card',
+                'post_name' => 'gbp-card',
+                'post_status' => 'publish',
+                'menu_order' => 1,
+                'gb_style_selector' => '.gbp-card',
+                'gb_style_data' => serialize(['borderTopWidth' => '1px']),
+                'gb_style_css' => '.gbp-card { border-top-width: 1px; }',
+            ],
+        ]);
+        $committer->commitSnapshot($snapshot, new \PushPull\Domain\Sync\CommitManagedSetRequest('main', 'Local change', 'Jane Doe', 'jane@example.com'));
+        $localHeadHash = $repository->getRef('refs/heads/main')?->commitHash;
+        self::assertIsString($localHeadHash);
+        self::assertNotSame('', $localHeadHash);
+        $localHeadCommit = $repository->getCommit($localHeadHash);
+        self::assertNotNull($localHeadCommit);
+        $localHeadTree = $repository->getTree($localHeadCommit->treeHash);
+        self::assertNotNull($localHeadTree);
+        $provider->commits[$localHeadHash] = new \PushPull\Provider\RemoteCommit(
+            $localHeadHash,
+            $localHeadCommit->treeHash,
+            array_values(array_filter([$localHeadCommit->parentHash, $localHeadCommit->secondParentHash])),
+            $localHeadCommit->message
+        );
+        $provider->trees[$localHeadCommit->treeHash] = new \PushPull\Provider\RemoteTree($localHeadCommit->treeHash, array_map(
+            static fn (\PushPull\Domain\Repository\TreeEntry $entry): array => [
+                'path' => $entry->path,
+                'type' => $entry->type,
+                'hash' => $entry->hash,
+            ],
+            $localHeadTree->entries
+        ));
+        foreach ($localHeadTree->entries as $entry) {
+            if ($entry->type !== 'blob') {
+                continue;
+            }
+
+            $blob = $repository->getBlob($entry->hash);
+            self::assertNotNull($blob);
+            $provider->blobs[$entry->hash] = new \PushPull\Provider\RemoteBlob($entry->hash, $blob->content);
+        }
+        $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', $localHeadHash);
+        $repository->updateRef('refs/remotes/origin/main', $localHeadHash);
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [];
+        $GLOBALS['pushpull_test_generateblocks_meta'] = [];
+        $GLOBALS['pushpull_test_next_post_id'] = 1;
+
+        $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
+        $runner = new AsyncBranchOperationRunner(
+            new OperationLogRepository($wpdb),
+            new OperationLockService(),
+            $settingsRepository,
+            $repository,
+            new AsyncInMemoryProviderFactory($provider),
+            $syncService,
+            [$adapter->getManagedSetKey() => $applyService],
+            new ManagedSetRegistry([$adapter])
+        );
+
+        $started = $runner->start('generateblocks_global_styles', 'pull_apply_all');
+        self::assertSame('indeterminate', $started['progress']['mode']);
+        $response = null;
+
+        for ($index = 0; $index < 30; $index++) {
+            $response = $runner->continue($started['operationId']);
+
+            if ($response['done']) {
+                break;
+            }
+        }
+
+        self::assertNotNull($response);
+        self::assertTrue($response['done']);
+        self::assertSame('success', $response['status']);
+        self::assertStringContainsString('Applied 1 managed domain(s) to WordPress', $response['message']);
+        self::assertCount(2, $GLOBALS['pushpull_test_generateblocks_posts']);
+    }
+
     private function settingsRepositoryWithStylesEnabled(): SettingsRepository
     {
         $settingsRepository = new SettingsRepository();
@@ -316,7 +498,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
             'repository' => 'repo',
             'branch' => 'main',
             'api_token' => 'token',
-            'manage_generateblocks_global_styles' => '1',
+            'enabled_managed_sets' => ['generateblocks_global_styles'],
         ]));
 
         return $settingsRepository;

@@ -12,8 +12,12 @@ use PushPull\Admin\ManagedContentPage;
 use PushPull\Admin\OperationsPage;
 use PushPull\Admin\AttachmentSyncField;
 use PushPull\Admin\AdminBarStatus;
+use PushPull\Admin\DomainsPage;
+use PushPull\Cli\PushPullCliCommand;
+use PushPull\Cli\PushPullConfigCliCommand;
 use PushPull\Content\GenerateBlocks\GenerateBlocksConditionsAdapter;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
+use PushPull\Content\Discovery\WordPressDomainDiscovery;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\Media\RmlMediaOrganizationAdapter;
 use PushPull\Admin\SettingsPage;
@@ -23,9 +27,12 @@ use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
 use PushPull\Content\WordPress\WordPressCustomCssAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
+use PushPull\Content\WordPress\WordPressCommentsAdapter;
+use PushPull\Content\WordPress\WordPressCategoriesAdapter;
 use PushPull\Content\WordPress\WordPressMenusAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Content\WordPress\WordPressPostsAdapter;
+use PushPull\Content\WordPress\WordPressTagsAdapter;
 use PushPull\Domain\Apply\ConfigManagedSetApplyService;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Apply\OverlayManagedSetApplyService;
@@ -65,6 +72,7 @@ final class Plugin
 
         $settingsRepository = new SettingsRepository();
         $providerFactory = new GitProviderFactory();
+        $wordPressDomainDiscovery = new WordPressDomainDiscovery();
         $localRepository = new DatabaseLocalRepository($wpdb);
         $fetchAvailabilityService = new FetchAvailabilityService($settingsRepository, $providerFactory, $localRepository);
         $fetchAvailabilityScheduler = new FetchAvailabilityScheduler($settingsRepository);
@@ -77,12 +85,15 @@ final class Plugin
         $generateBlocksConditionsAdapter = new GenerateBlocksConditionsAdapter();
         $wordPressBlockPatternsAdapter = new WordPressBlockPatternsAdapter();
         $wordPressAttachmentsAdapter = new WordPressAttachmentsAdapter();
+        $wordPressCategoriesAdapter = new WordPressCategoriesAdapter();
+        $wordPressCommentsAdapter = new WordPressCommentsAdapter();
         $wordPressCoreConfigurationAdapter = new WordPressCoreConfigurationAdapter();
         $wordPressCustomCssAdapter = new WordPressCustomCssAdapter();
         $generatePressElementsAdapter = new GeneratePressElementsAdapter();
         $wordPressMenusAdapter = new WordPressMenusAdapter();
         $wordPressPagesAdapter = new WordPressPagesAdapter();
         $wordPressPostsAdapter = new WordPressPostsAdapter();
+        $wordPressTagsAdapter = new WordPressTagsAdapter();
         $wpmlTranslationManagementAdapter = new WpmlTranslationManagementAdapter($settingsRepository);
         $rmlMediaOrganizationAdapter = new RmlMediaOrganizationAdapter($settingsRepository);
         $workingStateRepository = new WorkingStateRepository($wpdb);
@@ -93,14 +104,22 @@ final class Plugin
             $generateBlocksConditionsAdapter,
             $wordPressBlockPatternsAdapter,
             $wordPressAttachmentsAdapter,
+            $wordPressCategoriesAdapter,
+            $wordPressCommentsAdapter,
             $wordPressCoreConfigurationAdapter,
             $wordPressCustomCssAdapter,
             $generatePressElementsAdapter,
             $wordPressMenusAdapter,
             $wordPressPagesAdapter,
             $wordPressPostsAdapter,
+            $wordPressTagsAdapter,
             $rmlMediaOrganizationAdapter,
             $wpmlTranslationManagementAdapter,
+        ], [
+            static fn () => array_merge(
+                $wordPressDomainDiscovery->discoverCustomPostTypeAdapters(),
+                $wordPressDomainDiscovery->discoverCustomTaxonomyAdapters()
+            ),
         ]);
         $managedSetCommitters = [];
         $managedSetDiffServices = [];
@@ -152,9 +171,12 @@ final class Plugin
             $remoteBranchResetService,
             $localRepository,
             $settingsRepository,
-            $providerFactory
+            $providerFactory,
+            $stateReader,
+            $contentMapRepository,
+            $workingStateRepository
         );
-        $settingsRegistrar = new SettingsRegistrar($settingsRepository, $managedSetRegistry);
+        $settingsRegistrar = new SettingsRegistrar($settingsRepository);
         $settingsPage = new SettingsPage(
             $settingsRepository,
             $managedSetRegistry,
@@ -163,6 +185,11 @@ final class Plugin
             $localRepositoryResetService,
             $remoteRepositoryInitializer,
             $operationExecutor
+        );
+        $domainsPage = new DomainsPage(
+            $settingsRepository,
+            $managedSetRegistry,
+            $wordPressDomainDiscovery
         );
         $operationsPage = new OperationsPage($operationLogRepository);
         $adminBarStatus = new AdminBarStatus(
@@ -175,6 +202,23 @@ final class Plugin
         add_filter('cron_schedules', [$fetchAvailabilityScheduler, 'registerSchedule']);
         add_action('init', [$fetchAvailabilityScheduler, 'ensureScheduled']);
         add_action(FetchAvailabilityScheduler::CRON_HOOK, [$fetchAvailabilityService, 'checkAndStore']);
+        if (defined('WP_CLI') && WP_CLI) {
+            \WP_CLI::add_command('pushpull', new PushPullCliCommand(
+                $settingsRepository,
+                $managedSetRegistry,
+                $syncService,
+                $providerFactory,
+                $localRepositoryResetService,
+                $remoteRepositoryInitializer,
+                $conflictResolutionService,
+                $fetchAvailabilityService,
+                $localRepository
+            ));
+            \WP_CLI::add_command('pushpull config', new PushPullConfigCliCommand(
+                $settingsRepository,
+                $managedSetRegistry
+            ));
+        }
 
         if (! is_admin()) {
             return;
@@ -195,7 +239,11 @@ final class Plugin
                 $localRepository,
                 $providerFactory,
                 $syncService,
-                $managedSetApplyServices
+                $managedSetApplyServices,
+                $managedSetRegistry,
+                $stateReader,
+                $contentMapRepository,
+                $workingStateRepository
             ),
             $fetchAvailabilityService
         );
@@ -204,8 +252,10 @@ final class Plugin
         add_action('admin_init', [$settingsRegistrar, 'register']);
         add_action('admin_init', [$attachmentSyncField, 'register']);
         add_action('admin_menu', [$settingsPage, 'register']);
+        add_action('admin_menu', [$domainsPage, 'register']);
         add_action('admin_menu', [$managedContentPage, 'register']);
         add_action('admin_menu', [$operationsPage, 'register']);
+        add_action('admin_post_pushpull_save_domains', [$domainsPage, 'handleSave']);
         add_action('admin_post_pushpull_test_connection', [$settingsPage, 'handleTestConnection']);
         add_action('admin_post_pushpull_reset_local_repository', [$settingsPage, 'handleResetLocalRepository']);
         add_action('admin_post_pushpull_reset_remote_branch', [$settingsPage, 'handleResetRemoteBranch']);
@@ -216,11 +266,14 @@ final class Plugin
         add_action('admin_post_pushpull_merge_managed_set', [$managedContentPage, 'handleMerge']);
         add_action('admin_post_pushpull_apply_managed_set', [$managedContentPage, 'handleApply']);
         add_action('admin_post_pushpull_push_managed_set', [$managedContentPage, 'handlePush']);
+        add_action('admin_post_pushpull_commit_push_all', [$managedContentPage, 'handleCommitPushAll']);
+        add_action('admin_post_pushpull_pull_apply_all', [$managedContentPage, 'handlePullApplyAll']);
         add_action('wp_ajax_pushpull_start_branch_action', [$managedContentPage, 'handleAjaxStartBranchAction']);
         add_action('wp_ajax_pushpull_continue_branch_action', [$managedContentPage, 'handleAjaxContinueBranchAction']);
         add_action('admin_post_pushpull_resolve_conflict_managed_set', [$managedContentPage, 'handleResolveConflict']);
         add_action('admin_post_pushpull_finalize_merge_managed_set', [$managedContentPage, 'handleFinalizeMerge']);
         add_action('admin_enqueue_scripts', [$settingsPage, 'enqueueAssets']);
+        add_action('admin_enqueue_scripts', [$domainsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$operationsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$managedContentPage, 'enqueueAssets']);
     }

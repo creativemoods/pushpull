@@ -117,6 +117,13 @@ final class AdminBarStatus
         }
 
         $adminBar->add_node([
+            'id' => 'pushpull-status-domains',
+            'parent' => 'pushpull-status',
+            'title' => esc_html__('Domains', 'pushpull'),
+            'href' => admin_url('admin.php?page=' . DomainsPage::MENU_SLUG),
+        ]);
+
+        $adminBar->add_node([
             'id' => 'pushpull-status-managed-content',
             'parent' => 'pushpull-status',
             'title' => esc_html__('Managed Content', 'pushpull'),

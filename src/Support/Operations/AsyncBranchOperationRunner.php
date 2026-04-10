@@ -7,10 +7,19 @@ namespace PushPull\Support\Operations;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Domain\Apply\ManagedSetApplyServiceInterface;
+use PushPull\Domain\Apply\ManagedSetApplyService;
+use PushPull\Domain\Apply\ConfigManagedSetApplyService;
+use PushPull\Domain\Apply\OverlayManagedSetApplyService;
+use PushPull\Content\ConfigManagedContentAdapterInterface;
+use PushPull\Content\ManagedSetRegistry;
+use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Domain\Sync\SyncServiceInterface;
+use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Persistence\Operations\OperationLogRepository;
 use PushPull\Persistence\Operations\OperationRecord;
+use PushPull\Persistence\ContentMap\ContentMapRepository;
+use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\CreateRemoteCommitRequest;
 use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\GitProviderFactoryInterface;
@@ -43,7 +52,11 @@ final class AsyncBranchOperationRunner
         private readonly LocalRepositoryInterface $localRepository,
         private readonly GitProviderFactoryInterface $providerFactory,
         private readonly SyncServiceInterface $syncService,
-        array $managedSetApplyServices = []
+        array $managedSetApplyServices = [],
+        private readonly ?ManagedSetRegistry $managedSetRegistry = null,
+        private readonly ?RepositoryStateReader $repositoryStateReader = null,
+        private readonly ?ContentMapRepository $contentMapRepository = null,
+        private readonly ?WorkingStateRepository $workingStateRepository = null
     ) {
         $this->applyServicesByManagedSetKey = $managedSetApplyServices;
     }
@@ -53,7 +66,7 @@ final class AsyncBranchOperationRunner
      */
     public function start(string $managedSetKey, string $operationType): array
     {
-        if (! in_array($operationType, ['fetch', 'pull', 'push', 'apply'], true)) {
+        if (! in_array($operationType, ['fetch', 'pull', 'push', 'apply', 'commit_push_all', 'pull_apply_all'], true)) {
             throw new RuntimeException(sprintf('Async branch action "%s" is not supported.', $operationType));
         }
 
@@ -187,6 +200,14 @@ final class AsyncBranchOperationRunner
 
         if ($operationType === 'apply') {
             return $this->initialApplyState($record, $baseState, $branch);
+        }
+
+        if ($operationType === 'commit_push_all') {
+            return $this->initialCommitPushAllState($baseState, $branch);
+        }
+
+        if ($operationType === 'pull_apply_all') {
+            return $this->initialPullApplyAllState($baseState, $branch);
         }
 
         [$remoteConfig, $remoteRef] = $this->loadRemoteRef($branch);
@@ -391,6 +412,98 @@ final class AsyncBranchOperationRunner
     }
 
     /**
+     * @param array<string, mixed> $baseState
+     * @return array<string, mixed>
+     */
+    private function initialCommitPushAllState(array $baseState, string $branch): array
+    {
+        $managedSetKeys = $this->enabledAvailableManagedSetKeys();
+
+        if ($managedSetKeys === []) {
+            return $baseState + [
+                'phase' => 'complete',
+                'summaryType' => 'success',
+                'summaryMessage' => __('No enabled available domains need to be committed or pushed.', 'pushpull'),
+                'redirectUrl' => $this->noticeUrl('success', __('No enabled available domains need to be committed or pushed.', 'pushpull')),
+                'progressMode' => 'indeterminate',
+                'progressCurrent' => 0,
+                'progressTotal' => 0,
+            ];
+        }
+
+        return $baseState + [
+            'phase' => 'commit_all',
+            'managedSetKeys' => $managedSetKeys,
+            'managedSetIndex' => 0,
+            'createdCommitCount' => 0,
+            'committedDomainCount' => 0,
+            'committedFileCount' => 0,
+            'progressMode' => 'indeterminate',
+            'progressCurrent' => 0,
+            'progressTotal' => 0,
+            'progressMessage' => sprintf(
+                'Preparing commits for %d enabled available domain(s) on branch %s.',
+                count($managedSetKeys),
+                $branch
+            ),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $baseState
+     * @return array<string, mixed>
+     */
+    private function initialPullApplyAllState(array $baseState, string $branch): array
+    {
+        $managedSetKeys = $this->enabledAvailableManagedSetKeys();
+
+        if ($managedSetKeys === []) {
+            return $baseState + [
+                'phase' => 'complete',
+                'summaryType' => 'success',
+                'summaryMessage' => __('No enabled available domains need to be pulled or applied.', 'pushpull'),
+                'redirectUrl' => $this->noticeUrl('success', __('No enabled available domains need to be pulled or applied.', 'pushpull')),
+                'progressMode' => 'indeterminate',
+                'progressCurrent' => 0,
+                'progressTotal' => 0,
+            ];
+        }
+
+        [$remoteConfig, $remoteRef] = $this->loadRemoteRef($branch);
+
+        return $baseState + [
+            'phase' => 'pull_all_fetch',
+            'applyManagedSetKeys' => $managedSetKeys,
+            'applyManagedSetIndex' => 0,
+            'currentApplyIndex' => 0,
+            'currentDesiredLogicalKeys' => [],
+            'currentDeletedLogicalKeys' => [],
+            'currentApplyPlan' => null,
+            'applyPlans' => [],
+            'createdCount' => 0,
+            'updatedCount' => 0,
+            'deletedCount' => 0,
+            'appliedDomainCount' => 0,
+            'remoteRefName' => 'refs/remotes/origin/' . $branch,
+            'remoteCommitHash' => $remoteRef->commitHash,
+            'providerBranchRefName' => 'refs/heads/' . $remoteConfig->branch,
+            'pendingCommitHashes' => [$remoteRef->commitHash => true],
+            'pendingTreeHashes' => [],
+            'pendingBlobHashes' => [],
+            'visitedCommitHashes' => [],
+            'visitedTreeHashes' => [],
+            'visitedBlobHashes' => [],
+            'newCommitHashes' => [],
+            'newTreeHashes' => [],
+            'newBlobHashes' => [],
+            'progressMode' => 'indeterminate',
+            'progressCurrent' => 0,
+            'progressTotal' => 0,
+            'progressMessage' => sprintf('Queued pull of remote commit %s for branch %s.', $remoteRef->commitHash, $branch),
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $state
      * @return array{done: bool, state?: array<string, mixed>, finalResult?: array<string, mixed>}
      */
@@ -401,8 +514,166 @@ final class AsyncBranchOperationRunner
             'pull' => $this->continueFetchOrPull($record, $state, true),
             'push' => $this->continuePush($record, $state),
             'apply' => $this->continueApply($record, $state),
+            'commit_push_all' => $this->continueCommitPushAll($record, $state),
+            'pull_apply_all' => $this->continuePullApplyAll($record, $state),
             default => throw new RuntimeException(sprintf('Async branch action "%s" is not supported.', $record->operationType)),
         };
+    }
+
+    /**
+     * @param array<string, mixed> $state
+     * @return array{done: bool, state?: array<string, mixed>, finalResult?: array<string, mixed>}
+     */
+    private function continueCommitPushAll(OperationRecord $record, array $state): array
+    {
+        if (($state['phase'] ?? '') === 'commit_all') {
+            if ((int) $state['managedSetIndex'] < count($state['managedSetKeys'])) {
+                $managedSetKey = (string) $state['managedSetKeys'][(int) $state['managedSetIndex']];
+                $settings = $this->settingsRepository->get();
+                $result = $this->syncService->commitManagedSet($managedSetKey, new \PushPull\Domain\Sync\CommitManagedSetRequest(
+                    $settings->branch,
+                    $this->managedSetRegistry?->get($managedSetKey)->buildCommitMessage() ?? 'PushPull export',
+                    $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
+                    $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
+                ));
+
+                if ($result->createdNewCommit) {
+                    $state['createdCommitCount']++;
+                    $state['committedDomainCount']++;
+                    $state['committedFileCount'] += count($result->pathHashes);
+                }
+
+                $state['managedSetIndex']++;
+                $state['progressMessage'] = sprintf(
+                    'Committed %s. Processed %d of %d domain(s).',
+                    $managedSetKey,
+                    $state['managedSetIndex'],
+                    count($state['managedSetKeys'])
+                );
+
+                return [
+                    'done' => false,
+                    'state' => $state,
+                ];
+            }
+
+            $pushState = $this->initialPushState($record, [
+                'asyncType' => self::ASYNC_TYPE,
+                'operationId' => $record->id,
+                'operationType' => $record->operationType,
+                'managedSetKey' => $record->managedSetKey,
+                'branch' => $state['branch'],
+                'lockToken' => $state['lockToken'],
+            ], (string) $state['branch']);
+
+            $pushState['createdCommitCount'] = $state['createdCommitCount'];
+            $pushState['committedDomainCount'] = $state['committedDomainCount'];
+            $pushState['committedFileCount'] = $state['committedFileCount'];
+
+            if (($pushState['phase'] ?? '') === 'complete') {
+                return [
+                    'done' => true,
+                    'finalResult' => [
+                        'summaryType' => 'success',
+                        'summaryMessage' => __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull'),
+                        'progressMode' => 'indeterminate',
+                        'progressCurrent' => 0,
+                        'progressTotal' => 0,
+                    ],
+                ];
+            }
+
+            $pushState['progressMessage'] = sprintf(
+                'Prepared push plan after committing %d changed domain(s) across %d file(s).',
+                $state['committedDomainCount'],
+                $state['committedFileCount']
+            );
+
+            return [
+                'done' => false,
+                'state' => $pushState,
+            ];
+        }
+
+        $response = $this->continuePush($record, $state);
+
+        if (! $response['done']) {
+            return $response;
+        }
+
+        $finalResult = $response['finalResult'];
+        $finalResult['summaryMessage'] = sprintf(
+            'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
+            (int) ($state['committedDomainCount'] ?? 0),
+            (int) ($state['committedFileCount'] ?? 0),
+            (string) ($state['branch'] ?? ''),
+            (string) ($finalResult['remoteCommitHash'] ?? '')
+        );
+        $finalResult['operationType'] = 'commit_push_all';
+
+        return [
+            'done' => true,
+            'finalResult' => $finalResult,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $state
+     * @return array{done: bool, state?: array<string, mixed>, finalResult?: array<string, mixed>}
+     */
+    private function continuePullApplyAll(OperationRecord $record, array $state): array
+    {
+        if (($state['phase'] ?? '') === 'pull_all_fetch') {
+            [$provider, $remoteConfig] = $this->resolveProvider();
+            $state = $this->processFetchChunk($state, $provider, $remoteConfig);
+
+            if (! $this->isFetchComplete($state)) {
+                return [
+                    'done' => false,
+                    'state' => $state,
+                ];
+            }
+
+            $trackingRefName = 'refs/remotes/origin/' . $remoteConfig->branch;
+            $this->localRepository->updateRef($trackingRefName, (string) $state['remoteCommitHash']);
+            $state['phase'] = 'pull_all_merge';
+            $state['progressMessage'] = sprintf('Fetched remote commit %s into %s. Preparing merge.', $state['remoteCommitHash'], $trackingRefName);
+
+            return [
+                'done' => false,
+                'state' => $state,
+            ];
+        }
+
+        if (($state['phase'] ?? '') === 'pull_all_merge') {
+            $mergeResult = $this->syncService->merge($record->managedSetKey);
+            $state['pullSummaryMessage'] = $this->finalPullResult($record, $state, $mergeResult)['summaryMessage'];
+
+            if ($mergeResult->hasConflicts()) {
+                return [
+                    'done' => true,
+                    'finalResult' => [
+                        'summaryType' => 'error',
+                        'summaryMessage' => sprintf(
+                            '%s Apply was not started because merge conflict resolution is required.',
+                            $state['pullSummaryMessage']
+                        ),
+                        'progressMode' => 'indeterminate',
+                        'progressCurrent' => 0,
+                        'progressTotal' => 0,
+                    ],
+                ];
+            }
+
+            $state = $this->prepareBulkApplyPlans($state);
+
+            return [
+                'done' => false,
+                'state' => $state,
+            ];
+        }
+
+        return $this->continueBulkApply($state);
     }
 
     /**
@@ -695,6 +966,119 @@ final class AsyncBranchOperationRunner
                     'redirectManagedSetKey' => $record->managedSetKey,
                 ],
             ];
+        }
+
+        return [
+            'done' => false,
+            'state' => $state,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $state
+     * @return array<string, mixed>
+     */
+    private function prepareBulkApplyPlans(array $state): array
+    {
+        $applyPlans = [];
+        $totalSteps = 0;
+
+        foreach ($state['applyManagedSetKeys'] as $managedSetKey) {
+            if (! is_string($managedSetKey) || $managedSetKey === '') {
+                continue;
+            }
+
+            $prepared = $this->requireApplyService($managedSetKey)->prepareApply($this->settingsRepository->get());
+            $applyPlans[] = [
+                'managedSetKey' => $managedSetKey,
+                'sourceCommitHash' => $prepared['commitHash'],
+                'orderedLogicalKeys' => $prepared['orderedLogicalKeys'],
+            ];
+            $totalSteps += count($prepared['orderedLogicalKeys']) + 1;
+        }
+
+        $state['phase'] = 'pull_all_apply';
+        $state['applyPlans'] = $applyPlans;
+        $state['progressMode'] = 'determinate';
+        $state['progressCurrent'] = 0;
+        $state['progressTotal'] = max(1, $totalSteps);
+        $state['progressMessage'] = sprintf(
+            'Prepared apply plan for %d enabled available domain(s).',
+            count($applyPlans)
+        );
+
+        return $state;
+    }
+
+    /**
+     * @param array<string, mixed> $state
+     * @return array{done: bool, state?: array<string, mixed>, finalResult?: array<string, mixed>}
+     */
+    private function continueBulkApply(array $state): array
+    {
+        $settings = $this->settingsRepository->get();
+        $budget = self::CHUNK_NODE_LIMIT;
+
+        while ($budget > 0) {
+            if ((int) $state['applyManagedSetIndex'] >= count($state['applyPlans'])) {
+                return [
+                    'done' => true,
+                    'finalResult' => [
+                        'summaryType' => 'success',
+                        'summaryMessage' => sprintf(
+                            '%s Applied %d managed domain(s) to WordPress. Created %d item(s), updated %d item(s), and deleted %d missing item(s).',
+                            (string) ($state['pullSummaryMessage'] ?? ''),
+                            (int) $state['appliedDomainCount'],
+                            (int) $state['createdCount'],
+                            (int) $state['updatedCount'],
+                            (int) $state['deletedCount']
+                        ),
+                        'progressMode' => 'determinate',
+                        'progressCurrent' => (int) $state['progressTotal'],
+                        'progressTotal' => (int) $state['progressTotal'],
+                    ],
+                ];
+            }
+
+            /** @var array{managedSetKey: string, sourceCommitHash: string, orderedLogicalKeys: array<int, string>} $currentPlan */
+            $currentPlan = $state['applyPlans'][(int) $state['applyManagedSetIndex']];
+            $applyService = $this->requireApplyService($currentPlan['managedSetKey']);
+
+            if ((int) $state['currentApplyIndex'] < count($currentPlan['orderedLogicalKeys'])) {
+                $logicalKey = (string) $currentPlan['orderedLogicalKeys'][(int) $state['currentApplyIndex']];
+                $menuOrder = (int) $state['currentApplyIndex'];
+                $result = $applyService->applyLogicalKey($settings, $logicalKey, $menuOrder);
+
+                if ($result['created']) {
+                    $state['createdCount']++;
+                } else {
+                    $state['updatedCount']++;
+                }
+
+                $state['currentDesiredLogicalKeys'][$logicalKey] = true;
+                $state['currentApplyIndex']++;
+                $state['progressCurrent']++;
+                $state['progressMessage'] = sprintf(
+                    'Applied %s from %s to WordPress.',
+                    $logicalKey,
+                    $currentPlan['managedSetKey']
+                );
+                $budget--;
+                continue;
+            }
+
+            $deletedLogicalKeys = $applyService->deleteMissingLogicalKeys($state['currentDesiredLogicalKeys']);
+            $state['deletedCount'] += count($deletedLogicalKeys);
+            $state['appliedDomainCount']++;
+            $state['applyManagedSetIndex']++;
+            $state['currentApplyIndex'] = 0;
+            $state['currentDesiredLogicalKeys'] = [];
+            $state['progressCurrent']++;
+            $state['progressMessage'] = sprintf(
+                'Completed apply for %s.',
+                $currentPlan['managedSetKey']
+            );
+            $budget--;
         }
 
         return [
@@ -1105,6 +1489,25 @@ final class AsyncBranchOperationRunner
     }
 
     /**
+     * @return string[]
+     */
+    private function enabledAvailableManagedSetKeys(): array
+    {
+        $settings = $this->settingsRepository->get();
+        $managedSetKeys = [];
+
+        foreach ($this->managedSetRegistry?->allInDependencyOrder() ?? [] as $managedSetKey => $adapter) {
+            if (! $settings->isManagedSetEnabled($managedSetKey) || ! $adapter->isAvailable()) {
+                continue;
+            }
+
+            $managedSetKeys[] = $managedSetKey;
+        }
+
+        return $managedSetKeys;
+    }
+
+    /**
      * @param array<string, true> $seen
      * @param string[] $order
      * @return array<string, true>
@@ -1399,7 +1802,41 @@ final class AsyncBranchOperationRunner
     private function requireApplyService(string $managedSetKey): ManagedSetApplyServiceInterface
     {
         if (! isset($this->applyServicesByManagedSetKey[$managedSetKey])) {
-            throw new RuntimeException(sprintf('Managed set "%s" cannot be applied asynchronously.', $managedSetKey));
+            if (
+                ! $this->managedSetRegistry instanceof ManagedSetRegistry
+                || ! $this->repositoryStateReader instanceof RepositoryStateReader
+                || ! $this->workingStateRepository instanceof WorkingStateRepository
+                || ! $this->managedSetRegistry->has($managedSetKey)
+            ) {
+                throw new RuntimeException(sprintf('Managed set "%s" cannot be applied asynchronously.', $managedSetKey));
+            }
+
+            $adapter = $this->managedSetRegistry->get($managedSetKey);
+
+            if ($adapter instanceof OverlayManagedContentAdapterInterface) {
+                $this->applyServicesByManagedSetKey[$managedSetKey] = new OverlayManagedSetApplyService(
+                    $adapter,
+                    $this->repositoryStateReader,
+                    $this->workingStateRepository
+                );
+            } elseif ($adapter instanceof ConfigManagedContentAdapterInterface) {
+                $this->applyServicesByManagedSetKey[$managedSetKey] = new ConfigManagedSetApplyService(
+                    $adapter,
+                    $this->repositoryStateReader,
+                    $this->workingStateRepository
+                );
+            } else {
+                if (! $this->contentMapRepository instanceof ContentMapRepository) {
+                    throw new RuntimeException(sprintf('Managed set "%s" cannot be applied asynchronously.', $managedSetKey));
+                }
+
+                $this->applyServicesByManagedSetKey[$managedSetKey] = new ManagedSetApplyService(
+                    $adapter,
+                    $this->repositoryStateReader,
+                    $this->contentMapRepository,
+                    $this->workingStateRepository
+                );
+            }
         }
 
         return $this->applyServicesByManagedSetKey[$managedSetKey];

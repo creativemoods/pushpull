@@ -34,6 +34,8 @@ final class ManagedContentPage
     private const MERGE_ACTION = 'pushpull_merge_managed_set';
     private const APPLY_ACTION = 'pushpull_apply_managed_set';
     private const PUSH_ACTION = 'pushpull_push_managed_set';
+    private const COMMIT_PUSH_ALL_ACTION = 'pushpull_commit_push_all';
+    private const PULL_APPLY_ALL_ACTION = 'pushpull_pull_apply_all';
     private const RESET_REMOTE_ACTION = 'pushpull_reset_remote_managed_set';
     private const RESOLVE_CONFLICT_ACTION = 'pushpull_resolve_conflict_managed_set';
     private const FINALIZE_MERGE_ACTION = 'pushpull_finalize_merge_managed_set';
@@ -143,6 +145,11 @@ final class ManagedContentPage
             esc_html__('Settings', 'pushpull')
         );
         printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . DomainsPage::MENU_SLUG)),
+            esc_html__('Domains', 'pushpull')
+        );
+        printf(
             '<a href="%s" class="nav-tab nav-tab-active">%s</a>',
             esc_url(admin_url('admin.php?page=' . self::MENU_SLUG)),
             esc_html__('Managed Content', 'pushpull')
@@ -154,6 +161,8 @@ final class ManagedContentPage
         );
         echo '</nav>';
         echo '<div class="pushpull-top-actions">';
+        $this->renderCommitPushAllButton($managedSetKey, $branchActionState['commitPushAll']['enabled'], $branchActionState['commitPushAll']['reason']);
+        $this->renderPullApplyAllButton($managedSetKey, $branchActionState['pullApplyAll']['enabled'], $branchActionState['pullApplyAll']['reason']);
         $this->renderPullButton($managedSetKey, $branchActionState['pull']['enabled'], $branchActionState['pull']['reason']);
         $this->renderFetchButton($managedSetKey, $branchActionState['fetch']['enabled'], $branchActionState['fetch']['reason'], $fetchAvailabilityState);
         $this->renderTopLevelMergeButton($managedSetKey, $branchActionState['merge']['enabled'], $branchActionState['merge']['reason']);
@@ -962,6 +971,147 @@ final class ManagedContentPage
         ]);
     }
 
+    public function handleCommitPushAll(): void
+    {
+        if (! current_user_can(Capabilities::MANAGE_PLUGIN)) {
+            wp_die(esc_html__('You do not have permission to manage PushPull.', 'pushpull'));
+        }
+
+        check_admin_referer(self::COMMIT_PUSH_ALL_ACTION);
+
+        $settings = $this->settingsRepository->get();
+        $branchManagedSetKey = $this->branchActionManagedSetKey($settings);
+        $availableAdapters = $this->enabledAvailableManagedSetAdapters($settings);
+
+        if ($branchManagedSetKey === null || $availableAdapters === []) {
+            $this->redirectWithNotice('error', __('Enable at least one available managed domain to use this action.', 'pushpull'), null);
+        }
+
+        try {
+            $createdCommitCount = 0;
+            $committedFileCount = 0;
+            $committedDomainCount = 0;
+
+            foreach ($availableAdapters as $managedSetKey => $adapter) {
+                $result = $this->operationExecutor->run(
+                    $managedSetKey,
+                    'commit',
+                    ['branch' => $settings->branch, 'bulk' => true],
+                    fn () => $this->syncService->commitManagedSet(
+                        $managedSetKey,
+                        new CommitManagedSetRequest(
+                            $settings->branch,
+                            $adapter->buildCommitMessage(),
+                            $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
+                            $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
+                        )
+                    )
+                );
+
+                if ($result->createdNewCommit) {
+                    $createdCommitCount++;
+                    $committedDomainCount++;
+                    $committedFileCount += count($result->pathHashes);
+                }
+            }
+
+            $pushResult = $this->operationExecutor->run(
+                $branchManagedSetKey,
+                'push',
+                ['branch' => $settings->branch, 'bulk' => true],
+                fn () => $this->syncService->push($branchManagedSetKey)
+            );
+        } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
+            $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
+            $this->redirectWithNotice('error', $message, null);
+        }
+
+        $message = $pushResult->status === 'already_up_to_date'
+            ? __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull')
+            : sprintf(
+                'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
+                $committedDomainCount,
+                $committedFileCount,
+                $pushResult->branch,
+                $pushResult->remoteCommitHash
+            );
+
+        $this->redirectWithNotice('success', $message, null);
+    }
+
+    public function handlePullApplyAll(): void
+    {
+        if (! current_user_can(Capabilities::MANAGE_PLUGIN)) {
+            wp_die(esc_html__('You do not have permission to manage PushPull.', 'pushpull'));
+        }
+
+        check_admin_referer(self::PULL_APPLY_ALL_ACTION);
+
+        $settings = $this->settingsRepository->get();
+        $branchManagedSetKey = $this->branchActionManagedSetKey($settings);
+        $availableAdapters = $this->enabledAvailableManagedSetAdapters($settings);
+
+        if ($branchManagedSetKey === null || $availableAdapters === []) {
+            $this->redirectWithNotice('error', __('Enable at least one available managed domain to use this action.', 'pushpull'), null);
+        }
+
+        try {
+            $pullResult = $this->operationExecutor->run(
+                $branchManagedSetKey,
+                'pull',
+                ['branch' => $settings->branch, 'bulk' => true],
+                fn () => $this->syncService->pull($branchManagedSetKey)
+            );
+
+            if ($pullResult->mergeResult->hasConflicts()) {
+                $this->redirectWithNotice(
+                    'error',
+                    sprintf('Pull requires conflict resolution before PushPull can apply the repository to WordPress. Stored %d conflict(s).', count($pullResult->mergeResult->conflicts)),
+                    null
+                );
+            }
+
+            $createdCount = 0;
+            $updatedCount = 0;
+            $deletedCount = 0;
+            $appliedDomainCount = 0;
+
+            foreach ($availableAdapters as $managedSetKey => $_adapter) {
+                $diffResult = $this->buildDiffResult($managedSetKey);
+
+                if ($diffResult === null || ! $diffResult->liveToLocal->hasChanges()) {
+                    continue;
+                }
+
+                $result = $this->operationExecutor->run(
+                    $managedSetKey,
+                    'apply',
+                    ['branch' => $settings->branch, 'bulk' => true],
+                    fn () => $this->syncService->apply($managedSetKey)
+                );
+
+                $appliedDomainCount++;
+                $createdCount += $result->createdCount;
+                $updatedCount += $result->updatedCount;
+                $deletedCount += count($result->deletedLogicalKeys);
+            }
+        } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
+            $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
+            $this->redirectWithNotice('error', $message, null);
+        }
+
+        $message = sprintf(
+            'Pulled branch %1$s and applied %2$d managed domain(s) to WordPress. Created %3$d item(s), updated %4$d item(s), and deleted %5$d missing item(s).',
+            $settings->branch,
+            $appliedDomainCount,
+            $createdCount,
+            $updatedCount,
+            $deletedCount
+        );
+
+        $this->redirectWithNotice('success', $message, null);
+    }
+
     public function handleAjaxContinueBranchAction(): void
     {
         if (! current_user_can(Capabilities::MANAGE_PLUGIN)) {
@@ -1355,6 +1505,52 @@ final class ManagedContentPage
         echo '</div>';
     }
 
+    private function renderCommitPushAllButton(?string $managedSetKey, bool $enabled, ?string $reason = null): void
+    {
+        if (! $enabled) {
+            $this->renderDisabledActionButton(
+                __('Commit + Push All', 'pushpull'),
+                __('Commit live changes for all enabled available domains in dependency order, then push the branch to the remote repository.', 'pushpull'),
+                $reason,
+                'button button-primary'
+            );
+
+            return;
+        }
+
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Commit + Push All', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Commit live changes for all enabled available domains in dependency order, then push the branch to the remote repository.', 'pushpull') . '">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="commit_push_all" data-pushpull-async-label="' . esc_attr__('Commit + Push All', 'pushpull') . '">';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::COMMIT_PUSH_ALL_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
+        wp_nonce_field(self::COMMIT_PUSH_ALL_ACTION);
+        submit_button(__('Commit + Push All', 'pushpull'), 'primary', 'submit', false);
+        echo '</form>';
+        echo '</div>';
+    }
+
+    private function renderPullApplyAllButton(?string $managedSetKey, bool $enabled, ?string $reason = null): void
+    {
+        if (! $enabled) {
+            $this->renderDisabledActionButton(
+                __('Pull + Apply All', 'pushpull'),
+                __('Pull the remote branch into local and apply the resulting repository state across all enabled available domains in dependency order.', 'pushpull'),
+                $reason,
+                'button button-primary'
+            );
+
+            return;
+        }
+
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Pull + Apply All', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Pull the remote branch into local and apply the resulting repository state across all enabled available domains in dependency order.', 'pushpull') . '">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="pull_apply_all" data-pushpull-async-label="' . esc_attr__('Pull + Apply All', 'pushpull') . '" data-pushpull-confirm="' . esc_attr__('Pull remote changes and apply the resulting repository state across all enabled available domains? This will update existing managed content and remove WordPress items that are not present in the repository.', 'pushpull') . '">';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::PULL_APPLY_ALL_ACTION) . '" />';
+        echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
+        wp_nonce_field(self::PULL_APPLY_ALL_ACTION);
+        submit_button(__('Pull + Apply All', 'pushpull'), 'primary', 'submit', false);
+        echo '</form>';
+        echo '</div>';
+    }
+
     private function renderTopLevelMergeButton(?string $managedSetKey, bool $enabled, ?string $reason = null): void
     {
         if (! $enabled) {
@@ -1470,6 +1666,8 @@ final class ManagedContentPage
     /**
      * @return array{
      *   managedSetKey: ?string,
+     *   commitPushAll: array{enabled: bool, reason: ?string},
+     *   pullApplyAll: array{enabled: bool, reason: ?string},
      *   fetch: array{enabled: bool, reason: ?string},
      *   pull: array{enabled: bool, reason: ?string},
      *   merge: array{enabled: bool, reason: ?string},
@@ -1485,6 +1683,8 @@ final class ManagedContentPage
 
             return [
                 'managedSetKey' => null,
+                'commitPushAll' => ['enabled' => false, 'reason' => $reason],
+                'pullApplyAll' => ['enabled' => false, 'reason' => $reason],
                 'fetch' => ['enabled' => false, 'reason' => $reason],
                 'pull' => ['enabled' => false, 'reason' => $reason],
                 'merge' => ['enabled' => false, 'reason' => $reason],
@@ -1496,8 +1696,13 @@ final class ManagedContentPage
         $hasLiveToLocalChanges = false;
         $hasLocalToRemoteChanges = false;
         $hasAvailableDiff = false;
+        $hasAvailableManagedSet = false;
 
         foreach ($this->enabledManagedSetAdapters($settings) as $enabledManagedSetKey => $_adapter) {
+            if ($_adapter->isAvailable()) {
+                $hasAvailableManagedSet = true;
+            }
+
             $diffResult = $this->buildDiffResult($enabledManagedSetKey);
 
             if ($diffResult === null) {
@@ -1515,6 +1720,8 @@ final class ManagedContentPage
 
             return [
                 'managedSetKey' => $managedSetKey,
+                'commitPushAll' => ['enabled' => false, 'reason' => $hasAvailableManagedSet ? $reason : __('No enabled available domains can participate in this action.', 'pushpull')],
+                'pullApplyAll' => ['enabled' => false, 'reason' => $hasAvailableManagedSet ? $reason : __('No enabled available domains can participate in this action.', 'pushpull')],
                 'fetch' => ['enabled' => true, 'reason' => null],
                 'pull' => ['enabled' => false, 'reason' => $reason],
                 'merge' => ['enabled' => false, 'reason' => $reason],
@@ -1525,9 +1732,22 @@ final class ManagedContentPage
         $pullEnabled = in_array($relationship, ['behind', 'diverged'], true);
         $mergeEnabled = in_array($relationship, ['behind', 'diverged'], true);
         $pushEnabled = $relationship === 'ahead' && $hasLocalToRemoteChanges;
+        $commitPushAllEnabled = $hasAvailableManagedSet
+            && in_array($relationship, ['in_sync', 'ahead'], true)
+            && ($hasLiveToLocalChanges || $pushEnabled);
+        $pullApplyAllEnabled = $hasAvailableManagedSet
+            && ($hasLiveToLocalChanges || $pullEnabled || $mergeEnabled);
 
         return [
             'managedSetKey' => $managedSetKey,
+            'commitPushAll' => [
+                'enabled' => $commitPushAllEnabled,
+                'reason' => $commitPushAllEnabled ? null : $this->commitPushAllDisabledReason($hasAvailableManagedSet, (string) $relationship, $hasLiveToLocalChanges, $hasLocalToRemoteChanges),
+            ],
+            'pullApplyAll' => [
+                'enabled' => $pullApplyAllEnabled,
+                'reason' => $pullApplyAllEnabled ? null : $this->pullApplyAllDisabledReason($hasAvailableManagedSet, (string) $relationship, $hasLiveToLocalChanges),
+            ],
             'fetch' => ['enabled' => true, 'reason' => null],
             'pull' => ['enabled' => $pullEnabled, 'reason' => $pullEnabled ? null : $this->pullDisabledReason((string) $relationship, $hasLocalToRemoteChanges)],
             'merge' => ['enabled' => $mergeEnabled, 'reason' => $mergeEnabled ? null : $this->mergeDisabledReason((string) $relationship)],
@@ -1617,6 +1837,36 @@ final class ManagedContentPage
             default => $hasLiveToLocalChanges
                 ? __('Push is blocked until local changes are committed onto the branch.', 'pushpull')
                 : __('Push is not available for the current branch relationship.', 'pushpull'),
+        };
+    }
+
+    private function commitPushAllDisabledReason(bool $hasAvailableManagedSet, string $relationship, bool $hasLiveToLocalChanges, bool $hasLocalToRemoteChanges): string
+    {
+        if (! $hasAvailableManagedSet) {
+            return __('No enabled available domains can participate in this action.', 'pushpull');
+        }
+
+        return match ($relationship) {
+            'behind' => __('Commit + Push All is blocked. Fetch or pull the latest remote changes first.', 'pushpull'),
+            'diverged' => __('Commit + Push All is blocked. Merge the fetched remote changes into local first.', 'pushpull'),
+            default => ($hasLiveToLocalChanges || $hasLocalToRemoteChanges)
+                ? __('Commit + Push All is temporarily unavailable.', 'pushpull')
+                : __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull'),
+        };
+    }
+
+    private function pullApplyAllDisabledReason(bool $hasAvailableManagedSet, string $relationship, bool $hasLiveToLocalChanges): string
+    {
+        if (! $hasAvailableManagedSet) {
+            return __('No enabled available domains can participate in this action.', 'pushpull');
+        }
+
+        return match ($relationship) {
+            'ahead' => $hasLiveToLocalChanges
+                ? __('Pull + Apply All is temporarily unavailable.', 'pushpull')
+                : __('Nothing to pull or apply. WordPress already matches the local repository state.', 'pushpull'),
+            'in_sync' => __('Nothing to pull or apply. WordPress already matches the local repository state.', 'pushpull'),
+            default => __('Pull + Apply All is temporarily unavailable.', 'pushpull'),
         };
     }
 
@@ -1874,6 +2124,17 @@ final class ManagedContentPage
         }
 
         return $enabledAdapters;
+    }
+
+    /**
+     * @return array<string, ManifestManagedContentAdapterInterface>
+     */
+    private function enabledAvailableManagedSetAdapters(\PushPull\Settings\PushPullSettings $settings): array
+    {
+        return array_filter(
+            $this->enabledManagedSetAdapters($settings),
+            static fn (ManifestManagedContentAdapterInterface $adapter): bool => $adapter->isAvailable()
+        );
     }
 
     private function visibleManagedSetKey(\PushPull\Settings\PushPullSettings $settings, ?string $requestedManagedSetKey): ?string

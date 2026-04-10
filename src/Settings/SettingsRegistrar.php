@@ -4,18 +4,13 @@ declare(strict_types=1);
 
 namespace PushPull\Settings;
 
-use PushPull\Content\ConfigManagedSetInterface;
-use PushPull\Content\ManagedSetRegistry;
-use PushPull\Content\OverlayManagedSetInterface;
-
 final class SettingsRegistrar
 {
     public const SETTINGS_GROUP = 'pushpull_settings';
     public const SETTINGS_PAGE_SLUG = 'pushpull-settings';
 
     public function __construct(
-        private readonly SettingsRepository $settingsRepository,
-        private readonly ManagedSetRegistry $managedSetRegistry
+        private readonly SettingsRepository $settingsRepository
     ) {
     }
 
@@ -62,15 +57,6 @@ final class SettingsRegistrar
         );
 
         add_settings_section(
-            'pushpull_managed_sets',
-            __('Managed Content Sets', 'pushpull'),
-            static function (): void {
-                echo '<p>Enable the content domains that PushPull should manage and serialize into the repository.</p>';
-            },
-            self::SETTINGS_PAGE_SLUG
-        );
-
-        add_settings_section(
             'pushpull_sync',
             __('Sync Behavior Options', 'pushpull'),
             static function (): void {
@@ -85,7 +71,6 @@ final class SettingsRegistrar
         $this->registerField('pushpull_remote', 'branch', __('Branch', 'pushpull'));
         $this->registerField('pushpull_auth', 'api_token', __('API token', 'pushpull'));
         $this->registerField('pushpull_auth', 'base_url', __('Base URL', 'pushpull'));
-        $this->registerField('pushpull_managed_sets', 'enabled_managed_sets', __('Enabled managed sets', 'pushpull'));
         $this->registerField('pushpull_sync', 'fetch_availability_check_interval_minutes', __('Remote fetch check interval', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_name', __('Commit author name', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_email', __('Commit author email', 'pushpull'));
@@ -121,10 +106,6 @@ final class SettingsRegistrar
 
                     case 'api_token':
                         $this->renderPassword($name, $settings->maskedApiToken());
-                        break;
-
-                    case 'enabled_managed_sets':
-                        $this->renderManagedSetCheckboxes(SettingsRepository::OPTION_KEY . '[enabled_managed_sets][]', $settings);
                         break;
 
                     case 'fetch_availability_check_interval_minutes':
@@ -185,70 +166,6 @@ final class SettingsRegistrar
         }
 
         echo '<p class="description">Leave blank until you have a provider token.</p>';
-    }
-
-    private function renderManagedSetCheckboxes(string $name, PushPullSettings $settings): void
-    {
-        $primary = [];
-        $config = [];
-        $overlay = [];
-
-        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $adapter) {
-            if ($adapter instanceof OverlayManagedSetInterface && $adapter->isOverlayManagedSet()) {
-                $target = 'overlay';
-            } elseif ($adapter instanceof ConfigManagedSetInterface && $adapter->isConfigManagedSet()) {
-                $target = 'config';
-            } else {
-                $target = 'primary';
-            }
-
-            if ($target === 'overlay') {
-                $overlay[$managedSetKey] = $adapter->getManagedSetLabel();
-            } elseif ($target === 'config') {
-                $config[$managedSetKey] = $adapter->getManagedSetLabel();
-            } else {
-                $primary[$managedSetKey] = $adapter->getManagedSetLabel();
-            }
-        }
-
-        if ($primary !== []) {
-            echo '<p><strong>' . esc_html__('Primary domains', 'pushpull') . '</strong></p>';
-            foreach ($primary as $managedSetKey => $label) {
-                printf(
-                    '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
-                    esc_attr($name),
-                    esc_attr($managedSetKey),
-                    checked($settings->isManagedSetEnabled($managedSetKey), true, false),
-                    esc_html($label)
-                );
-            }
-        }
-
-        if ($config !== []) {
-            echo '<p><strong>' . esc_html__('Config domains', 'pushpull') . '</strong></p>';
-            foreach ($config as $managedSetKey => $label) {
-                printf(
-                    '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
-                    esc_attr($name),
-                    esc_attr($managedSetKey),
-                    checked($settings->isManagedSetEnabled($managedSetKey), true, false),
-                    esc_html($label)
-                );
-            }
-        }
-
-        if ($overlay !== []) {
-            echo '<p><strong>' . esc_html__('Overlay domains', 'pushpull') . '</strong></p>';
-            foreach ($overlay as $managedSetKey => $label) {
-                printf(
-                    '<label><input type="checkbox" name="%s" value="%s" %s /> %s</label><br />',
-                    esc_attr($name),
-                    esc_attr($managedSetKey),
-                    checked($settings->isManagedSetEnabled($managedSetKey), true, false),
-                    esc_html($label)
-                );
-            }
-        }
     }
 
     /**

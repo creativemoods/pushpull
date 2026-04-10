@@ -45,7 +45,7 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
      */
     public function getManagedSetDependencies(): array
     {
-        return ['wordpress_pages', 'wordpress_posts'];
+        return ['wordpress_categories', 'wordpress_pages', 'wordpress_posts', 'wordpress_tags'];
     }
 
     public function isAvailable(): bool

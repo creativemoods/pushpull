@@ -122,6 +122,11 @@ final class OperationsPage
         );
         printf(
             '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . DomainsPage::MENU_SLUG)),
+            esc_html__('Domains', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
             esc_url(admin_url('admin.php?page=' . ManagedContentPage::MENU_SLUG)),
             esc_html__('Managed Content', 'pushpull')
         );

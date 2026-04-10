@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.16
+Stable tag: 0.0.17
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -23,12 +23,16 @@ The current release supports these managed domains:
    `generateblocks_global_styles`
    `generateblocks_conditions`
    `wordpress_block_patterns`
+   `wordpress_categories`
+   `wordpress_comments`
    `wordpress_menus`
    `wordpress_pages`
    `wordpress_posts`
+   `wordpress_tags`
    `wordpress_custom_css`
    `generatepress_elements`
    `wordpress_attachments` (explicit opt-in only)
+   generic discovered custom post types and taxonomies
 2. Config domains:
    `wordpress_core_configuration`
 3. Overlay domains:
@@ -53,11 +57,13 @@ The plugin also includes:
 1. A dedicated audit log screen
 2. Local repository reset tooling
 3. Remote branch reset tooling that creates one commit removing all tracked files from the branch
-4. Global and per-domain managed-content views in the admin UI
-5. Primary, config, and overlay domain separation in settings and Managed Content
+4. A dedicated Domains screen that separates WordPress core, installed plugin integrations, and discovered custom content
+5. Global and per-domain managed-content views in the admin UI
 6. A high-level PushPull status dropdown in the WordPress admin bar
 7. Menu structure export and apply with hierarchy and theme location assignment
 8. A scheduled lightweight remote-head check that highlights when `Fetch` likely has updates available
+9. Bulk `Commit + Push All` and `Pull + Apply All` workflows for whole-site bootstrap and deploy flows
+10. A `wp pushpull` WP-CLI command surface for status, configuration, domains, and sync operations
 
 ## Current scope
 
@@ -68,13 +74,18 @@ This is an early, focused release. At the moment, PushPull is intentionally limi
    `generateblocks/global-styles/`
    `generateblocks/conditions/`
    `wordpress/block-patterns/`
+   `wordpress/categories/`
+   `wordpress/comments/`
    `wordpress/menus/`
    `wordpress/pages/`
    `wordpress/posts/`
+   `wordpress/tags/`
    `wordpress/custom-css/`
    `wordpress/attachments/`
    `wordpress/configuration/`
    `wordpress/generatepress-elements/`
+   `wordpress/custom-post-types/<slug>/`
+   `wordpress/custom-taxonomies/<slug>/`
    `translations/management/`
    `media/organization/`
 3. Canonical JSON storage with one file per managed item for manifest-backed sets, plus directory-backed storage for attachments using `attachment.json` and the binary file
@@ -82,7 +93,7 @@ This is an early, focused release. At the moment, PushPull is intentionally limi
 5. Overlay domains that scope themselves to enabled compatible base domains rather than exporting every backend row blindly
 6. A cached remote-head availability signal for `Fetch`, driven by a configurable recurring check instead of a live provider probe on every page load
 
-It does not yet manage forms, arbitrary `wp_options`, or arbitrary plugin data.
+It does not yet manage forms, users, arbitrary `wp_options`, or arbitrary plugin data.
 
 ## How PushPull represents content
 
@@ -142,10 +153,17 @@ In PushPull > Settings:
 2. Enter the repository owner and repository name
 3. Enter the target branch
 4. Enter the API token
-5. Enable one or more managed content domains in the managed content settings
-6. Optionally set the remote fetch check interval in minutes
-7. Click `Test connection`
-8. Save the settings
+5. Optionally set the remote fetch check interval in minutes
+6. Click `Test connection`
+7. Save the settings
+
+### Domain selection
+
+In PushPull > Domains:
+
+1. Enable one or more managed domains
+2. Review WordPress core, installed plugin integrations, and discovered custom content separately
+3. Opt into generic discovered custom post types and taxonomies when you want them managed
 
 ### Empty repositories
 
@@ -159,6 +177,22 @@ In that case, click `Initialize remote repository`. PushPull will:
 
 You no longer need to create the first commit manually on the provider before using PushPull.
 
+### WP-CLI
+
+PushPull also exposes a `wp pushpull` command.
+
+Examples:
+
+1. `wp pushpull status`
+2. `wp pushpull domains`
+3. `wp pushpull config list`
+4. `wp pushpull config set branch main`
+5. `wp pushpull config enable-domain wordpress_pages`
+6. `wp pushpull commit wordpress_pages`
+7. `wp pushpull push`
+8. `wp pushpull commit-push-all`
+9. `wp pushpull pull-apply-all`
+
 ## Workflow
 
 The normal workflow is:
@@ -171,6 +205,11 @@ The normal workflow is:
 6. `Push` when you want local commits published to GitHub
 
 PushPull also performs a lightweight recurring remote-head check and visually highlights `Fetch` when the latest scheduled check suggests the remote branch has advanced since the last fetch.
+
+For whole-site bootstrap flows, PushPull also supports:
+
+1. `Commit + Push All` to snapshot and publish all enabled domains
+2. `Pull + Apply All` to import and apply all enabled domains on a bare target site
 
 If both local and remote changed, PushPull can persist conflicts, let you resolve them in the admin UI, and then finalize a merge commit.
 
@@ -198,6 +237,14 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 4. Surface unresolved logical-reference mapping issues, such as GeneratePress condition IDs that could not be converted to logical placeholders, instead of silently leaving mixed raw IDs and canonical refs.
 
 ## Changelog
+
+### 0.0.17
+
+1. Added new primary domains for WordPress comments, categories, and tags.
+2. Added generic managed-domain support for discovered custom post types and custom taxonomies, with opt-in enablement from a dedicated Domains screen.
+3. Moved domain selection out of Settings into a dedicated Domains page organized by WordPress core, installed plugin integrations, and custom content.
+4. Added bulk `Commit + Push All` and `Pull + Apply All` workflows for full-site bootstrap and deployment scenarios.
+5. Added a `wp pushpull` WP-CLI interface covering status, domains, configuration, sync operations, conflict resolution, and the new bulk workflows.
 
 ### 0.0.16
 
@@ -309,6 +356,10 @@ PushPull sends the following information to the configured provider over HTTPS:
 2. Your configured API token in the provider-specific authentication header
 3. Canonical JSON representations of the managed content you choose to commit and push
 4. Commit metadata such as commit messages and, if configured, author name and email
+
+In the current release, the managed content sent to the provider is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Categories, WordPress Comments, WordPress Menus, WordPress Pages, WordPress Posts, WordPress Tags, WordPress Custom CSS, GeneratePress Elements, explicitly opted-in WordPress Attachments, WordPress core configuration, generic discovered custom post types and taxonomies, WPML-backed translation management, and Real Media Library-backed media organization.
+
+PushPull does not send your whole WordPress database to the provider. It only sends the managed content represented by the enabled adapters.
 
 In the current release, the managed content sent to the provider is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Menus, WordPress Pages, WordPress Posts, WordPress Custom CSS, GeneratePress Elements, explicitly opted-in WordPress Attachments, WordPress core configuration, WPML-backed translation management, and Real Media Library-backed media organization.
 

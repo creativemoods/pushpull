@@ -83,7 +83,7 @@ final class SettingsPage
 
         echo '<div class="wrap pushpull-admin">';
         echo '<h1>' . esc_html__('PushPull Settings', 'pushpull') . '</h1>';
-        echo '<p class="pushpull-intro">' . esc_html__('Configure the remote provider, repository, branch, and managed content settings that drive PushPull fetch, merge, apply, and push workflows.', 'pushpull') . '</p>';
+        echo '<p class="pushpull-intro">' . esc_html__('Configure the remote provider, repository, branch, author identity, and operational behavior that drive PushPull fetch, merge, apply, and push workflows.', 'pushpull') . '</p>';
         $this->renderPrimaryNavigation();
         $notice = $this->notice();
         if ($notice !== null) {
@@ -122,6 +122,11 @@ final class SettingsPage
             '<a href="%s" class="nav-tab nav-tab-active">%s</a>',
             esc_url(admin_url('admin.php?page=' . self::MENU_SLUG)),
             esc_html__('Settings', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . DomainsPage::MENU_SLUG)),
+            esc_html__('Domains', 'pushpull')
         );
         printf(
             '<a href="%s" class="nav-tab">%s</a>',
@@ -178,34 +183,15 @@ final class SettingsPage
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Provider', 'pushpull'), esc_html($settings->providerKey));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Repository', 'pushpull'), esc_html(trim($settings->ownerOrWorkspace . '/' . $settings->repository, '/')));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Branch', 'pushpull'), esc_html($settings->branch));
-        $managedSets = [];
-        if ($settings->isManagedSetEnabled('generateblocks_global_styles')) {
-            $managedSets[] = 'GenerateBlocks global styles';
-        }
-        if ($settings->isManagedSetEnabled('generateblocks_conditions')) {
-            $managedSets[] = 'GenerateBlocks conditions';
-        }
-        if ($settings->isManagedSetEnabled('wordpress_block_patterns')) {
-            $managedSets[] = 'WordPress block patterns';
-        }
-        if ($settings->isManagedSetEnabled('wordpress_attachments')) {
-            $managedSets[] = 'WordPress attachments';
-        }
-        if ($settings->isManagedSetEnabled('wordpress_custom_css')) {
-            $managedSets[] = 'WordPress custom CSS';
-        }
-        if ($settings->isManagedSetEnabled('generatepress_elements')) {
-            $managedSets[] = 'GeneratePress elements';
-        }
-        if ($settings->isManagedSetEnabled('wordpress_pages')) {
-            $managedSets[] = 'WordPress pages';
-        }
-        if ($settings->isManagedSetEnabled('wordpress_posts')) {
-            $managedSets[] = 'WordPress posts';
-        }
-        printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Managed sets', 'pushpull'), esc_html($managedSets !== [] ? implode(', ', $managedSets) : 'Not enabled'));
+        printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Enabled domains', 'pushpull'), esc_html((string) count($settings->enabledManagedSets)));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Token', 'pushpull'), esc_html($settings->maskedApiToken() !== '' ? $settings->maskedApiToken() : 'Not stored'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Schema', 'pushpull'), esc_html((new SchemaMigrator())->installedVersion() ?: 'Not installed'));
+        printf(
+            '<dt>%s</dt><dd><a href="%s">%s</a></dd>',
+            esc_html__('Domain scope', 'pushpull'),
+            esc_url(admin_url('admin.php?page=' . DomainsPage::MENU_SLUG)),
+            esc_html__('Open Domains page', 'pushpull')
+        );
         echo '</dl>';
         echo '</div>';
     }

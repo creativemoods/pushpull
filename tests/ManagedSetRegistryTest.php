@@ -10,9 +10,11 @@ use PushPull\Content\Media\RmlMediaOrganizationAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
+use PushPull\Content\WordPress\WordPressCategoriesAdapter;
 use PushPull\Content\WordPress\WordPressMenusAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Content\WordPress\WordPressPostsAdapter;
+use PushPull\Content\WordPress\WordPressTagsAdapter;
 
 final class ManagedSetRegistryTest extends TestCase
 {
@@ -48,16 +50,18 @@ final class ManagedSetRegistryTest extends TestCase
     {
         $registry = new ManagedSetRegistry([
             new WordPressAttachmentsAdapter(),
+            new WordPressCategoriesAdapter(),
             new RmlMediaOrganizationAdapter(new \PushPull\Settings\SettingsRepository()),
             new WordPressCoreConfigurationAdapter(),
             new GeneratePressElementsAdapter(),
             new WordPressMenusAdapter(),
             new WordPressPostsAdapter(),
             new WordPressPagesAdapter(),
+            new WordPressTagsAdapter(),
         ]);
 
         self::assertSame(
-            ['wordpress_attachments', 'media_organization', 'wordpress_posts', 'wordpress_pages', 'wordpress_core_configuration', 'generatepress_elements', 'wordpress_menus'],
+            ['wordpress_attachments', 'wordpress_categories', 'media_organization', 'wordpress_posts', 'wordpress_pages', 'wordpress_core_configuration', 'generatepress_elements', 'wordpress_tags', 'wordpress_menus'],
             array_keys($registry->allInDependencyOrder())
         );
     }

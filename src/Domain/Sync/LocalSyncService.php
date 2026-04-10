@@ -8,11 +8,16 @@ namespace PushPull\Domain\Sync;
 
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
+use PushPull\Content\ConfigManagedContentAdapterInterface;
+use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Domain\Apply\ApplyManagedSetResult;
+use PushPull\Domain\Apply\ConfigManagedSetApplyService;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Apply\ManagedSetApplyServiceInterface;
+use PushPull\Domain\Apply\OverlayManagedSetApplyService;
 use PushPull\Domain\Diff\ManagedSetDiffResult;
 use PushPull\Domain\Diff\ManagedSetDiffService;
+use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Domain\Merge\ManagedSetMergeService;
 use PushPull\Domain\Merge\MergeManagedSetResult;
 use PushPull\Domain\Push\ManagedSetPushService;
@@ -23,6 +28,8 @@ use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\GitProviderFactoryInterface;
 use PushPull\Provider\GitRemoteConfig;
+use PushPull\Persistence\ContentMap\ContentMapRepository;
+use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Settings\SettingsRepository;
 use RuntimeException;
 
@@ -45,7 +52,10 @@ final class LocalSyncService implements SyncServiceInterface
         private readonly RemoteBranchResetService $remoteBranchResetService,
         private readonly LocalRepositoryInterface $localRepository,
         private readonly SettingsRepository $settingsRepository,
-        private readonly GitProviderFactoryInterface $providerFactory
+        private readonly GitProviderFactoryInterface $providerFactory,
+        private readonly ?RepositoryStateReader $repositoryStateReader = null,
+        private readonly ?ContentMapRepository $contentMapRepository = null,
+        private readonly ?WorkingStateRepository $workingStateRepository = null
     ) {
         $this->committersByManagedSetKey = $managedSetCommitters;
         $this->diffServicesByManagedSetKey = $managedSetDiffServices;
@@ -140,7 +150,10 @@ final class LocalSyncService implements SyncServiceInterface
     private function requireCommitter(string $managedSetKey): ManagedSetRepositoryCommitter
     {
         if (! isset($this->committersByManagedSetKey[$managedSetKey])) {
-            throw new RuntimeException(sprintf('Managed set "%s" cannot be committed.', $managedSetKey));
+            $this->committersByManagedSetKey[$managedSetKey] = new ManagedSetRepositoryCommitter(
+                $this->localRepository,
+                $this->requireAdapter($managedSetKey)
+            );
         }
 
         return $this->committersByManagedSetKey[$managedSetKey];
@@ -149,7 +162,15 @@ final class LocalSyncService implements SyncServiceInterface
     private function requireDiffService(string $managedSetKey): ManagedSetDiffService
     {
         if (! isset($this->diffServicesByManagedSetKey[$managedSetKey])) {
-            throw new RuntimeException(sprintf('Managed set "%s" cannot be diffed.', $managedSetKey));
+            if (! $this->repositoryStateReader instanceof RepositoryStateReader) {
+                throw new RuntimeException(sprintf('Managed set "%s" cannot be diffed.', $managedSetKey));
+            }
+
+            $this->diffServicesByManagedSetKey[$managedSetKey] = new ManagedSetDiffService(
+                $this->requireAdapter($managedSetKey),
+                $this->repositoryStateReader,
+                $this->localRepository
+            );
         }
 
         return $this->diffServicesByManagedSetKey[$managedSetKey];
@@ -158,7 +179,39 @@ final class LocalSyncService implements SyncServiceInterface
     private function requireApplyService(string $managedSetKey): ManagedSetApplyServiceInterface
     {
         if (! isset($this->applyServicesByManagedSetKey[$managedSetKey])) {
-            throw new RuntimeException(sprintf('Managed set "%s" cannot be applied.', $managedSetKey));
+            if (
+                ! $this->repositoryStateReader instanceof RepositoryStateReader
+                || ! $this->workingStateRepository instanceof WorkingStateRepository
+            ) {
+                throw new RuntimeException(sprintf('Managed set "%s" cannot be applied.', $managedSetKey));
+            }
+
+            $adapter = $this->requireAdapter($managedSetKey);
+
+            if ($adapter instanceof OverlayManagedContentAdapterInterface) {
+                $this->applyServicesByManagedSetKey[$managedSetKey] = new OverlayManagedSetApplyService(
+                    $adapter,
+                    $this->repositoryStateReader,
+                    $this->workingStateRepository
+                );
+            } elseif ($adapter instanceof ConfigManagedContentAdapterInterface) {
+                $this->applyServicesByManagedSetKey[$managedSetKey] = new ConfigManagedSetApplyService(
+                    $adapter,
+                    $this->repositoryStateReader,
+                    $this->workingStateRepository
+                );
+            } else {
+                if (! $this->contentMapRepository instanceof ContentMapRepository) {
+                    throw new RuntimeException(sprintf('Managed set "%s" cannot be applied.', $managedSetKey));
+                }
+
+                $this->applyServicesByManagedSetKey[$managedSetKey] = new ManagedSetApplyService(
+                    $adapter,
+                    $this->repositoryStateReader,
+                    $this->contentMapRepository,
+                    $this->workingStateRepository
+                );
+            }
         }
 
         return $this->applyServicesByManagedSetKey[$managedSetKey];
