@@ -1,9 +1,22 @@
 {
     "name": "creativemoods/pushpull",
     "description": "Git-backed content workflows for selected WordPress content domains.",
+    "keywords": [
+        "wordpress",
+        "plugin",
+        "git",
+        "devops",
+        "content sync"
+    ],
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
+    "homepage": "https://github.com/CreativeMoods/pushpull",
+    "support": {
+        "issues": "https://github.com/CreativeMoods/pushpull/issues",
+        "source": "https://github.com/CreativeMoods/pushpull"
+    },
     "require": {
+        "composer/installers": "^2.0",
         "php": "^8.1"
     },
     "require-dev": {
@@ -34,6 +47,9 @@
         "deploy-wordpress-svn": "sh bin/deploy-wordpress-svn.sh"
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true
+        }
     }
 }

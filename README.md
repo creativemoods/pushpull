@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.17
+Stable tag: 0.0.18
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -237,6 +237,10 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 4. Surface unresolved logical-reference mapping issues, such as GeneratePress condition IDs that could not be converted to logical placeholders, instead of silently leaving mixed raw IDs and canonical refs.
 
 ## Changelog
+
+### 0.0.18
+
+1. Added requirements for packagist.org
 
 ### 0.0.17
 
