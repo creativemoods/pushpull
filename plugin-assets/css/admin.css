@@ -594,6 +594,18 @@
     background: #fff;
 }
 
+.pushpull-domain-group > summary {
+    display: block;
+    cursor: pointer;
+    margin: -16px -16px 0;
+    padding: 16px 16px 0;
+    list-style: none;
+}
+
+.pushpull-domain-group > summary::-webkit-details-marker {
+    display: none;
+}
+
 .pushpull-domain-group--disabled {
     background: #f8fafc;
     border-style: dashed;

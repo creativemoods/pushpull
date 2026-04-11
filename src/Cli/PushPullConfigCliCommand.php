@@ -114,6 +114,8 @@ final class PushPullConfigCliCommand extends WP_CLI_Command
     /**
      * Enable one managed domain.
      *
+     * @subcommand enable-domain
+     *
      * ## OPTIONS
      *
      * <managed-set>
@@ -140,6 +142,8 @@ final class PushPullConfigCliCommand extends WP_CLI_Command
 
     /**
      * Disable one managed domain.
+     *
+     * @subcommand disable-domain
      *
      * ## OPTIONS
      *

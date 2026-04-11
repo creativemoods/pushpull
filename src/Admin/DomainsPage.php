@@ -108,7 +108,7 @@ final class DomainsPage
         );
         $this->renderSourcePanel(
             __('Custom Content', 'pushpull'),
-            __('PushPull now detects site-specific custom post types and taxonomies here. They are listed in a disabled discovery state until the generic adapter path is implemented.', 'pushpull'),
+            __('PushPull detects site-specific custom post types and taxonomies here and can manage them through the generic adapter path.', 'pushpull'),
             [],
             [],
             [],
@@ -297,16 +297,37 @@ final class DomainsPage
 
         foreach ($nestedPanels as $panel) {
             $panelClass = $panel['disabled'] ? ' pushpull-domain-group--disabled' : '';
-            printf('<div class="pushpull-domain-group%s">', esc_attr($panelClass));
-            printf('<h3>%s</h3>', esc_html($panel['title']));
+            $expandPanel = $this->panelHasCheckableEntries($panel['sections']);
+            printf(
+                '<details class="pushpull-domain-group%s"%s>',
+                esc_attr($panelClass),
+                $expandPanel ? ' open' : ''
+            );
+            printf('<summary><h3>%s</h3></summary>', esc_html($panel['title']));
             printf('<p class="description">%s</p>', esc_html($panel['description']));
             $this->renderDomainRoleSection(__('Primary domains', 'pushpull'), $panel['sections']['primary'], $panel['disabled'], __('No primary domains detected in this integration yet.', 'pushpull'));
-            $this->renderDomainRoleSection(__('Config domains', 'pushpull'), $panel['sections']['config'], true, __('No config domains detected in this integration yet.', 'pushpull'));
-            $this->renderDomainRoleSection(__('Overlay domains', 'pushpull'), $panel['sections']['overlay'], true, __('No overlay domains detected in this integration yet.', 'pushpull'));
-            echo '</div>';
+            $this->renderDomainRoleSection(__('Config domains', 'pushpull'), $panel['sections']['config'], $panel['disabled'], __('No config domains detected in this integration yet.', 'pushpull'));
+            $this->renderDomainRoleSection(__('Overlay domains', 'pushpull'), $panel['sections']['overlay'], $panel['disabled'], __('No overlay domains detected in this integration yet.', 'pushpull'));
+            echo '</details>';
         }
 
         echo '</section>';
+    }
+
+    /**
+     * @param array{primary: array<int, array<string, mixed>>, config: array<int, array<string, mixed>>, overlay: array<int, array<string, mixed>>} $sections
+     */
+    private function panelHasCheckableEntries(array $sections): bool
+    {
+        foreach (['primary', 'config', 'overlay'] as $role) {
+            foreach ($sections[$role] as $entry) {
+                if (! empty($entry['available'])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

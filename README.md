@@ -5,17 +5,21 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.18
+Stable tag: 0.0.19
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
 Git-backed content workflows for selected WordPress content domains.
+
+Project homepage: https://creativemoods.pt/pushpull/
 
 > This is a beta plugin. It is still under active development, has limited functionality, and currently supports only a narrow subset of the intended PushPull feature set.
 
 ## Description
 
 PushPull stores selected WordPress content in a Git repository using a canonical JSON representation instead of raw database dumps.
+
+This project is also documented through a DevOps-focused article series that explains how to efficiently manage a WordPress stack with Bedrock and PushPull, starting here: https://creativemoods.pt/devops-with-wordpress/
 
 The current release supports these managed domains:
 
@@ -125,6 +129,15 @@ That design keeps content stable across environments and makes reorder-only chan
 1. Clone this repository into `wp-content/plugins/pushpull`.
 2. Run `composer install`.
 3. Activate PushPull in WordPress.
+
+### Install via Composer / Packagist
+
+In a Composer-managed WordPress project such as Bedrock:
+
+1. Require the plugin:
+   `composer require creativemoods/pushpull`
+2. Make sure the root project allows `composer/installers` and installs `type: wordpress-plugin` packages into your plugins directory
+3. Activate PushPull in WordPress
 
 ## Configuration
 
@@ -237,6 +250,12 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 4. Surface unresolved logical-reference mapping issues, such as GeneratePress condition IDs that could not be converted to logical placeholders, instead of silently leaving mixed raw IDs and canonical refs.
 
 ## Changelog
+
+### 0.0.19
+
+1. Fixed the `wp pushpull config enable-domain` and `disable-domain` subcommands so domain enablement can be managed reliably from WP-CLI.
+2. Fixed the Domains page so available plugin overlay domains such as WPML translation management and Real Media Library media organization are checkable again.
+3. Improved the Domains page by collapsing integration groups that currently have nothing checkable, reducing placeholder noise while keeping the long-term structure visible.
 
 ### 0.0.18
 
