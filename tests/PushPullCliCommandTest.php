@@ -38,6 +38,7 @@ use PushPull\Provider\RemoteCommit;
 use PushPull\Provider\RemoteRef;
 use PushPull\Provider\RemoteTree;
 use PushPull\Provider\UpdateRefResult;
+use PushPull\Integration\Wpml\WpmlSiteKeyActivationService;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use RuntimeException;
@@ -51,6 +52,9 @@ final class PushPullCliCommandTest extends TestCase
         \WP_CLI::$warnings = [];
         \WP_CLI::$errors = [];
         \WP_CLI::$commands = [];
+        $GLOBALS['pushpull_test_wpml_site_keys'] = [];
+        $GLOBALS['pushpull_test_wpml_save_site_key_calls'] = [];
+        $GLOBALS['pushpull_test_wpml_save_site_key_error'] = '';
     }
 
     public function testDomainsListsEnabledAndAvailableDomains(): void
@@ -128,6 +132,21 @@ final class PushPullCliCommandTest extends TestCase
         );
     }
 
+    public function testWpmlRegisterSiteKeyRegistersThroughInstaller(): void
+    {
+        $settingsRepository = new SettingsRepository();
+        $registry = new ManagedSetRegistry([
+            new GenerateBlocksGlobalStylesAdapter(),
+        ]);
+        $command = $this->buildCommand($settingsRepository, $registry, new CliSyncServiceStub());
+
+        $command->wpmlRegisterSiteKey(['abC-123'], []);
+
+        self::assertSame('abc123', strtolower((string) ($GLOBALS['pushpull_test_wpml_site_keys']['wpml'] ?? '')));
+        self::assertSame('Registered WPML site key through the installer for repository wpml.', \WP_CLI::$successes[0]);
+        self::assertSame('wpml', $GLOBALS['pushpull_test_wpml_save_site_key_calls'][0]['repository_id']);
+    }
+
     private function buildCommand(
         SettingsRepository $settingsRepository,
         ManagedSetRegistry $registry,
@@ -146,7 +165,8 @@ final class PushPullCliCommandTest extends TestCase
             new RemoteRepositoryInitializer($providerFactory, $localRepository),
             new ManagedSetConflictResolutionService($localRepository, new WorkingStateRepository($wpdb)),
             new FetchAvailabilityService($settingsRepository, $providerFactory, $localRepository),
-            $localRepository
+            $localRepository,
+            new WpmlSiteKeyActivationService()
         );
     }
 }

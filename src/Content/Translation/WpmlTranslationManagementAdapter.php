@@ -14,6 +14,7 @@ use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Content\OverlayManagedSetInterface;
 use PushPull\Content\WordPress\WordPressMenusAdapter;
+use PushPull\Integration\Wpml\WpmlConfigurationApplier;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use PushPull\Settings\SettingsRepository;
@@ -30,6 +31,7 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
     private const WPML_SETTINGS_OPTION = 'icl_sitepress_settings';
     private const CACHE_GROUP = 'pushpull_wpml';
     private const CACHE_KEY_TRANSLATION_ROWS = 'translation_rows';
+    private const CACHE_KEY_HAS_TRANSLATION_STORAGE = 'has_translation_storage';
     /**
      * @var array<string, array{entityType: string, postType?: string, taxonomy?: string, contentType: string}>
      */
@@ -70,12 +72,12 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
      */
     public function getManagedSetDependencies(): array
     {
-        return array_keys(self::SUPPORTED_DOMAINS);
+        return array_merge(['wpml_configuration'], array_keys(self::SUPPORTED_DOMAINS));
     }
 
     public function isAvailable(): bool
     {
-        return is_array($this->wpmlSettings()) && $this->translationRows() !== [];
+        return (new WpmlConfigurationApplier())->isAvailable();
     }
 
     public function exportAll(): array
@@ -629,6 +631,42 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
         $settings = maybe_unserialize(get_option(self::WPML_SETTINGS_OPTION, []));
 
         return is_array($settings) ? $settings : [];
+    }
+
+    private function hasTranslationStorage(): bool
+    {
+        if (isset($GLOBALS['pushpull_test_wpml_translations']) && is_array($GLOBALS['pushpull_test_wpml_translations'])) {
+            return true;
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return false;
+        }
+
+        $table = $wpdb->prefix . 'icl_translations';
+
+        $cached = wp_cache_get(self::CACHE_KEY_HAS_TRANSLATION_STORAGE, self::CACHE_GROUP);
+
+        if (is_bool($cached)) {
+            return $cached;
+        }
+
+        if (method_exists($wpdb, 'get_var')) {
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- Cached via wp_cache_get()/wp_cache_set() around the table existence probe.
+            $result = $wpdb->get_var("SHOW TABLES LIKE '{$table}'");
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+            $hasStorage = is_string($result) && $result === $table;
+            wp_cache_set(self::CACHE_KEY_HAS_TRANSLATION_STORAGE, $hasStorage, self::CACHE_GROUP);
+
+            return $hasStorage;
+        }
+
+        return true;
     }
 
     /**

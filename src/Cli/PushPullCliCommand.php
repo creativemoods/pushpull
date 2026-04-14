@@ -16,6 +16,7 @@ use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\Exception\UnsupportedProviderException;
 use PushPull\Provider\GitProviderFactoryInterface;
 use PushPull\Provider\GitRemoteConfig;
+use PushPull\Integration\Contracts\SiteKeyActivationServiceInterface;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use RuntimeException;
@@ -33,7 +34,8 @@ final class PushPullCliCommand extends WP_CLI_Command
         private readonly RemoteRepositoryInitializer $remoteRepositoryInitializer,
         private readonly ManagedSetConflictResolutionService $conflictResolutionService,
         private readonly FetchAvailabilityService $fetchAvailabilityService,
-        private readonly LocalRepositoryInterface $localRepository
+        private readonly LocalRepositoryInterface $localRepository,
+        private readonly SiteKeyActivationServiceInterface $wpmlSiteKeyActivationService
     ) {
     }
 
@@ -52,6 +54,7 @@ final class PushPullCliCommand extends WP_CLI_Command
                 'managed_set' => $managedSetKey,
                 'label' => $adapter->getManagedSetLabel(),
                 'available' => $adapter->isAvailable() ? 'yes' : 'no',
+                'branch_state' => array_key_exists($adapter->getManifestPath(), $diff->local->files) ? 'present' : 'absent',
                 'live_local' => $diff->liveToLocal->hasChanges() ? 'changed' : 'clean',
                 'local_remote' => $diff->localToRemote->hasChanges() ? 'changed' : 'clean',
                 'relationship' => $diff->repositoryRelationship->status,
@@ -68,7 +71,19 @@ final class PushPullCliCommand extends WP_CLI_Command
             return;
         }
 
-        $this->renderRows($rows, ['managed_set', 'label', 'available', 'live_local', 'local_remote', 'relationship']);
+        $this->renderRows($rows, ['managed_set', 'label', 'available', 'branch_state', 'live_local', 'local_remote', 'relationship']);
+
+        $absentManagedSets = array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => ($row['branch_state'] ?? '') === 'absent'
+        ));
+
+        if ($absentManagedSets !== []) {
+            WP_CLI::warning(sprintf(
+                'Enabled domain(s) absent from the current local branch: %s',
+                implode(', ', array_map(static fn (array $row): string => (string) $row['managed_set'], $absentManagedSets))
+            ));
+        }
     }
 
     /**
@@ -573,6 +588,36 @@ final class PushPullCliCommand extends WP_CLI_Command
             'Finalized merge on branch %s with merge commit %s.',
             $result->branch,
             $result->commit->hash
+        ));
+    }
+
+    /**
+     * Register a WPML site key through WPML's internal installer path.
+     *
+     * @subcommand wpml-register-site-key
+     *
+     * ## OPTIONS
+     *
+     * <site-key>
+     * : WPML site key to validate and register.
+     */
+    public function wpmlRegisterSiteKey(array $args, array $assocArgs): void
+    {
+        $siteKey = (string) ($args[0] ?? '');
+
+        if ($siteKey === '') {
+            WP_CLI::error('A WPML site key is required.');
+        }
+
+        try {
+            $result = $this->wpmlSiteKeyActivationService->activateSiteKey($siteKey);
+        } catch (RuntimeException $exception) {
+            $this->failFromException($exception);
+        }
+
+        WP_CLI::success(sprintf(
+            'Registered WPML site key through the installer for repository %s.',
+            $result->integrationKey
         ));
     }
 

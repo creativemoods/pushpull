@@ -428,11 +428,11 @@ final class DomainsPage
                 'label' => 'GeneratePress',
                 'description' => __('GeneratePress-managed layout and element domains.', 'pushpull'),
             ],
-            'translation_management' => [
+            'translation_management', 'wpml_configuration' => [
                 'type' => 'plugin',
                 'key' => 'wpml',
                 'label' => 'WPML',
-                'description' => __('Translation relationship overlays backed by the active translation plugin.', 'pushpull'),
+                'description' => __('Translation configuration and relationship domains backed by the active translation plugin.', 'pushpull'),
             ],
             'media_organization' => [
                 'type' => 'plugin',

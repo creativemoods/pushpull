@@ -16,6 +16,11 @@ $GLOBALS['pushpull_test_term_meta'] ??= [];
 $GLOBALS['pushpull_test_next_term_id'] ??= 1;
 $GLOBALS['pushpull_test_next_post_id'] ??= 1;
 $GLOBALS['pushpull_test_wpml_translations'] ??= [];
+$GLOBALS['pushpull_test_wpml_site_keys'] ??= [];
+$GLOBALS['pushpull_test_wpml_save_site_key_calls'] ??= [];
+$GLOBALS['pushpull_test_wpml_save_site_key_error'] ??= '';
+$GLOBALS['pushpull_test_deleted_site_transients'] ??= [];
+$GLOBALS['pushpull_test_actions'] ??= [];
 $GLOBALS['pushpull_test_theme_mods'] ??= [];
 
 if (! defined('ABSPATH')) {
@@ -78,6 +83,206 @@ if (! class_exists('WP_CLI')) {
     }
 }
 
+if (! class_exists('WP_Installer')) {
+    class WP_Installer
+    {
+        private static ?self $instance = null;
+
+        public static function instance(): self
+        {
+            if (self::$instance === null) {
+                self::$instance = new self();
+            }
+
+            return self::$instance;
+        }
+
+        public function save_site_key(array $args = []): array
+        {
+            $GLOBALS['pushpull_test_wpml_save_site_key_calls'][] = $args;
+
+            $repositoryId = (string) ($args['repository_id'] ?? '');
+            $siteKey = preg_replace('/[^A-Za-z0-9]/', '', (string) ($args['site_key'] ?? '')) ?? '';
+            $nonce = (string) ($args['nonce'] ?? '');
+
+            if ($repositoryId === '' || ! wp_verify_nonce($nonce, 'save_site_key_' . $repositoryId)) {
+                return ['error' => 'Invalid site key request.'];
+            }
+
+            $configuredError = (string) ($GLOBALS['pushpull_test_wpml_save_site_key_error'] ?? '');
+
+            if ($configuredError !== '') {
+                return ['error' => $configuredError];
+            }
+
+            $GLOBALS['pushpull_test_wpml_site_keys'][$repositoryId] = $siteKey;
+            do_action('check_posthog_should_record');
+
+            return ['error' => ''];
+        }
+
+        public function get_repository_site_key(string $repositoryId): string|false
+        {
+            return $GLOBALS['pushpull_test_wpml_site_keys'][$repositoryId] ?? false;
+        }
+    }
+}
+
+if (! class_exists('PushPull_Test_SitePress')) {
+    class PushPull_Test_SitePress
+    {
+        public function get_setting(string $key, mixed $default = false): mixed
+        {
+            $settings = get_option('icl_sitepress_settings', []);
+
+            return is_array($settings) && array_key_exists($key, $settings) ? $settings[$key] : $default;
+        }
+
+        public function set_setting(string $key, mixed $value, bool $save = false): void
+        {
+            $settings = get_option('icl_sitepress_settings', []);
+            $settings = is_array($settings) ? $settings : [];
+            $settings[$key] = $value;
+
+            if ($save) {
+                update_option('icl_sitepress_settings', $settings);
+            } else {
+                $GLOBALS['pushpull_test_options']['icl_sitepress_settings'] = $settings;
+            }
+        }
+
+        public function save_settings(): void
+        {
+            $settings = get_option('icl_sitepress_settings', []);
+            update_option('icl_sitepress_settings', is_array($settings) ? $settings : []);
+        }
+
+        public function get_default_language(): string
+        {
+            return (string) $this->get_setting('default_language', '');
+        }
+
+        public function set_default_language(string $code): void
+        {
+            $this->set_setting('default_language', $code, true);
+            $this->set_setting('admin_default_language', $code, true);
+        }
+
+        /**
+         * @return array<string, array{code: string, active: string}>
+         */
+        public function get_active_languages(bool $refresh = false): array
+        {
+            $languages = [];
+
+            foreach ((array) $this->get_setting('active_languages', []) as $languageCode) {
+                $languageCode = (string) $languageCode;
+
+                if ($languageCode !== '') {
+                    $languages[$languageCode] = [
+                        'code' => $languageCode,
+                        'active' => '1',
+                    ];
+                }
+            }
+
+            return $languages;
+        }
+
+        public function is_setup_complete(): bool
+        {
+            return (bool) $this->get_setting('setup_complete', false);
+        }
+
+        public function cpt_slug_translation_turned_on(string $postType): bool
+        {
+            $settings = get_option('icl_sitepress_settings', []);
+            $settings = is_array($settings) ? $settings : [];
+
+            return ! empty($settings['posts_slug_translation']['types'][$postType])
+                && (bool) get_option('wpml_base_slug_translation', false);
+        }
+
+        public function verify_post_translations(string $postType): void
+        {
+            $GLOBALS['pushpull_test_verified_post_translations'][] = $postType;
+        }
+    }
+}
+
+if (! class_exists('WPML_Installation')) {
+    class WPML_Installation
+    {
+        public function __construct(private readonly wpdb $wpdb, private readonly PushPull_Test_SitePress $sitepress)
+        {
+        }
+
+        public function finish_step1(string $initialLanguageCode): void
+        {
+            $this->sitepress->set_setting('existing_content_language_verified', 1, true);
+            $this->sitepress->set_setting('default_language', $initialLanguageCode, true);
+            $this->sitepress->set_setting('admin_default_language', $initialLanguageCode, true);
+            $this->sitepress->set_setting('setup_wizard_step', 2, true);
+        }
+
+        /**
+         * @param string[] $activeLanguages
+         */
+        public function finish_step2(array $activeLanguages): bool
+        {
+            return $this->set_active_languages($activeLanguages);
+        }
+
+        /**
+         * @param string[] $activeLanguages
+         */
+        public function set_active_languages(array $activeLanguages): bool
+        {
+            $this->sitepress->set_setting('active_languages', array_values($activeLanguages), true);
+            $this->sitepress->set_setting('setup_wizard_step', 3, true);
+
+            return true;
+        }
+
+        public function finish_step3(): void
+        {
+            $this->sitepress->set_setting('setup_wizard_step', 4, true);
+        }
+
+        public function finish_installation(): void
+        {
+            $this->sitepress->set_setting('setup_complete', 1, true);
+            update_option('wpml_start_version', 'test-version');
+            do_action('wpml_setup_completed');
+        }
+    }
+}
+
+if (! class_exists('PushPull_Test_WPML_Core_LanguageNegotiation')) {
+    class PushPull_Test_WPML_Core_LanguageNegotiation
+    {
+        public static function saveMode(int|string $mode): void
+        {
+            $mappedMode = match ($mode) {
+                'directory', 1 => 1,
+                'domain', 2 => 2,
+                'parameter', 3 => 3,
+                default => 1,
+            };
+
+            if (! isset($GLOBALS['sitepress']) || ! $GLOBALS['sitepress'] instanceof PushPull_Test_SitePress) {
+                $GLOBALS['sitepress'] = new PushPull_Test_SitePress();
+            }
+
+            $GLOBALS['sitepress']->set_setting('language_negotiation_type', $mappedMode, true);
+        }
+    }
+
+    class_alias('PushPull_Test_WPML_Core_LanguageNegotiation', 'WPML\\Core\\LanguageNegotiation');
+}
+
+$GLOBALS['sitepress'] ??= new PushPull_Test_SitePress();
+
 if (! function_exists('sanitize_title')) {
     function sanitize_title(string $title): string
     {
@@ -116,6 +321,20 @@ if (! function_exists('wp_strip_all_tags')) {
         }
 
         return trim($value);
+    }
+}
+
+if (! function_exists('wp_create_nonce')) {
+    function wp_create_nonce(string $action = '-1'): string
+    {
+        return 'nonce:' . $action;
+    }
+}
+
+if (! function_exists('wp_verify_nonce')) {
+    function wp_verify_nonce(string $nonce, string|int $action = -1): int|false
+    {
+        return $nonce === 'nonce:' . $action ? 1 : false;
     }
 }
 
@@ -171,6 +390,16 @@ if (! function_exists('__')) {
     }
 }
 
+if (! function_exists('do_action')) {
+    function do_action(string $hookName, mixed ...$args): void
+    {
+        $GLOBALS['pushpull_test_actions'][] = [
+            'hook' => $hookName,
+            'args' => $args,
+        ];
+    }
+}
+
 if (! function_exists('esc_html__')) {
     function esc_html__(string $text, ?string $domain = null): string
     {
@@ -196,6 +425,15 @@ if (! function_exists('admin_url')) {
     function admin_url(string $path = ''): string
     {
         return 'https://source.example.test/wp-admin/' . ltrim($path, '/');
+    }
+}
+
+if (! function_exists('delete_site_transient')) {
+    function delete_site_transient(string $transient): bool
+    {
+        $GLOBALS['pushpull_test_deleted_site_transients'][] = $transient;
+
+        return true;
     }
 }
 
@@ -1618,6 +1856,35 @@ if (! class_exists('wpdb')) {
             return $this->insert($table, $data, $format);
         }
 
+        public function update(string $table, array $data, array $where, array $format = [], array $whereFormat = []): int|false
+        {
+            if (! isset($this->tables[$table])) {
+                return 0;
+            }
+
+            $updated = 0;
+
+            foreach ($this->tables[$table] as $primaryKey => $row) {
+                $matches = true;
+
+                foreach ($where as $column => $value) {
+                    if ((string) ($row[$column] ?? '') !== (string) $value) {
+                        $matches = false;
+                        break;
+                    }
+                }
+
+                if (! $matches) {
+                    continue;
+                }
+
+                $this->tables[$table][$primaryKey] = array_merge($row, $data);
+                $updated++;
+            }
+
+            return $updated;
+        }
+
         public function delete(string $table, array $where, array $where_format = []): int|false
         {
             if (! isset($this->tables[$table])) {
@@ -1681,6 +1948,19 @@ if (! class_exists('wpdb')) {
             return null;
         }
 
+        public function get_var(mixed $query, int $x = 0, int $y = 0): mixed
+        {
+            $row = $this->get_row($query, ARRAY_A);
+
+            if (! is_array($row)) {
+                return null;
+            }
+
+            $values = array_values($row);
+
+            return $values[$x] ?? null;
+        }
+
         public function get_results(mixed $query, string $output = ARRAY_A): array
         {
             if (is_string($query)) {
@@ -1735,7 +2015,8 @@ if (! class_exists('wpdb')) {
          */
         private function rowMatchesQuery(string $query, array $args, array $row): bool
         {
-            $matchCount = preg_match_all('/([a-z_]+)\s*=\s*%(?:s|d)/i', $query, $matches);
+            $normalizedQuery = preg_replace('/\s+/', ' ', $query) ?? $query;
+            $matchCount = preg_match_all('/([a-z_]+)\s*=\s*%(?:s|d)/i', $normalizedQuery, $matches);
 
             if ($matchCount === false || $matchCount === 0) {
                 foreach (['hash', 'ref_name', 'id'] as $column) {
@@ -1762,7 +2043,11 @@ if (! class_exists('wpdb')) {
 
         private function tableUsesAutoIncrement(string $table): bool
         {
-            return str_contains($table, 'working_state') || str_contains($table, 'content_map') || str_contains($table, 'operations');
+            return str_contains($table, 'working_state')
+                || str_contains($table, 'content_map')
+                || str_contains($table, 'operations')
+                || str_contains($table, 'icl_strings')
+                || str_contains($table, 'icl_string_translations');
         }
     }
 }

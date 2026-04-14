@@ -24,6 +24,7 @@ use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use PushPull\Support\Operations\AsyncBranchOperationRunner;
 use PushPull\Support\Operations\OperationExecutor;
 use RuntimeException;
+use Throwable;
 
 final class ManagedContentPage
 {
@@ -113,8 +114,17 @@ final class ManagedContentPage
         echo '<div class="wrap pushpull-admin">';
         echo '<h1>' . esc_html__('Managed Content', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('Review managed content state across all enabled domains, then drill into a specific managed set for fetch, merge, apply, commit, and push actions.', 'pushpull') . '</p>';
-        $this->renderPrimaryNavigation($settings);
-        $this->renderManagedSetTabs($settings, $activeManagedSetKey);
+
+        try {
+            $this->renderPrimaryNavigation($settings);
+            $this->renderManagedSetTabs($settings, $activeManagedSetKey);
+        } catch (Throwable $throwable) {
+            $this->renderScreenErrorNotice(
+                __('Managed Content actions are temporarily unavailable because PushPull could not compute branch status.', 'pushpull'),
+                $throwable
+            );
+        }
+
         if ($commitNotice !== null) {
             printf(
                 '<div class="notice notice-%1$s"><p>%2$s</p></div>',
@@ -122,10 +132,18 @@ final class ManagedContentPage
                 esc_html($commitNotice['message'])
             );
         }
-        if ($activeManagedSetKey === null) {
-            $this->renderOverview($settings);
-        } else {
-            $this->renderManagedSetDetail($settings, $this->managedSetRegistry->get($activeManagedSetKey));
+
+        try {
+            if ($activeManagedSetKey === null) {
+                $this->renderOverview($settings);
+            } else {
+                $this->renderManagedSetDetail($settings, $this->managedSetRegistry->get($activeManagedSetKey));
+            }
+        } catch (Throwable $throwable) {
+            $this->renderScreenErrorNotice(
+                __('Managed Content details are temporarily unavailable because PushPull could not build the current domain state.', 'pushpull'),
+                $throwable
+            );
         }
         $this->renderAsyncOperationModal();
         echo '</div>';
@@ -191,6 +209,10 @@ final class ManagedContentPage
         $this->statusCard(__('Merge / conflict state', 'pushpull'), $this->mergeStateSummary($workingState));
         echo '</div>';
 
+        if ($diffResult !== null && $this->isManagedSetAbsentFromLocalBranch($managedContentAdapter, $diffResult)) {
+            echo '<div class="notice notice-warning inline"><p>' . esc_html__('This enabled domain is absent from the current local branch. Bulk apply will currently treat it as empty for this branch state.', 'pushpull') . '</p></div>';
+        }
+
         echo '<div class="pushpull-panel">';
         printf('<h2>%s</h2>', esc_html($managedContentAdapter->getManagedSetLabel()));
         echo '<div class="pushpull-button-grid">';
@@ -221,6 +243,7 @@ final class ManagedContentPage
         $conflictedSetCount = 0;
         $enabledAdapters = $this->enabledManagedSetAdapters($settings);
         $enabledSetCount = count($enabledAdapters);
+        $absentFromLocalBranch = [];
 
         foreach ($enabledAdapters as $managedSetKey => $adapter) {
             $enabled = true;
@@ -234,6 +257,10 @@ final class ManagedContentPage
 
             if ($workingState !== null && $workingState->hasConflicts()) {
                 $conflictedSetCount++;
+            }
+
+            if ($diffResult !== null && $this->isManagedSetAbsentFromLocalBranch($adapter, $diffResult)) {
+                $absentFromLocalBranch[] = $adapter->getManagedSetLabel();
             }
 
             $overviewRows[] = [
@@ -265,6 +292,13 @@ final class ManagedContentPage
         $this->statusCard(__('Last local commit', 'pushpull'), $this->localRepository->getHeadCommit($settings->branch)?->hash ?? __('None recorded', 'pushpull'));
         $this->statusCard(__('Branch', 'pushpull'), $settings->branch);
         echo '</div>';
+
+        if ($absentFromLocalBranch !== []) {
+            echo '<div class="notice notice-warning inline"><p>' . esc_html(sprintf(
+                'Enabled domain(s) absent from the current local branch: %s. Pull + Apply All will currently treat them as empty for this branch state.',
+                implode(', ', $absentFromLocalBranch)
+            )) . '</p></div>';
+        }
 
         echo '<div class="pushpull-panel">';
         echo '<h2>' . esc_html__('All Managed Sets', 'pushpull') . '</h2>';
@@ -461,9 +495,9 @@ final class ManagedContentPage
         try {
             $snapshot = $managedContentAdapter->exportSnapshot();
             $items = $snapshot->items;
-        } catch (ManagedContentExportException $exception) {
+        } catch (Throwable $throwable) {
             return [
-                'summary' => $exception->getMessage(),
+                'summary' => $throwable->getMessage(),
                 'paths' => [],
             ];
         }
@@ -504,9 +538,18 @@ final class ManagedContentPage
     {
         try {
             return $this->syncService->diff($managedSetKey);
-        } catch (ManagedContentExportException | ProviderException | RuntimeException) {
+        } catch (Throwable) {
             return null;
         }
+    }
+
+    private function renderScreenErrorNotice(string $message, Throwable $throwable): void
+    {
+        printf(
+            '<div class="notice notice-error inline"><p>%1$s</p><p><code>%2$s</code></p></div>',
+            esc_html($message),
+            esc_html($throwable->getMessage())
+        );
     }
 
     private function uncommittedSummary(ManagedSetDiffResult $diffResult): string
@@ -514,6 +557,11 @@ final class ManagedContentPage
         return $diffResult->liveToLocal->hasChanges()
             ? sprintf('%d changed file(s)', $diffResult->liveToLocal->changedCount())
             : 'Clean';
+    }
+
+    private function isManagedSetAbsentFromLocalBranch(ManifestManagedContentAdapterInterface $managedContentAdapter, ManagedSetDiffResult $diffResult): bool
+    {
+        return ! array_key_exists($managedContentAdapter->getManifestPath(), $diffResult->local->files);
     }
 
     private function renderDiffList(

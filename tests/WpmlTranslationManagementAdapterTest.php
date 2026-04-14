@@ -18,6 +18,14 @@ final class WpmlTranslationManagementAdapterTest extends TestCase
         $GLOBALS['pushpull_test_generateblocks_posts'] = [];
         $GLOBALS['pushpull_test_generateblocks_meta'] = [];
         $GLOBALS['pushpull_test_wpml_translations'] = [];
+        $GLOBALS['sitepress'] = new \PushPull_Test_SitePress();
+    }
+
+    public function testAdapterIsAvailableWhenWpmlIntegrationIsPresentEvenBeforeTranslationsExist(): void
+    {
+        $adapter = new WpmlTranslationManagementAdapter(new SettingsRepository());
+
+        self::assertTrue($adapter->isAvailable());
     }
 
     public function testExportScopesWpmlRowsToEnabledManagedPrimaryDomains(): void

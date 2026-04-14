@@ -5,7 +5,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.19
+Stable tag: 0.0.20
 License: GPLv2
 License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -39,6 +39,7 @@ The current release supports these managed domains:
    generic discovered custom post types and taxonomies
 2. Config domains:
    `wordpress_core_configuration`
+   `wpml_configuration`
 3. Overlay domains:
    `translation_management` (WPML-backed)
    `media_organization` (Real Media Library-backed)
@@ -87,6 +88,7 @@ This is an early, focused release. At the moment, PushPull is intentionally limi
    `wordpress/custom-css/`
    `wordpress/attachments/`
    `wordpress/configuration/`
+   `wpml/configuration/`
    `wordpress/generatepress-elements/`
    `wordpress/custom-post-types/<slug>/`
    `wordpress/custom-taxonomies/<slug>/`
@@ -256,6 +258,13 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 1. Fixed the `wp pushpull config enable-domain` and `disable-domain` subcommands so domain enablement can be managed reliably from WP-CLI.
 2. Fixed the Domains page so available plugin overlay domains such as WPML translation management and Real Media Library media organization are checkable again.
 3. Improved the Domains page by collapsing integration groups that currently have nothing checkable, reducing placeholder noise while keeping the long-term structure visible.
+
+### 0.0.20
+
+1. Added a new `wpml_configuration` config domain that exports and applies core WPML setup state, including default language, active languages, URL format, post type translation modes, and translated post type slugs.
+2. Refactored WPML activation logic into the integration layer and added a reusable site-key activation service instead of leaving the registration spike in ad hoc CLI-only code.
+3. Improved WPML setup and translation-management availability handling on bare installs so WPML domains are selectable earlier in the bootstrap flow.
+4. Hardened WPML slug-translation apply and export behavior, including persistence of translated slug values and more resilient handling of cache and table state during tests and apply operations.
 
 ### 0.0.18
 

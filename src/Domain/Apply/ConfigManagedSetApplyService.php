@@ -7,6 +7,7 @@ namespace PushPull\Domain\Apply;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Content\ConfigManagedContentAdapterInterface;
+use PushPull\Content\Exception\ManagedContentExportException;
 use PushPull\Content\ManagedContentItem;
 use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
@@ -24,10 +25,10 @@ final class ConfigManagedSetApplyService implements ManagedSetApplyServiceInterf
 
     public function apply(PushPullSettings $settings): ApplyManagedSetResult
     {
-        ['commitHash' => $commitHash, 'snapshot' => $snapshot, 'items' => $items] = $this->loadSnapshot($settings);
+        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys, 'items' => $items] = $this->loadSnapshot($settings);
         $updatedCount = 0;
 
-        foreach ($snapshot->orderedLogicalKeys as $logicalKey) {
+        foreach ($orderedLogicalKeys as $logicalKey) {
             $item = $items[$logicalKey] ?? null;
 
             if (! $item instanceof ManagedContentItem) {
@@ -51,11 +52,11 @@ final class ConfigManagedSetApplyService implements ManagedSetApplyServiceInterf
 
     public function prepareApply(PushPullSettings $settings): array
     {
-        ['commitHash' => $commitHash, 'snapshot' => $snapshot] = $this->loadSnapshot($settings);
+        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys] = $this->loadSnapshot($settings);
 
         return [
             'commitHash' => $commitHash,
-            'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
+            'orderedLogicalKeys' => $orderedLogicalKeys,
         ];
     }
 
@@ -82,7 +83,7 @@ final class ConfigManagedSetApplyService implements ManagedSetApplyServiceInterf
     }
 
     /**
-     * @return array{commitHash: string, snapshot: \PushPull\Content\ManagedContentSnapshot, items: array<string, ManagedContentItem>}
+     * @return array{commitHash: string, orderedLogicalKeys: array<int, string>, items: array<string, ManagedContentItem>}
      */
     private function loadSnapshot(PushPullSettings $settings): array
     {
@@ -106,7 +107,20 @@ final class ConfigManagedSetApplyService implements ManagedSetApplyServiceInterf
             }
         }
 
-        $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($files);
+        try {
+            $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($files);
+        } catch (ManagedContentExportException $exception) {
+            if ($exception->getMessage() !== 'Managed set manifest is missing from the local branch.') {
+                throw $exception;
+            }
+
+            return [
+                'commitHash' => $state->commitHash,
+                'orderedLogicalKeys' => [],
+                'items' => [],
+            ];
+        }
+
         $items = [];
 
         foreach ($snapshot->items as $item) {
@@ -115,7 +129,7 @@ final class ConfigManagedSetApplyService implements ManagedSetApplyServiceInterf
 
         return [
             'commitHash' => $state->commitHash,
-            'snapshot' => $snapshot,
+            'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
             'items' => $items,
         ];
     }

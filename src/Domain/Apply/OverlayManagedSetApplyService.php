@@ -8,6 +8,7 @@ namespace PushPull\Domain\Apply;
 
 use PushPull\Content\ManagedContentItem;
 use PushPull\Content\OverlayManagedContentAdapterInterface;
+use PushPull\Content\Exception\ManagedContentExportException;
 use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Settings\PushPullSettings;
@@ -24,12 +25,12 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
 
     public function apply(PushPullSettings $settings): ApplyManagedSetResult
     {
-        ['commitHash' => $commitHash, 'snapshot' => $snapshot, 'items' => $items] = $this->loadSnapshot($settings);
+        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys, 'items' => $items] = $this->loadSnapshot($settings);
         $createdCount = 0;
         $updatedCount = 0;
         $desiredLogicalKeys = [];
 
-        foreach ($snapshot->orderedLogicalKeys as $menuOrder => $logicalKey) {
+        foreach ($orderedLogicalKeys as $menuOrder => $logicalKey) {
             $item = $items[$logicalKey] ?? null;
 
             if (! $item instanceof ManagedContentItem) {
@@ -61,11 +62,11 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
 
     public function prepareApply(PushPullSettings $settings): array
     {
-        ['commitHash' => $commitHash, 'snapshot' => $snapshot] = $this->loadSnapshot($settings);
+        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys] = $this->loadSnapshot($settings);
 
         return [
             'commitHash' => $commitHash,
-            'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
+            'orderedLogicalKeys' => $orderedLogicalKeys,
         ];
     }
 
@@ -90,7 +91,7 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
     }
 
     /**
-     * @return array{commitHash: string, snapshot: \PushPull\Content\ManagedContentSnapshot, items: array<string, ManagedContentItem>}
+     * @return array{commitHash: string, orderedLogicalKeys: array<int, string>, items: array<string, ManagedContentItem>}
      */
     private function loadSnapshot(PushPullSettings $settings): array
     {
@@ -114,7 +115,20 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
             }
         }
 
-        $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($files);
+        try {
+            $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($files);
+        } catch (ManagedContentExportException $exception) {
+            if ($exception->getMessage() !== 'Managed set manifest is missing from the local branch.') {
+                throw $exception;
+            }
+
+            return [
+                'commitHash' => $state->commitHash,
+                'orderedLogicalKeys' => [],
+                'items' => [],
+            ];
+        }
+
         $items = [];
 
         foreach ($snapshot->items as $item) {
@@ -123,7 +137,7 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
 
         return [
             'commitHash' => $state->commitHash,
-            'snapshot' => $snapshot,
+            'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
             'items' => $items,
         ];
     }

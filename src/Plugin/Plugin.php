@@ -22,6 +22,7 @@ use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\Media\RmlMediaOrganizationAdapter;
 use PushPull\Admin\SettingsPage;
 use PushPull\Content\GenerateBlocks\WordPressBlockPatternsAdapter;
+use PushPull\Content\ConfigManagedContentAdapterInterface;
 use PushPull\Content\Translation\WpmlTranslationManagementAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
@@ -53,8 +54,11 @@ use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Persistence\Migrations\SchemaMigrator;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\GitProviderFactory;
+use PushPull\Integration\Wpml\WpmlConfigurationAdapter;
+use PushPull\Integration\Wpml\WpmlConfigurationApplier;
 use PushPull\Settings\SettingsRegistrar;
 use PushPull\Settings\SettingsRepository;
+use PushPull\Integration\Wpml\WpmlSiteKeyActivationService;
 use PushPull\Support\Operations\OperationExecutor;
 use PushPull\Support\Operations\AsyncBranchOperationRunner;
 use PushPull\Support\FetchAvailability\FetchAvailabilityScheduler;
@@ -75,6 +79,8 @@ final class Plugin
         $wordPressDomainDiscovery = new WordPressDomainDiscovery();
         $localRepository = new DatabaseLocalRepository($wpdb);
         $fetchAvailabilityService = new FetchAvailabilityService($settingsRepository, $providerFactory, $localRepository);
+        $wpmlSiteKeyActivationService = new WpmlSiteKeyActivationService();
+        $wpmlConfigurationApplier = new WpmlConfigurationApplier();
         $fetchAvailabilityScheduler = new FetchAvailabilityScheduler($settingsRepository);
         $localRepositoryResetService = new LocalRepositoryResetService($wpdb);
         $remoteRepositoryInitializer = new RemoteRepositoryInitializer($providerFactory, $localRepository);
@@ -94,6 +100,7 @@ final class Plugin
         $wordPressPagesAdapter = new WordPressPagesAdapter();
         $wordPressPostsAdapter = new WordPressPostsAdapter();
         $wordPressTagsAdapter = new WordPressTagsAdapter();
+        $wpmlConfigurationAdapter = new WpmlConfigurationAdapter($wpmlConfigurationApplier);
         $wpmlTranslationManagementAdapter = new WpmlTranslationManagementAdapter($settingsRepository);
         $rmlMediaOrganizationAdapter = new RmlMediaOrganizationAdapter($settingsRepository);
         $workingStateRepository = new WorkingStateRepository($wpdb);
@@ -113,6 +120,7 @@ final class Plugin
             $wordPressPagesAdapter,
             $wordPressPostsAdapter,
             $wordPressTagsAdapter,
+            $wpmlConfigurationAdapter,
             $rmlMediaOrganizationAdapter,
             $wpmlTranslationManagementAdapter,
         ], [
@@ -134,7 +142,7 @@ final class Plugin
                     $stateReader,
                     $workingStateRepository
                 );
-            } elseif ($adapter instanceof WordPressCoreConfigurationAdapter) {
+            } elseif ($adapter instanceof ConfigManagedContentAdapterInterface) {
                 $managedSetApplyServices[$managedSetKey] = new ConfigManagedSetApplyService(
                     $adapter,
                     $stateReader,
@@ -212,7 +220,8 @@ final class Plugin
                 $remoteRepositoryInitializer,
                 $conflictResolutionService,
                 $fetchAvailabilityService,
-                $localRepository
+                $localRepository,
+                $wpmlSiteKeyActivationService
             ));
             \WP_CLI::add_command('pushpull config', new PushPullConfigCliCommand(
                 $settingsRepository,

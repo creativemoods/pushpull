@@ -8,6 +8,7 @@ namespace PushPull\Domain\Apply;
 
 use PushPull\Content\ManagedContentItem;
 use PushPull\Content\WordPressManagedContentAdapterInterface;
+use PushPull\Content\Exception\ManagedContentExportException;
 use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Persistence\ContentMap\ContentMapRepository;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
@@ -26,14 +27,14 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
 
     public function apply(PushPullSettings $settings): ApplyManagedSetResult
     {
-        ['commitHash' => $commitHash, 'snapshot' => $snapshot, 'items' => $items] = $this->loadSnapshot($settings);
+        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys, 'items' => $items, 'snapshotFiles' => $snapshotFiles] = $this->loadSnapshot($settings);
 
         $createdCount = 0;
         $updatedCount = 0;
         $appliedIds = [];
         $desiredLogicalKeys = [];
 
-        foreach ($snapshot->orderedLogicalKeys as $menuOrder => $logicalKey) {
+        foreach ($orderedLogicalKeys as $menuOrder => $logicalKey) {
             $item = $items[$logicalKey] ?? null;
 
             if ($item === null) {
@@ -50,7 +51,7 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
                 $updatedCount++;
             }
 
-            $this->adapter->persistItemMeta($postId, $item, $snapshot->files);
+            $this->adapter->persistItemMeta($postId, $item, $snapshotFiles);
             $this->contentMapRepository->upsert(
                 $item->managedSetKey,
                 $item->contentType,
@@ -79,11 +80,11 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
      */
     public function prepareApply(PushPullSettings $settings): array
     {
-        ['commitHash' => $commitHash, 'snapshot' => $snapshot] = $this->loadSnapshot($settings);
+        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys] = $this->loadSnapshot($settings);
 
         return [
             'commitHash' => $commitHash,
-            'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
+            'orderedLogicalKeys' => $orderedLogicalKeys,
         ];
     }
 
@@ -92,7 +93,7 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
      */
     public function applyLogicalKey(PushPullSettings $settings, string $logicalKey, int $menuOrder): array
     {
-        ['snapshot' => $snapshot, 'items' => $items] = $this->loadSnapshot($settings);
+        ['items' => $items, 'snapshotFiles' => $snapshotFiles] = $this->loadSnapshot($settings);
         $item = $items[$logicalKey] ?? null;
 
         if ($item === null) {
@@ -101,7 +102,7 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
 
         $existingId = $this->resolveExistingWpObjectId($item);
         $postId = $this->adapter->upsertItem($item, $menuOrder, $existingId);
-        $this->adapter->persistItemMeta($postId, $item, $snapshot->files);
+        $this->adapter->persistItemMeta($postId, $item, $snapshotFiles);
         $this->contentMapRepository->upsert(
             $item->managedSetKey,
             $item->contentType,
@@ -173,7 +174,7 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
     }
 
     /**
-     * @return array{commitHash: string, snapshot: \PushPull\Content\ManagedContentSnapshot, items: array<string, ManagedContentItem>}
+     * @return array{commitHash: string, orderedLogicalKeys: array<int, string>, items: array<string, ManagedContentItem>, snapshotFiles: array<string, string>}
      */
     private function loadSnapshot(PushPullSettings $settings): array
     {
@@ -189,7 +190,21 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
             throw new RuntimeException(sprintf('Local branch %s does not have a commit to apply.', $settings->branch));
         }
 
-        $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($this->managedSetFiles($state->files));
+        try {
+            $snapshot = $this->adapter->readSnapshotFromRepositoryFiles($this->managedSetFiles($state->files));
+        } catch (ManagedContentExportException $exception) {
+            if ($exception->getMessage() !== 'Managed set manifest is missing from the local branch.') {
+                throw $exception;
+            }
+
+            return [
+                'commitHash' => $state->commitHash,
+                'orderedLogicalKeys' => [],
+                'items' => [],
+                'snapshotFiles' => [],
+            ];
+        }
+
         $items = [];
 
         foreach ($snapshot->items as $item) {
@@ -198,8 +213,9 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
 
         return [
             'commitHash' => $state->commitHash,
-            'snapshot' => $snapshot,
+            'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
             'items' => $items,
+            'snapshotFiles' => $snapshot->files,
         ];
     }
 }

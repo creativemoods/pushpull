@@ -53,6 +53,43 @@ if (! class_exists('WP_CLI')) {
     }
 }
 
+if (! class_exists('WPML_Installation')) {
+    class WPML_Installation
+    {
+        public function __construct(object $wpdb, object $sitepress)
+        {
+        }
+
+        public function finish_step1(string $initialLanguageCode): void
+        {
+        }
+
+        /**
+         * @param string[] $activeLanguages
+         */
+        public function finish_step2(array $activeLanguages): bool
+        {
+            return true;
+        }
+
+        /**
+         * @param string[] $activeLanguages
+         */
+        public function set_active_languages(array $activeLanguages): bool
+        {
+            return true;
+        }
+
+        public function finish_step3(): void
+        {
+        }
+
+        public function finish_installation(): void
+        {
+        }
+    }
+}
+
 if (! function_exists('dbDelta')) {
     function dbDelta(string $sql): array
     {

@@ -4,7 +4,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.19
+Stable tag: 0.0.20
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -40,6 +40,7 @@ The current release supports these managed domains:
    generic discovered custom post types and taxonomies
 2. Config domains:
    `wordpress_core_configuration`
+   `wpml_configuration`
 3. Overlay domains:
    `translation_management` (WPML-backed)
    `media_organization` (Real Media Library-backed)
@@ -88,6 +89,7 @@ This is an early, focused release. At the moment, PushPull is intentionally limi
    `wordpress/custom-css/`
    `wordpress/attachments/`
    `wordpress/configuration/`
+   `wpml/configuration/`
    `wordpress/generatepress-elements/`
    `wordpress/custom-post-types/<slug>/`
    `wordpress/custom-taxonomies/<slug>/`
@@ -248,7 +250,7 @@ PushPull sends the following information to the configured provider over HTTPS:
 3. Canonical JSON representations of the managed content you choose to commit and push
 4. Commit metadata such as commit messages and, if configured, author name and email
 
-In the current release, the managed content sent to the provider is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Categories, WordPress Comments, WordPress Menus, WordPress Pages, WordPress Posts, WordPress Tags, WordPress Custom CSS, GeneratePress Elements, explicitly opted-in WordPress Attachments, WordPress core configuration, generic discovered custom post types and taxonomies, WPML-backed translation management, and Real Media Library-backed media organization.
+In the current release, the managed content sent to the provider is limited to the enabled supported domains: GenerateBlocks Global Styles, GenerateBlocks Conditions, WordPress Block Patterns, WordPress Categories, WordPress Comments, WordPress Menus, WordPress Pages, WordPress Posts, WordPress Tags, WordPress Custom CSS, GeneratePress Elements, explicitly opted-in WordPress Attachments, WordPress core configuration, WPML configuration, generic discovered custom post types and taxonomies, WPML-backed translation management, and Real Media Library-backed media organization.
 
 PushPull does not send your whole WordPress database to the provider. It only sends the managed content represented by the enabled adapters.
 
@@ -258,6 +260,13 @@ GitLab terms: https://about.gitlab.com/terms/
 GitLab privacy statement: https://about.gitlab.com/privacy/
 
 == Changelog ==
+
+= 0.0.20 =
+
+1. Added a new `wpml_configuration` config domain that exports and applies core WPML setup state, including default language, active languages, URL format, post type translation modes, and translated post type slugs.
+2. Refactored WPML activation logic into the integration layer and added a reusable site-key activation service instead of leaving the registration spike in ad hoc CLI-only code.
+3. Improved WPML setup and translation-management availability handling on bare installs so WPML domains are selectable earlier in the bootstrap flow.
+4. Hardened WPML slug-translation apply and export behavior, including persistence of translated slug values and more resilient handling of cache and table state during tests and apply operations.
 
 = 0.0.19 =
 
