@@ -38,6 +38,13 @@ final class RemoteRepositoryInitializer
         $fetchResult = (new RemoteBranchFetcher($provider, $this->localRepository, $remoteConfig))
             ->fetchManagedSet($managedSetKey);
 
+        $localRef = $this->localRepository->getRef('refs/heads/' . $settings->branch);
+
+        if ($localRef === null || $localRef->commitHash === '') {
+            $this->localRepository->updateRef('refs/heads/' . $settings->branch, $fetchResult->remoteCommitHash);
+            $this->localRepository->updateRef('HEAD', $fetchResult->remoteCommitHash);
+        }
+
         return new InitializeRemoteRepositoryResult(
             $managedSetKey,
             $settings->branch,

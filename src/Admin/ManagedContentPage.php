@@ -960,6 +960,7 @@ final class ManagedContentPage
                 ['branch' => $settings->branch],
                 fn () => $this->syncService->fetch($managedSetKey)
             );
+            $this->fetchAvailabilityService->markUpToDate($settings, $result->remoteCommitHash, $result->remoteCommitHash);
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message, null);
@@ -1069,6 +1070,7 @@ final class ManagedContentPage
                 ['branch' => $settings->branch, 'bulk' => true],
                 fn () => $this->syncService->push($branchManagedSetKey)
             );
+            $this->fetchAvailabilityService->markUpToDate($settings, $pushResult->remoteCommitHash, $pushResult->remoteCommitHash);
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message, null);
@@ -1110,6 +1112,7 @@ final class ManagedContentPage
                 ['branch' => $settings->branch, 'bulk' => true],
                 fn () => $this->syncService->pull($branchManagedSetKey)
             );
+            $this->fetchAvailabilityService->markUpToDate($settings, $pullResult->fetchResult->remoteCommitHash, $pullResult->fetchResult->remoteCommitHash);
 
             if ($pullResult->mergeResult->hasConflicts()) {
                 $this->redirectWithNotice(
@@ -1219,6 +1222,7 @@ final class ManagedContentPage
                 ['branch' => $settings->branch],
                 fn () => $this->syncService->pull($managedSetKey)
             );
+            $this->fetchAvailabilityService->markUpToDate($settings, $result->fetchResult->remoteCommitHash, $result->fetchResult->remoteCommitHash);
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message, null);
@@ -1344,6 +1348,7 @@ final class ManagedContentPage
                 ['branch' => $settings->branch],
                 fn () => $this->syncService->push($managedSetKey)
             );
+            $this->fetchAvailabilityService->markUpToDate($settings, $result->remoteCommitHash, $result->remoteCommitHash);
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message, $managedSetKey);

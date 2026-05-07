@@ -62,6 +62,24 @@ final class FetchAvailabilityService
         }
     }
 
+    public function markUpToDate(PushPullSettings $settings, ?string $remoteCommitHash = null, ?string $trackingCommitHash = null): void
+    {
+        $commitHash = $remoteCommitHash ?? $trackingCommitHash;
+        $this->storeState(
+            $settings,
+            self::STATUS_UP_TO_DATE,
+            false,
+            $commitHash,
+            $trackingCommitHash ?? $commitHash,
+            null
+        );
+    }
+
+    public function clearCachedState(): void
+    {
+        delete_option(self::OPTION_KEY);
+    }
+
     /**
      * @return array{
      *   status: string,

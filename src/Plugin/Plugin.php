@@ -192,7 +192,8 @@ final class Plugin
             $providerFactory,
             $localRepositoryResetService,
             $remoteRepositoryInitializer,
-            $operationExecutor
+            $operationExecutor,
+            $fetchAvailabilityService
         );
         $domainsPage = new DomainsPage(
             $settingsRepository,
@@ -252,7 +253,8 @@ final class Plugin
                 $managedSetRegistry,
                 $stateReader,
                 $contentMapRepository,
-                $workingStateRepository
+                $workingStateRepository,
+                $fetchAvailabilityService
             ),
             $fetchAvailabilityService
         );

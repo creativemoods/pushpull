@@ -139,4 +139,67 @@ final class FetchAvailabilityServiceTest extends TestCase
         self::assertSame(FetchAvailabilityService::STATUS_UNKNOWN, $state['status']);
         self::assertFalse($state['updatesAvailable']);
     }
+
+    public function testMarkUpToDateStoresSynchronizedState(): void
+    {
+        update_option(SettingsRepository::OPTION_KEY, [
+            'provider_key' => 'github',
+            'owner_or_workspace' => 'creativemoods',
+            'repository' => 'pushpull',
+            'branch' => 'main',
+            'enabled_managed_sets' => ['wordpress_pages'],
+        ]);
+
+        $service = new FetchAvailabilityService(
+            new SettingsRepository(),
+            new class () implements GitProviderFactoryInterface {
+                public function make(string $providerKey): GitProviderInterface
+                {
+                    throw new \RuntimeException('not used');
+                }
+            },
+            new DatabaseLocalRepository(new \wpdb())
+        );
+
+        $settings = (new SettingsRepository())->get();
+        $service->markUpToDate($settings, 'commit-2', 'commit-2');
+
+        $state = $service->getCachedState($settings);
+
+        self::assertSame(FetchAvailabilityService::STATUS_UP_TO_DATE, $state['status']);
+        self::assertFalse($state['updatesAvailable']);
+        self::assertSame('commit-2', $state['remoteCommitHash']);
+        self::assertSame('commit-2', $state['trackingCommitHash']);
+    }
+
+    public function testClearCachedStateRemovesStoredAvailability(): void
+    {
+        update_option(SettingsRepository::OPTION_KEY, [
+            'provider_key' => 'github',
+            'owner_or_workspace' => 'creativemoods',
+            'repository' => 'pushpull',
+            'branch' => 'main',
+            'enabled_managed_sets' => ['wordpress_pages'],
+        ]);
+
+        $service = new FetchAvailabilityService(
+            new SettingsRepository(),
+            new class () implements GitProviderFactoryInterface {
+                public function make(string $providerKey): GitProviderInterface
+                {
+                    throw new \RuntimeException('not used');
+                }
+            },
+            new DatabaseLocalRepository(new \wpdb())
+        );
+
+        $settings = (new SettingsRepository())->get();
+        $service->markUpToDate($settings, 'commit-2', 'commit-2');
+        $service->clearCachedState();
+
+        $state = $service->getCachedState($settings);
+
+        self::assertSame(FetchAvailabilityService::STATUS_UNKNOWN, $state['status']);
+        self::assertFalse($state['updatesAvailable']);
+    }
 }

@@ -17,6 +17,7 @@ use PushPull\Settings\SettingsRegistrar;
 use PushPull\Settings\PushPullSettings;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Capabilities;
+use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use PushPull\Support\Operations\OperationExecutor;
 
 final class SettingsPage
@@ -26,6 +27,7 @@ final class SettingsPage
     private const RESET_LOCAL_REPOSITORY_ACTION = 'pushpull_reset_local_repository';
     private const RESET_REMOTE_BRANCH_ACTION = 'pushpull_reset_remote_branch';
     private const INITIALIZE_REMOTE_REPOSITORY_ACTION = 'pushpull_initialize_remote_repository';
+    private const MENU_ICON_PATH = 'plugin-assets/icons/menu.svg';
 
     public function __construct(
         private readonly SettingsRepository $settingsRepository,
@@ -34,7 +36,8 @@ final class SettingsPage
         private readonly GitProviderFactoryInterface $providerFactory,
         private readonly LocalRepositoryResetService $localRepositoryResetService,
         private readonly RemoteRepositoryInitializer $remoteRepositoryInitializer,
-        private readonly OperationExecutor $operationExecutor
+        private readonly OperationExecutor $operationExecutor,
+        private readonly FetchAvailabilityService $fetchAvailabilityService
     ) {
     }
 
@@ -46,7 +49,7 @@ final class SettingsPage
             Capabilities::MANAGE_PLUGIN,
             self::MENU_SLUG,
             [$this, 'render'],
-            'dashicons-cloud-saved'
+            PUSHPULL_PLUGIN_URL . self::MENU_ICON_PATH
         );
 
         add_submenu_page(
@@ -275,6 +278,7 @@ final class SettingsPage
             $this->operationExecutor->run('', 'reset_local_repository', [], function (): void {
                 $this->localRepositoryResetService->reset();
             });
+            $this->fetchAvailabilityService->clearCachedState();
         } catch (\RuntimeException $exception) {
             $this->redirectWithNotice('error', $exception->getMessage());
         }
@@ -302,6 +306,7 @@ final class SettingsPage
                 ['branch' => $settings->branch],
                 fn () => $this->remoteRepositoryInitializer->initialize('generateblocks_global_styles', $settings)
             );
+            $this->fetchAvailabilityService->markUpToDate($settings, $result->remoteCommitHash, $result->fetchResult->remoteCommitHash);
         } catch (\Throwable $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message);
@@ -340,6 +345,7 @@ final class SettingsPage
                 ['branch' => $settings->branch],
                 fn () => $this->syncService->resetRemote($managedSetKey)
             );
+            $this->fetchAvailabilityService->markUpToDate($settings, $result->remoteCommitHash, $result->remoteCommitHash);
         } catch (\RuntimeException | ProviderException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message);

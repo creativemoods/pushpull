@@ -4,7 +4,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.20
+Stable tag: 0.0.21
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -260,6 +260,11 @@ GitLab terms: https://about.gitlab.com/terms/
 GitLab privacy statement: https://about.gitlab.com/privacy/
 
 == Changelog ==
+
+= 0.0.21 =
+
+1. Replaced the WordPress admin menu Dashicon with a custom SVG icon bundled in the plugin assets.
+2. Normalized the menu SVG markup for WordPress admin sizing so the icon renders at the expected menu scale.
 
 = 0.0.20 =
 

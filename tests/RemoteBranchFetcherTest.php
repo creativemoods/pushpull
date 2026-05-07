@@ -142,6 +142,8 @@ final class RemoteBranchFetcherTest extends TestCase
 
         self::assertSame('refs/heads/main', $result->remoteRefName);
         self::assertSame($result->remoteCommitHash, $repository->getRef('refs/remotes/origin/main')?->commitHash);
+        self::assertSame($result->remoteCommitHash, $repository->getRef('refs/heads/main')?->commitHash);
+        self::assertSame($result->remoteCommitHash, $repository->getRef('HEAD')?->commitHash);
         self::assertNotNull($repository->getCommit($result->remoteCommitHash));
     }
 }

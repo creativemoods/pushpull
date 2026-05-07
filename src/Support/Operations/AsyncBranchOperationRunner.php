@@ -32,6 +32,7 @@ use PushPull\Provider\RemoteTree;
 use PushPull\Provider\RemoteRef;
 use PushPull\Provider\UpdateRemoteRefRequest;
 use PushPull\Settings\SettingsRepository;
+use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use RuntimeException;
 
 if (! defined('ABSPATH')) {
@@ -56,7 +57,8 @@ final class AsyncBranchOperationRunner
         private readonly ?ManagedSetRegistry $managedSetRegistry = null,
         private readonly ?RepositoryStateReader $repositoryStateReader = null,
         private readonly ?ContentMapRepository $contentMapRepository = null,
-        private readonly ?WorkingStateRepository $workingStateRepository = null
+        private readonly ?WorkingStateRepository $workingStateRepository = null,
+        private readonly ?FetchAvailabilityService $fetchAvailabilityService = null
     ) {
         $this->applyServicesByManagedSetKey = $managedSetApplyServices;
     }
@@ -163,6 +165,7 @@ final class AsyncBranchOperationRunner
                 ];
             }
 
+            $this->refreshFetchAvailability($response['finalResult']);
             $this->operationLogRepository->markSucceeded($record->id, $response['finalResult']);
             $this->operationLockService->release($lock);
 
@@ -178,6 +181,37 @@ final class AsyncBranchOperationRunner
             $this->operationLockService->release($lock);
             throw $exception;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $finalResult
+     */
+    private function refreshFetchAvailability(array $finalResult): void
+    {
+        if (! $this->fetchAvailabilityService instanceof FetchAvailabilityService) {
+            return;
+        }
+
+        $operationType = (string) ($finalResult['operationType'] ?? '');
+
+        if (! in_array($operationType, ['fetch', 'pull', 'push', 'commit_push_all', 'pull_apply_all'], true)) {
+            return;
+        }
+
+        $branch = (string) ($finalResult['branch'] ?? '');
+        $remoteCommitHash = (string) ($finalResult['remoteCommitHash'] ?? '');
+
+        if ($branch === '' || $remoteCommitHash === '') {
+            return;
+        }
+
+        $settings = $this->settingsRepository->get();
+
+        if ($settings->branch !== $branch) {
+            return;
+        }
+
+        $this->fetchAvailabilityService->markUpToDate($settings, $remoteCommitHash, $remoteCommitHash);
     }
 
     /**
