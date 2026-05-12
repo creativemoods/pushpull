@@ -4,7 +4,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.22
+Stable tag: 0.0.23
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -260,6 +260,12 @@ GitLab terms: https://about.gitlab.com/terms/
 GitLab privacy statement: https://about.gitlab.com/privacy/
 
 == Changelog ==
+
+= 0.0.23 =
+
+1. Fixed the Managed Content branch-action gating so `Pull` is available after `Fetch` when the local branch is still empty and only the remote-tracking branch exists.
+2. Improved managed-set status summaries to report state drift as `live`, `local`, and `remote` counts instead of the more ambiguous previous shorthand.
+3. Clarified focused Managed Content detail summaries so they show the state-drift breakdown alongside the existing pairwise `Live vs local` and `Local vs remote` diff counts.
 
 = 0.0.22 =
 

@@ -244,6 +244,12 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 
 ## Changelog
 
+### 0.0.23
+
+1. Fixed the Managed Content branch-action gating so `Pull` is available after `Fetch` when the local branch is still empty and only the remote-tracking branch exists.
+2. Improved managed-set status summaries to report state drift as `live`, `local`, and `remote` counts instead of the more ambiguous previous shorthand.
+3. Clarified focused Managed Content detail summaries so they show the state-drift breakdown alongside the existing pairwise `Live vs local` and `Local vs remote` diff counts.
+
 ### 0.0.22
 
 1. Refreshed PushPull branding across the project and plugin assets, including new banner and logo artwork plus updated WordPress.org icons and banners.

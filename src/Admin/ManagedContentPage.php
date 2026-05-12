@@ -378,10 +378,12 @@ final class ManagedContentPage
                 continue;
             }
 
+            $stateDrift = $this->stateDriftSummary($diffResult);
             printf(
                 '<p>%s</p>',
                 esc_html(sprintf(
-                    'Live vs local: %d changed file(s). Local vs remote: %d changed file(s). Relationship: %s.',
+                    'State drift: %s. Live vs local: %d changed file(s). Local vs remote: %d changed file(s). Relationship: %s.',
+                    $stateDrift,
                     $diffResult->liveToLocal->changedCount(),
                     $diffResult->localToRemote->changedCount(),
                     $diffResult->repositoryRelationship->label()
@@ -442,7 +444,8 @@ final class ManagedContentPage
             wp_kses($this->managedSetBadgeMarkup($managedContentAdapter, true), ['span' => ['class' => true]])
         );
         printf('<p>%s</p>', esc_html(sprintf(
-            'Live vs local: %d changed file(s). Local vs remote: %d changed file(s).',
+            'State drift: %s. Live vs local: %d changed file(s). Local vs remote: %d changed file(s).',
+            $this->stateDriftSummary($diffResult),
             $diffResult->liveToLocal->changedCount(),
             $diffResult->localToRemote->changedCount()
         )));
@@ -1792,7 +1795,7 @@ final class ManagedContentPage
             ];
         }
 
-        $pullEnabled = in_array($relationship, ['behind', 'diverged'], true);
+        $pullEnabled = in_array($relationship, ['remote_only', 'behind', 'diverged'], true);
         $mergeEnabled = in_array($relationship, ['behind', 'diverged'], true);
         $pushEnabled = $relationship === 'ahead' && $hasLocalToRemoteChanges;
         $commitPushAllEnabled = $hasAvailableManagedSet
@@ -1871,6 +1874,7 @@ final class ManagedContentPage
         return match ($relationship) {
             'in_sync' => __('Nothing to pull. The local branch already matches the fetched remote state.', 'pushpull'),
             'ahead' => __('Nothing to pull. The local branch is ahead of the fetched remote state.', 'pushpull'),
+            'remote_only' => __('Pull is temporarily unavailable.', 'pushpull'),
             'behind' => __('No remote changes are ready to pull.', 'pushpull'),
             'diverged' => __('No remote changes are ready to pull.', 'pushpull'),
             default => $hasLocalToRemoteChanges
@@ -2272,11 +2276,7 @@ final class ManagedContentPage
         }
 
         if ($diffResult->liveToLocal->hasChanges() || $diffResult->localToRemote->hasChanges()) {
-            return sprintf(
-                '%d local, %d remote',
-                $diffResult->liveToLocal->changedCount(),
-                $diffResult->localToRemote->changedCount()
-            );
+            return $this->stateDriftSummary($diffResult);
         }
 
         return 'Clean';
@@ -2300,6 +2300,57 @@ final class ManagedContentPage
         }
 
         return 'unchanged';
+    }
+
+    private function stateDriftSummary(ManagedSetDiffResult $diffResult): string
+    {
+        $counts = $this->stateDriftCounts($diffResult);
+        $summary = sprintf(
+            '%d live, %d local, %d remote',
+            $counts['live'],
+            $counts['local'],
+            $counts['remote']
+        );
+
+        if ($counts['mixed'] > 0) {
+            $summary .= sprintf(', %d mixed', $counts['mixed']);
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @return array{live: int, local: int, remote: int, mixed: int}
+     */
+    private function stateDriftCounts(ManagedSetDiffResult $diffResult): array
+    {
+        $counts = [
+            'live' => $diffResult->liveToLocal->changedCount(),
+            'local' => 0,
+            'remote' => 0,
+            'mixed' => 0,
+        ];
+
+        $localRemoteChanges = $diffResult->localToRemote->changedCount();
+
+        switch ($diffResult->repositoryRelationship->status) {
+            case 'ahead':
+            case 'local_only':
+                $counts['local'] = $localRemoteChanges;
+                break;
+
+            case 'behind':
+            case 'remote_only':
+                $counts['remote'] = $localRemoteChanges;
+                break;
+
+            case 'diverged':
+            case 'unrelated':
+                $counts['mixed'] = $localRemoteChanges;
+                break;
+        }
+
+        return $counts;
     }
 
     /**
