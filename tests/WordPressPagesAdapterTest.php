@@ -10,6 +10,12 @@ use PushPull\Content\WordPress\WordPressPagesAdapter;
 
 final class WordPressPagesAdapterTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        $GLOBALS['pushpull_test_options'] = [];
+        $GLOBALS['pushpull_test_wpml_translations'] = [];
+    }
+
     public function testSlugProducesLogicalKey(): void
     {
         $adapter = new WordPressPagesAdapter();
@@ -58,6 +64,43 @@ final class WordPressPagesAdapterTest extends TestCase
 
         $this->expectException(ManagedContentExportException::class);
         $adapter->computeLogicalKey(['post_name' => '']);
+    }
+
+    public function testTranslationManagementAddsLanguageSuffixToLogicalKey(): void
+    {
+        update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
+            'enabled_managed_sets' => ['wordpress_pages', 'translation_management'],
+        ]);
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'post_page',
+                'element_id' => 42,
+                'trid' => 100,
+                'language_code' => 'fr',
+                'source_language_code' => 'en',
+            ],
+        ];
+
+        $adapter = new WordPressPagesAdapter();
+
+        self::assertSame('about-us--fr', $adapter->computeLogicalKey([
+            'wp_object_id' => 42,
+            'post_name' => 'about-us',
+        ]));
+    }
+
+    public function testDuplicateLogicalKeyMessageSuggestsTranslationManagementWhenDisabled(): void
+    {
+        $adapter = new WordPressPagesAdapter();
+
+        $this->expectException(ManagedContentExportException::class);
+        $this->expectExceptionMessage('If these are translations, enable the Translation Management domain so language can be added to logical keys.');
+
+        $adapter->snapshotFromRuntimeRecords([
+            $this->runtimeRecord(),
+            array_merge($this->runtimeRecord(), ['wp_object_id' => 43]),
+        ]);
     }
 
     /**

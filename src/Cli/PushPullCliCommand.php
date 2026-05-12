@@ -162,9 +162,11 @@ final class PushPullCliCommand extends WP_CLI_Command
     public function initializeRemoteRepository(array $args, array $assocArgs): void
     {
         $managedSetKey = $this->managedSetKeyFromAssocArgs($assocArgs, false);
+        $settings = $this->settingsRepository->get();
+        $this->guardRemoteWritesAllowed($settings);
 
         try {
-            $result = $this->remoteRepositoryInitializer->initialize($managedSetKey, $this->settingsRepository->get());
+            $result = $this->remoteRepositoryInitializer->initialize($managedSetKey, $settings);
         } catch (ProviderException | RuntimeException $exception) {
             $this->failFromException($exception);
         }
@@ -190,6 +192,7 @@ final class PushPullCliCommand extends WP_CLI_Command
     public function resetRemoteBranch(array $args, array $assocArgs): void
     {
         $managedSetKey = $this->managedSetKeyFromAssocArgs($assocArgs, false);
+        $this->guardRemoteWritesAllowed($this->settingsRepository->get());
 
         try {
             $result = $this->syncService->resetRemote($managedSetKey);
@@ -349,6 +352,7 @@ final class PushPullCliCommand extends WP_CLI_Command
     {
         $managedSetKey = $this->requiredManagedSetKey($args);
         $this->requireEnabledAvailableManagedSet($managedSetKey);
+        $this->guardLiveWritesAllowed($this->settingsRepository->get());
 
         try {
             $result = $this->syncService->apply($managedSetKey);
@@ -377,6 +381,7 @@ final class PushPullCliCommand extends WP_CLI_Command
     public function push(array $args, array $assocArgs): void
     {
         $managedSetKey = $this->managedSetKeyFromAssocArgs($assocArgs, false);
+        $this->guardRemoteWritesAllowed($this->settingsRepository->get());
 
         try {
             $result = $this->syncService->push($managedSetKey);
@@ -406,10 +411,13 @@ final class PushPullCliCommand extends WP_CLI_Command
     public function commitPushAll(array $args, array $assocArgs): void
     {
         $settings = $this->settingsRepository->get();
-        $managedSetKeys = $this->enabledAvailableManagedSetKeys();
+        $this->guardRemoteWritesAllowed($settings);
+        $plan = $this->buildCommitPushAllPlan();
+        $managedSetKeys = $plan['managedSetKeys'];
+        $skippedManagedSets = $plan['skippedManagedSets'];
         $branchManagedSetKey = $this->branchManagedSetKey();
 
-        if ($managedSetKeys === [] || $branchManagedSetKey === null) {
+        if (($managedSetKeys === [] && $skippedManagedSets === []) || $branchManagedSetKey === null) {
             WP_CLI::error('Enable at least one available managed domain to use this action.');
         }
 
@@ -436,23 +444,39 @@ final class PushPullCliCommand extends WP_CLI_Command
                 $committedFileCount += count($result->pathHashes);
             }
 
-            $pushResult = $this->syncService->push($branchManagedSetKey);
+            $pushResult = $managedSetKeys !== []
+                ? $this->syncService->push($branchManagedSetKey)
+                : null;
         } catch (ProviderException | RuntimeException $exception) {
             $this->failFromException($exception);
         }
 
-        if ($pushResult->status === 'already_up_to_date' && $committedDomainCount === 0) {
-            WP_CLI::success('Nothing to commit or push. Live content and the remote branch are already up to date.');
+        if ($pushResult === null) {
+            $message = 'No managed domains were committed or pushed.';
+
+            if ($skippedManagedSets !== []) {
+                $message .= ' ' . $this->skippedManagedSetsSummary($skippedManagedSets);
+            }
+
+            WP_CLI::success($message);
             return;
         }
 
-        WP_CLI::success(sprintf(
-            'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
-            $committedDomainCount,
-            $committedFileCount,
-            $pushResult->branch,
-            $pushResult->remoteCommitHash
-        ));
+        $message = $pushResult->status === 'already_up_to_date' && $committedDomainCount === 0
+            ? 'Nothing to commit or push. Live content and the remote branch are already up to date.'
+            : sprintf(
+                'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
+                $committedDomainCount,
+                $committedFileCount,
+                $pushResult->branch,
+                $pushResult->remoteCommitHash
+            );
+
+        if ($skippedManagedSets !== []) {
+            $message .= ' ' . $this->skippedManagedSetsSummary($skippedManagedSets);
+        }
+
+        WP_CLI::success($message);
     }
 
     /**
@@ -462,6 +486,7 @@ final class PushPullCliCommand extends WP_CLI_Command
      */
     public function pullApplyAll(array $args, array $assocArgs): void
     {
+        $this->guardLiveWritesAllowed($this->settingsRepository->get());
         $managedSetKeys = $this->enabledAvailableManagedSetKeys();
         $branchManagedSetKey = $this->branchManagedSetKey();
 
@@ -513,6 +538,67 @@ final class PushPullCliCommand extends WP_CLI_Command
             $updatedCount,
             $deletedCount
         ));
+    }
+
+    private function guardLiveWritesAllowed(\PushPull\Settings\PushPullSettings $settings): void
+    {
+        if (! $settings->allowsLiveWrites()) {
+            WP_CLI::error('This site is configured as push-only. Applying repository state into WordPress is disabled.');
+        }
+    }
+
+    private function guardRemoteWritesAllowed(\PushPull\Settings\PushPullSettings $settings): void
+    {
+        if (! $settings->allowsRemoteWrites()) {
+            WP_CLI::error('This site is configured as pull-only. Pushing branch changes to the remote repository is disabled.');
+        }
+    }
+
+    /**
+     * @return array{managedSetKeys: string[], skippedManagedSets: array<int, array{label: string, message: string}>}
+     */
+    private function buildCommitPushAllPlan(): array
+    {
+        $managedSetKeys = [];
+        $skippedManagedSets = [];
+
+        foreach ($this->enabledAvailableManagedSetKeys() as $managedSetKey) {
+            $adapter = $this->managedSetRegistry->get($managedSetKey);
+
+            try {
+                $this->syncService->diff($managedSetKey);
+            } catch (RuntimeException $exception) {
+                $skippedManagedSets[] = [
+                    'label' => $adapter->getManagedSetLabel(),
+                    'message' => $exception->getMessage(),
+                ];
+                continue;
+            }
+
+            $managedSetKeys[] = $managedSetKey;
+        }
+
+        return [
+            'managedSetKeys' => $managedSetKeys,
+            'skippedManagedSets' => $skippedManagedSets,
+        ];
+    }
+
+    /**
+     * @param array<int, array{label: string, message: string}> $skippedManagedSets
+     */
+    private function skippedManagedSetsSummary(array $skippedManagedSets): string
+    {
+        $parts = array_map(
+            static fn (array $entry): string => sprintf('%s (%s)', $entry['label'], $entry['message']),
+            $skippedManagedSets
+        );
+
+        return sprintf(
+            'Skipped %d managed domain(s) due to diff/export errors: %s.',
+            count($skippedManagedSets),
+            implode('; ', $parts)
+        );
     }
 
     /**

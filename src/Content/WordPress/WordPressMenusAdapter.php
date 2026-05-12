@@ -715,11 +715,17 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
                 return null;
             }
 
+            $adapter = new WordPressPagesAdapter();
+
             return [
                 'objectRef' => [
                     'managedSetKey' => 'wordpress_pages',
                     'contentType' => 'wordpress_page',
-                    'logicalKey' => sanitize_title($post->post_name !== '' ? $post->post_name : $post->post_title),
+                    'logicalKey' => $adapter->computeLogicalKey([
+                        'wp_object_id' => (int) $post->ID,
+                        'post_title' => (string) $post->post_title,
+                        'post_name' => (string) $post->post_name,
+                    ]),
                     'postType' => 'page',
                 ],
             ];
@@ -732,11 +738,17 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
                 return null;
             }
 
+            $adapter = new WordPressPostsAdapter();
+
             return [
                 'objectRef' => [
                     'managedSetKey' => 'wordpress_posts',
                     'contentType' => 'wordpress_post',
-                    'logicalKey' => sanitize_title($post->post_name !== '' ? $post->post_name : $post->post_title),
+                    'logicalKey' => $adapter->computeLogicalKey([
+                        'wp_object_id' => (int) $post->ID,
+                        'post_title' => (string) $post->post_title,
+                        'post_name' => (string) $post->post_name,
+                    ]),
                     'postType' => 'post',
                 ],
             ];
@@ -875,6 +887,14 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
         }
 
         $objectId = $adapter->findExistingWpObjectIdByLogicalKey($logicalKey);
+
+        if ($objectId === null) {
+            $baseLogicalKey = preg_replace('/--[a-z0-9_]+$/', '', $logicalKey);
+
+            if (is_string($baseLogicalKey) && $baseLogicalKey !== '' && $baseLogicalKey !== $logicalKey) {
+                $objectId = $adapter->findExistingWpObjectIdByLogicalKey($baseLogicalKey);
+            }
+        }
 
         if ($objectId === null) {
             throw new RuntimeException(sprintf(

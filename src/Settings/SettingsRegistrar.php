@@ -72,6 +72,7 @@ final class SettingsRegistrar
         $this->registerField('pushpull_auth', 'api_token', __('API token', 'pushpull'));
         $this->registerField('pushpull_auth', 'base_url', __('Base URL', 'pushpull'));
         $this->registerField('pushpull_sync', 'fetch_availability_check_interval_minutes', __('Remote fetch check interval', 'pushpull'));
+        $this->registerField('pushpull_sync', 'site_mode', __('Site sync mode', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_name', __('Commit author name', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_email', __('Commit author email', 'pushpull'));
     }
@@ -114,6 +115,15 @@ final class SettingsRegistrar
                             'step' => '1',
                         ]);
                         echo '<p class="description">' . esc_html__('How often PushPull should perform a lightweight remote head check to highlight when Fetch likely has updates available.', 'pushpull') . '</p>';
+                        break;
+
+                    case 'site_mode':
+                        $this->renderSelect($name, (string) $value, [
+                            'both' => __('Push and pull', 'pushpull'),
+                            'push_only' => __('Push only', 'pushpull'),
+                            'pull_only' => __('Pull only', 'pushpull'),
+                        ]);
+                        echo '<p class="description">' . esc_html__('Push only disables operations that apply repository state into WordPress. Pull only disables operations that push branch changes to the remote repository. Fetch, Pull, and Merge remain available in both restricted modes.', 'pushpull') . '</p>';
                         break;
 
                     case 'author_email':

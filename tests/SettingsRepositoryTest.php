@@ -76,6 +76,7 @@ final class SettingsRepositoryTest extends TestCase
         $repository = new SettingsRepository();
 
         self::assertSame(5, $repository->defaults()->fetchAvailabilityCheckIntervalMinutes);
+        self::assertSame('both', $repository->defaults()->siteMode);
     }
 
     public function testFetchAvailabilityIntervalAcceptsPositiveIntegerValues(): void
@@ -116,5 +117,32 @@ final class SettingsRepositoryTest extends TestCase
         self::assertSame('Jane Doe', $settings->authorName);
         self::assertSame('JaneDoejane@example.com', $settings->authorEmail);
         self::assertStringStartsWith('https://gitlab.example.com/', $settings->baseUrl);
+    }
+
+    public function testSiteModeFallsBackToBothWhenInvalid(): void
+    {
+        $repository = new SettingsRepository();
+        $settings = $repository->sanitize([
+            'site_mode' => 'not-valid',
+        ]);
+
+        self::assertSame('both', $settings->siteMode);
+        self::assertTrue($settings->allowsLiveWrites());
+        self::assertTrue($settings->allowsRemoteWrites());
+    }
+
+    public function testSiteModeSupportsPushOnlyAndPullOnly(): void
+    {
+        $repository = new SettingsRepository();
+        $pushOnly = $repository->sanitize(['site_mode' => 'push_only']);
+        $pullOnly = $repository->sanitize(['site_mode' => 'pull_only']);
+
+        self::assertSame('push_only', $pushOnly->siteMode);
+        self::assertFalse($pushOnly->allowsLiveWrites());
+        self::assertTrue($pushOnly->allowsRemoteWrites());
+
+        self::assertSame('pull_only', $pullOnly->siteMode);
+        self::assertTrue($pullOnly->allowsLiveWrites());
+        self::assertFalse($pullOnly->allowsRemoteWrites());
     }
 }

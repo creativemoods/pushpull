@@ -86,6 +86,119 @@ final class ManagedContentPageBranchActionStateTest extends TestCase
         self::assertSame('0 live, 1 local, 0 remote', $this->overviewBadgeText($page, new WordPressPagesAdapter(), $afterCommit));
     }
 
+    public function testOverviewBadgeUsesDivergedLabelForTwoSidedBranchDrift(): void
+    {
+        $page = $this->managedContentPage(
+            new SettingsRepository(),
+            new ManagedSetRegistry([new WordPressPagesAdapter()]),
+            new ManagedContentPageFakeSyncService([])
+        );
+
+        $diverged = $this->diffResult(
+            liveLocalChanged: false,
+            localRemoteChanged: true,
+            relationship: RepositoryRelationship::DIVERGED
+        );
+
+        self::assertSame('0 live, 0 local, 0 remote, 1 diverged', $this->overviewBadgeText($page, new WordPressPagesAdapter(), $diverged));
+    }
+
+    public function testPushOnlyModeDisablesApplyActionsButKeepsPushAvailable(): void
+    {
+        $settingsRepository = new SettingsRepository();
+        $settingsRepository->save($settingsRepository->sanitize([
+            'site_mode' => 'push_only',
+            'enabled_managed_sets' => ['wordpress_pages'],
+        ]));
+
+        $page = $this->managedContentPage(
+            $settingsRepository,
+            new ManagedSetRegistry([new WordPressPagesAdapter()]),
+            new ManagedContentPageFakeSyncService([
+                'wordpress_pages' => $this->diffResult(
+                    liveLocalChanged: true,
+                    localRemoteChanged: true,
+                    relationship: RepositoryRelationship::AHEAD
+                ),
+            ])
+        );
+
+        $branchState = $this->branchActionState($page, $settingsRepository->get());
+        $applyState = $this->applyActionState($page, $settingsRepository->get(), true, true, $this->diffResult(
+            liveLocalChanged: true,
+            localRemoteChanged: false,
+            relationship: RepositoryRelationship::IN_SYNC
+        ));
+
+        self::assertFalse($branchState['pullApplyAll']['enabled']);
+        self::assertSame('This site is configured as push-only. Applying repository state into WordPress is disabled.', $branchState['pullApplyAll']['reason']);
+        self::assertTrue($branchState['push']['enabled']);
+        self::assertFalse($applyState['enabled']);
+    }
+
+    public function testPullOnlyModeDisablesRemoteWriteActions(): void
+    {
+        $settingsRepository = new SettingsRepository();
+        $settingsRepository->save($settingsRepository->sanitize([
+            'site_mode' => 'pull_only',
+            'enabled_managed_sets' => ['wordpress_pages'],
+        ]));
+
+        $page = $this->managedContentPage(
+            $settingsRepository,
+            new ManagedSetRegistry([new WordPressPagesAdapter()]),
+            new ManagedContentPageFakeSyncService([
+                'wordpress_pages' => $this->diffResult(
+                    liveLocalChanged: true,
+                    localRemoteChanged: true,
+                    relationship: RepositoryRelationship::AHEAD
+                ),
+            ])
+        );
+
+        $branchState = $this->branchActionState($page, $settingsRepository->get());
+
+        self::assertFalse($branchState['push']['enabled']);
+        self::assertSame('This site is configured as pull-only. Pushing branch changes to the remote repository is disabled.', $branchState['push']['reason']);
+        self::assertFalse($branchState['commitPushAll']['enabled']);
+        self::assertSame('This site is configured as pull-only. Pushing branch changes to the remote repository is disabled.', $branchState['commitPushAll']['reason']);
+    }
+
+    public function testBuildDiffStatePreservesUnderlyingDiffErrorMessage(): void
+    {
+        $page = $this->managedContentPage(
+            new SettingsRepository(),
+            new ManagedSetRegistry([new WordPressPagesAdapter()]),
+            new ManagedContentPageFakeSyncService([], ['wordpress_pages' => 'Partners logical keys must be unique.'])
+        );
+
+        $state = $this->buildDiffState($page, 'wordpress_pages');
+
+        self::assertNull($state['result']);
+        self::assertSame('Partners logical keys must be unique.', $state['error']);
+    }
+
+    public function testBuildCommitPushAllPlanSkipsErroringManagedSets(): void
+    {
+        $settingsRepository = new SettingsRepository();
+        $settingsRepository->save($settingsRepository->sanitize([
+            'enabled_managed_sets' => ['wordpress_pages'],
+        ]));
+
+        $page = $this->managedContentPage(
+            $settingsRepository,
+            new ManagedSetRegistry([new WordPressPagesAdapter()]),
+            new ManagedContentPageFakeSyncService([], ['wordpress_pages' => 'Partners logical keys must be unique.'])
+        );
+
+        $plan = $this->buildCommitPushAllPlan($page, $settingsRepository->get());
+
+        self::assertSame([], $plan['adapters']);
+        self::assertCount(1, $plan['skipped']);
+        self::assertSame('WordPress pages', $plan['skipped'][0]['label']);
+        self::assertSame('Partners logical keys must be unique.', $plan['skipped'][0]['message']);
+    }
+
     private function managedContentPage(
         SettingsRepository $settingsRepository,
         ManagedSetRegistry $managedSetRegistry,
@@ -211,14 +324,64 @@ final class ManagedContentPageBranchActionStateTest extends TestCase
 
         return $reflection->invoke($page, true, $adapter, $diffResult, null);
     }
+
+    /**
+     * @return array{enabled: bool, reason: ?string}
+     */
+    private function applyActionState(
+        ManagedContentPage $page,
+        \PushPull\Settings\PushPullSettings $settings,
+        bool $managedSetEnabled,
+        bool $available,
+        ?ManagedSetDiffResult $diffResult
+    ): array {
+        $reflection = new \ReflectionMethod($page, 'applyActionState');
+
+        /** @var array{enabled: bool, reason: ?string} $state */
+        $state = $reflection->invoke($page, $settings, $managedSetEnabled, $available, $diffResult);
+
+        return $state;
+    }
+
+    /**
+     * @return array{result: ?ManagedSetDiffResult, error: ?string}
+     */
+    private function buildDiffState(ManagedContentPage $page, string $managedSetKey): array
+    {
+        $reflection = new \ReflectionMethod($page, 'buildDiffState');
+
+        /** @var array{result: ?ManagedSetDiffResult, error: ?string} $state */
+        $state = $reflection->invoke($page, $managedSetKey);
+
+        return $state;
+    }
+
+    /**
+     * @return array{adapters: array<string, \PushPull\Content\ManifestManagedContentAdapterInterface>, skipped: array<int, array{label: string, message: string}>}
+     */
+    private function buildCommitPushAllPlan(
+        ManagedContentPage $page,
+        \PushPull\Settings\PushPullSettings $settings
+    ): array {
+        $reflection = new \ReflectionMethod($page, 'buildCommitPushAllPlan');
+
+        /** @var array{adapters: array<string, \PushPull\Content\ManifestManagedContentAdapterInterface>, skipped: array<int, array{label: string, message: string}>} $plan */
+        $plan = $reflection->invoke($page, $settings);
+
+        return $plan;
+    }
 }
 
 final class ManagedContentPageFakeSyncService implements SyncServiceInterface
 {
     /**
      * @param array<string, ManagedSetDiffResult> $diffs
+     * @param array<string, string> $diffFailures
      */
-    public function __construct(private readonly array $diffs)
+    public function __construct(
+        private readonly array $diffs,
+        private readonly array $diffFailures = []
+    )
     {
     }
 
@@ -239,6 +402,10 @@ final class ManagedContentPageFakeSyncService implements SyncServiceInterface
 
     public function diff(string $managedSetKey): ManagedSetDiffResult
     {
+        if (isset($this->diffFailures[$managedSetKey])) {
+            throw new \RuntimeException($this->diffFailures[$managedSetKey]);
+        }
+
         return $this->diffs[$managedSetKey];
     }
 

@@ -156,13 +156,15 @@ final class SettingsPage
 
     private function renderConnectionActions(): void
     {
+        $settings = $this->settingsRepository->get();
+
         echo '<div class="pushpull-panel">';
         echo '<h2>' . esc_html__('Connection Actions', 'pushpull') . '</h2>';
         echo '<p>' . esc_html__('Use this to verify that the configured provider, repository, token, and branch are reachable before running fetch or push workflows.', 'pushpull') . '</p>';
         echo '<div class="pushpull-button-grid">';
         $this->renderTestConnectionButton();
         if ($this->shouldOfferRemoteInitialization()) {
-            $this->renderInitializeRemoteButton();
+            $this->renderInitializeRemoteButton($settings);
         }
         echo '</div>';
         echo '</div>';
@@ -170,6 +172,8 @@ final class SettingsPage
 
     private function renderDangerZone(): void
     {
+        $settings = $this->settingsRepository->get();
+
         echo '<div class="pushpull-panel">';
         echo '<h2>' . esc_html__('Repository Reset', 'pushpull') . '</h2>';
         echo '<p>' . esc_html__('This clears PushPull local repository state, fetched objects, refs, and conflicts while keeping your saved configuration, operation history, live WordPress content, and remote repository untouched.', 'pushpull') . '</p>';
@@ -180,11 +184,15 @@ final class SettingsPage
         echo '</form>';
         echo '<hr />';
         echo '<p>' . esc_html__('This resets the configured remote branch by creating one new commit that removes all tracked files from the branch. It does not rewrite Git history.', 'pushpull') . '</p>';
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the remote branch to an empty commit? This will not delete Git history, but it will create one new remote commit that removes all tracked files from the branch.\');">';
-        echo '<input type="hidden" name="action" value="pushpull_reset_remote_branch" />';
-        wp_nonce_field(self::RESET_REMOTE_BRANCH_ACTION);
-        submit_button(__('Reset remote branch', 'pushpull'), 'delete', 'submit', false);
-        echo '</form>';
+        if (! $settings->allowsRemoteWrites()) {
+            printf('<p class="description">%s</p>', esc_html($this->remoteWriteBlockedMessage()));
+        } else {
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the remote branch to an empty commit? This will not delete Git history, but it will create one new remote commit that removes all tracked files from the branch.\');">';
+            echo '<input type="hidden" name="action" value="pushpull_reset_remote_branch" />';
+            wp_nonce_field(self::RESET_REMOTE_BRANCH_ACTION);
+            submit_button(__('Reset remote branch', 'pushpull'), 'delete', 'submit', false);
+            echo '</form>';
+        }
         echo '</div>';
     }
 
@@ -196,6 +204,7 @@ final class SettingsPage
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Provider', 'pushpull'), esc_html($settings->providerKey));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Repository', 'pushpull'), esc_html(trim($settings->ownerOrWorkspace . '/' . $settings->repository, '/')));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Branch', 'pushpull'), esc_html($settings->branch));
+        printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Site sync mode', 'pushpull'), esc_html($this->siteModeLabel($settings)));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Enabled domains', 'pushpull'), esc_html((string) count($settings->enabledManagedSets)));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Token', 'pushpull'), esc_html($settings->maskedApiToken() !== '' ? $settings->maskedApiToken() : 'Not stored'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Schema', 'pushpull'), esc_html((new SchemaMigrator())->installedVersion() ?: 'Not installed'));
@@ -309,6 +318,10 @@ final class SettingsPage
 
         $settings = $this->settingsRepository->get();
 
+        if (! $settings->allowsRemoteWrites()) {
+            $this->redirectWithNotice('error', $this->remoteWriteBlockedMessage());
+        }
+
         try {
             $result = $this->operationExecutor->run(
                 'generateblocks_global_styles',
@@ -343,6 +356,10 @@ final class SettingsPage
 
         $settings = $this->settingsRepository->get();
         $managedSetKey = $this->branchActionManagedSetKey($settings);
+
+        if (! $settings->allowsRemoteWrites()) {
+            $this->redirectWithNotice('error', $this->remoteWriteBlockedMessage());
+        }
 
         if ($managedSetKey === null) {
             $this->redirectWithNotice('error', 'Enable at least one managed set before resetting the remote branch.');
@@ -381,8 +398,13 @@ final class SettingsPage
         echo '</form>';
     }
 
-    private function renderInitializeRemoteButton(): void
+    private function renderInitializeRemoteButton(PushPullSettings $settings): void
     {
+        if (! $settings->allowsRemoteWrites()) {
+            printf('<p class="description">%s</p>', esc_html($this->remoteWriteBlockedMessage()));
+            return;
+        }
+
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Initialize the configured remote repository? PushPull will create the first commit on the configured branch so fetch and push can start working.\');">';
         echo '<input type="hidden" name="action" value="pushpull_initialize_remote_repository" />';
         wp_nonce_field(self::INITIALIZE_REMOTE_REPOSITORY_ACTION);
@@ -399,6 +421,20 @@ final class SettingsPage
         }
 
         return null;
+    }
+
+    private function remoteWriteBlockedMessage(): string
+    {
+        return __('This site is configured as pull-only. Remote repository write actions are disabled.', 'pushpull');
+    }
+
+    private function siteModeLabel(PushPullSettings $settings): string
+    {
+        return match ($settings->siteMode) {
+            PushPullSettings::SITE_MODE_PUSH_ONLY => __('Push only', 'pushpull'),
+            PushPullSettings::SITE_MODE_PULL_ONLY => __('Pull only', 'pushpull'),
+            default => __('Push and pull', 'pushpull'),
+        };
     }
 
     /**

@@ -73,6 +73,7 @@ final class AsyncBranchOperationRunner
         }
 
         $settings = $this->settingsRepository->get();
+        $this->guardOperationAllowedBySiteMode($settings, $operationType);
         $record = $this->operationLogRepository->start($managedSetKey, $operationType, [
             'branch' => $settings->branch,
             'async' => true,
@@ -451,9 +452,11 @@ final class AsyncBranchOperationRunner
      */
     private function initialCommitPushAllState(array $baseState, string $branch): array
     {
-        $managedSetKeys = $this->enabledAvailableManagedSetKeys();
+        $plan = $this->buildCommitPushAllPlan();
+        $managedSetKeys = $plan['managedSetKeys'];
+        $skippedManagedSets = $plan['skippedManagedSets'];
 
-        if ($managedSetKeys === []) {
+        if ($managedSetKeys === [] && $skippedManagedSets === []) {
             return $baseState + [
                 'phase' => 'complete',
                 'summaryType' => 'success',
@@ -468,6 +471,7 @@ final class AsyncBranchOperationRunner
         return $baseState + [
             'phase' => 'commit_all',
             'managedSetKeys' => $managedSetKeys,
+            'skippedManagedSets' => $skippedManagedSets,
             'managedSetIndex' => 0,
             'createdCommitCount' => 0,
             'committedDomainCount' => 0,
@@ -603,13 +607,20 @@ final class AsyncBranchOperationRunner
             $pushState['createdCommitCount'] = $state['createdCommitCount'];
             $pushState['committedDomainCount'] = $state['committedDomainCount'];
             $pushState['committedFileCount'] = $state['committedFileCount'];
+            $pushState['skippedManagedSets'] = $state['skippedManagedSets'] ?? [];
 
             if (($pushState['phase'] ?? '') === 'complete') {
+                $summaryMessage = __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull');
+
+                if (($state['skippedManagedSets'] ?? []) !== []) {
+                    $summaryMessage .= ' ' . $this->skippedManagedSetsSummary((array) $state['skippedManagedSets']);
+                }
+
                 return [
                     'done' => true,
                     'finalResult' => [
                         'summaryType' => 'success',
-                        'summaryMessage' => __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull'),
+                        'summaryMessage' => $summaryMessage,
                         'progressMode' => 'indeterminate',
                         'progressCurrent' => 0,
                         'progressTotal' => 0,
@@ -643,6 +654,11 @@ final class AsyncBranchOperationRunner
             (string) ($state['branch'] ?? ''),
             (string) ($finalResult['remoteCommitHash'] ?? '')
         );
+
+        if (($state['skippedManagedSets'] ?? []) !== []) {
+            $finalResult['summaryMessage'] .= ' ' . $this->skippedManagedSetsSummary((array) $state['skippedManagedSets']);
+        }
+
         $finalResult['operationType'] = 'commit_push_all';
 
         return [
@@ -1493,6 +1509,17 @@ final class AsyncBranchOperationRunner
         ];
     }
 
+    private function guardOperationAllowedBySiteMode(\PushPull\Settings\PushPullSettings $settings, string $operationType): void
+    {
+        if (in_array($operationType, ['apply', 'pull_apply_all'], true) && ! $settings->allowsLiveWrites()) {
+            throw new RuntimeException('This site is configured as push-only. Applying repository state into WordPress is disabled.');
+        }
+
+        if (in_array($operationType, ['push', 'commit_push_all'], true) && ! $settings->allowsRemoteWrites()) {
+            throw new RuntimeException('This site is configured as pull-only. Pushing branch changes to the remote repository is disabled.');
+        }
+    }
+
     private function aliasRemoteCommitHash(string $stagedRemoteHash, string $finalRemoteHash): void
     {
         if ($stagedRemoteHash === $finalRemoteHash) {
@@ -1539,6 +1566,53 @@ final class AsyncBranchOperationRunner
         }
 
         return $managedSetKeys;
+    }
+
+    /**
+     * @return array{managedSetKeys: string[], skippedManagedSets: array<int, array{label: string, message: string}>}
+     */
+    private function buildCommitPushAllPlan(): array
+    {
+        $managedSetKeys = [];
+        $skippedManagedSets = [];
+
+        foreach ($this->enabledAvailableManagedSetKeys() as $managedSetKey) {
+            $adapter = $this->managedSetRegistry?->get($managedSetKey);
+
+            try {
+                $this->syncService->diff($managedSetKey);
+            } catch (\Throwable $throwable) {
+                $skippedManagedSets[] = [
+                    'label' => $adapter?->getManagedSetLabel() ?? $managedSetKey,
+                    'message' => $throwable->getMessage(),
+                ];
+                continue;
+            }
+
+            $managedSetKeys[] = $managedSetKey;
+        }
+
+        return [
+            'managedSetKeys' => $managedSetKeys,
+            'skippedManagedSets' => $skippedManagedSets,
+        ];
+    }
+
+    /**
+     * @param array<int, array{label: string, message: string}> $skippedManagedSets
+     */
+    private function skippedManagedSetsSummary(array $skippedManagedSets): string
+    {
+        $parts = array_map(
+            static fn (array $entry): string => sprintf('%s (%s)', $entry['label'], $entry['message']),
+            $skippedManagedSets
+        );
+
+        return sprintf(
+            'Skipped %d managed domain(s) due to diff/export errors: %s.',
+            count($skippedManagedSets),
+            implode('; ', $parts)
+        );
     }
 
     /**

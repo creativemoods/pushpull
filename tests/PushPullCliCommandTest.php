@@ -47,6 +47,7 @@ final class PushPullCliCommandTest extends TestCase
 {
     protected function setUp(): void
     {
+        $GLOBALS['pushpull_test_options'] = [];
         \WP_CLI::$lines = [];
         \WP_CLI::$successes = [];
         \WP_CLI::$warnings = [];

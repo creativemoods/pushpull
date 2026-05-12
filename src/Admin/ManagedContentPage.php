@@ -207,7 +207,8 @@ final class ManagedContentPage
         $isInitialized = $this->localRepository->hasBeenInitialized($settings->branch);
         $headCommit = $this->localRepository->getHeadCommit($settings->branch);
         $exportPreview = $this->buildExportPreview($managedContentAdapter);
-        $diffResult = $this->buildDiffResult($managedSetKey);
+        $diffState = $this->buildDiffState($managedSetKey);
+        $diffResult = $diffState['result'];
         $workingState = $this->workingStateRepository->get($managedSetKey, $settings->branch);
 
         echo '<div class="pushpull-status-grid">';
@@ -227,7 +228,7 @@ final class ManagedContentPage
         printf('<h2>%s</h2>', esc_html($managedContentAdapter->getManagedSetLabel()));
         echo '<div class="pushpull-button-grid">';
         $commitState = $this->commitActionState($managedSetEnabled, $managedContentAdapter->isAvailable(), $diffResult);
-        $applyState = $this->applyActionState($managedSetEnabled, $managedContentAdapter->isAvailable(), $diffResult);
+        $applyState = $this->applyActionState($settings, $managedSetEnabled, $managedContentAdapter->isAvailable(), $diffResult);
         $this->renderCommitButton($managedContentAdapter, $commitState['enabled'], $commitState['reason']);
         $this->renderApplyButton($managedContentAdapter, $applyState['enabled'], $applyState['reason']);
         $this->renderResolveConflictsButton($workingState);
@@ -258,7 +259,8 @@ final class ManagedContentPage
         foreach ($enabledAdapters as $managedSetKey => $adapter) {
             $enabled = true;
 
-            $diffResult = $this->buildDiffResult($managedSetKey);
+            $diffState = $this->buildDiffState($managedSetKey);
+            $diffResult = $diffState['result'];
             $workingState = $this->workingStateRepository->get($managedSetKey, $settings->branch);
 
             if ($diffResult !== null && ($diffResult->liveToLocal->hasChanges() || $diffResult->localToRemote->hasChanges())) {
@@ -277,6 +279,7 @@ final class ManagedContentPage
                 'adapter' => $adapter,
                 'enabled' => $enabled,
                 'diffResult' => $diffResult,
+                'diffError' => $diffState['error'],
                 'workingState' => $workingState,
             ];
         }
@@ -322,7 +325,7 @@ final class ManagedContentPage
     }
 
     /**
-     * @param array<int, array{adapter: ManifestManagedContentAdapterInterface, enabled: bool, diffResult: ?ManagedSetDiffResult, workingState: ?\PushPull\Persistence\WorkingState\WorkingStateRecord}> $rows
+     * @param array<int, array{adapter: ManifestManagedContentAdapterInterface, enabled: bool, diffResult: ?ManagedSetDiffResult, diffError: ?string, workingState: ?\PushPull\Persistence\WorkingState\WorkingStateRecord}> $rows
      */
     private function renderOverviewSection(string $heading, array $rows): void
     {
@@ -339,6 +342,8 @@ final class ManagedContentPage
             $managedSetKey = $adapter->getManagedSetKey();
             /** @var ManagedSetDiffResult|null $diffResult */
             $diffResult = $row['diffResult'];
+            /** @var string|null $diffError */
+            $diffError = $row['diffError'];
             /** @var \PushPull\Persistence\WorkingState\WorkingStateRecord|null $workingState */
             $workingState = $row['workingState'];
 
@@ -373,7 +378,7 @@ final class ManagedContentPage
             }
 
             if ($diffResult === null) {
-                echo '<p class="description">' . esc_html__('Diff data is currently unavailable for this managed set.', 'pushpull') . '</p>';
+                echo '<p class="description">' . esc_html($diffError !== null && $diffError !== '' ? $diffError : __('Diff data is currently unavailable for this managed set.', 'pushpull')) . '</p>';
                 echo '</details>';
                 continue;
             }
@@ -547,13 +552,27 @@ final class ManagedContentPage
         ];
     }
 
-    private function buildDiffResult(string $managedSetKey): ?ManagedSetDiffResult
+    /**
+     * @return array{result: ?ManagedSetDiffResult, error: ?string}
+     */
+    private function buildDiffState(string $managedSetKey): array
     {
         try {
-            return $this->syncService->diff($managedSetKey);
-        } catch (Throwable) {
-            return null;
+            return [
+                'result' => $this->syncService->diff($managedSetKey),
+                'error' => null,
+            ];
+        } catch (Throwable $throwable) {
+            return [
+                'result' => null,
+                'error' => $throwable->getMessage(),
+            ];
         }
+    }
+
+    private function buildDiffResult(string $managedSetKey): ?ManagedSetDiffResult
+    {
+        return $this->buildDiffState($managedSetKey)['result'];
     }
 
     private function renderScreenErrorNotice(string $message, Throwable $throwable): void
@@ -1016,6 +1035,12 @@ final class ManagedContentPage
             wp_send_json_error(['message' => sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel())], 400);
         }
 
+        $modeRestriction = $this->modeRestrictionMessage($settings, $operationType);
+
+        if ($modeRestriction !== null) {
+            wp_send_json_error(['message' => $modeRestriction], 400);
+        }
+
         try {
             $started = $this->asyncBranchOperationRunner->start($managedSetKey, $operationType);
         } catch (\Throwable $exception) {
@@ -1043,9 +1068,15 @@ final class ManagedContentPage
 
         $settings = $this->settingsRepository->get();
         $branchManagedSetKey = $this->branchActionManagedSetKey($settings);
-        $availableAdapters = $this->enabledAvailableManagedSetAdapters($settings);
+        $commitPlan = $this->buildCommitPushAllPlan($settings);
+        $availableAdapters = $commitPlan['adapters'];
+        $skippedManagedSets = $commitPlan['skipped'];
 
-        if ($branchManagedSetKey === null || $availableAdapters === []) {
+        if (! $settings->allowsRemoteWrites()) {
+            $this->redirectWithNotice('error', $this->remoteWriteBlockedMessage(), null);
+        }
+
+        if ($branchManagedSetKey === null || ($availableAdapters === [] && $skippedManagedSets === [])) {
             $this->redirectWithNotice('error', __('Enable at least one available managed domain to use this action.', 'pushpull'), null);
         }
 
@@ -1077,27 +1108,39 @@ final class ManagedContentPage
                 }
             }
 
-            $pushResult = $this->operationExecutor->run(
-                $branchManagedSetKey,
-                'push',
-                ['branch' => $settings->branch, 'bulk' => true],
-                fn () => $this->syncService->push($branchManagedSetKey)
-            );
-            $this->fetchAvailabilityService->markUpToDate($settings, $pushResult->remoteCommitHash, $pushResult->remoteCommitHash);
+            $pushResult = null;
+
+            if ($availableAdapters !== []) {
+                $pushResult = $this->operationExecutor->run(
+                    $branchManagedSetKey,
+                    'push',
+                    ['branch' => $settings->branch, 'bulk' => true],
+                    fn () => $this->syncService->push($branchManagedSetKey)
+                );
+                $this->fetchAvailabilityService->markUpToDate($settings, $pushResult->remoteCommitHash, $pushResult->remoteCommitHash);
+            }
         } catch (ManagedContentExportException | ProviderException | RuntimeException $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             $this->redirectWithNotice('error', $message, null);
         }
 
-        $message = $pushResult->status === 'already_up_to_date'
-            ? __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull')
-            : sprintf(
-                'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
-                $committedDomainCount,
-                $committedFileCount,
-                $pushResult->branch,
-                $pushResult->remoteCommitHash
-            );
+        if ($pushResult === null) {
+            $message = __('No managed domains were committed or pushed.', 'pushpull');
+        } else {
+            $message = $pushResult->status === 'already_up_to_date'
+                ? __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull')
+                : sprintf(
+                    'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
+                    $committedDomainCount,
+                    $committedFileCount,
+                    $pushResult->branch,
+                    $pushResult->remoteCommitHash
+                );
+        }
+
+        if ($skippedManagedSets !== []) {
+            $message .= ' ' . $this->skippedManagedSetsSummary($skippedManagedSets);
+        }
 
         $this->redirectWithNotice('success', $message, null);
     }
@@ -1113,6 +1156,10 @@ final class ManagedContentPage
         $settings = $this->settingsRepository->get();
         $branchManagedSetKey = $this->branchActionManagedSetKey($settings);
         $availableAdapters = $this->enabledAvailableManagedSetAdapters($settings);
+
+        if (! $settings->allowsLiveWrites()) {
+            $this->redirectWithNotice('error', $this->liveWriteBlockedMessage(), null);
+        }
 
         if ($branchManagedSetKey === null || $availableAdapters === []) {
             $this->redirectWithNotice('error', __('Enable at least one available managed domain to use this action.', 'pushpull'), null);
@@ -1314,6 +1361,10 @@ final class ManagedContentPage
             $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
         }
 
+        if (! $settings->allowsLiveWrites()) {
+            $this->redirectWithNotice('error', $this->liveWriteBlockedMessage(), $managedSetKey);
+        }
+
         try {
             $result = $this->operationExecutor->run(
                 $managedSetKey,
@@ -1352,6 +1403,10 @@ final class ManagedContentPage
 
         if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
             $this->redirectWithNotice('error', sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel()), $managedSetKey);
+        }
+
+        if (! $settings->allowsRemoteWrites()) {
+            $this->redirectWithNotice('error', $this->remoteWriteBlockedMessage(), $managedSetKey);
         }
 
         try {
@@ -1797,27 +1852,29 @@ final class ManagedContentPage
 
         $pullEnabled = in_array($relationship, ['remote_only', 'behind', 'diverged'], true);
         $mergeEnabled = in_array($relationship, ['behind', 'diverged'], true);
-        $pushEnabled = $relationship === 'ahead' && $hasLocalToRemoteChanges;
-        $commitPushAllEnabled = $hasAvailableManagedSet
+        $pushEnabled = $settings->allowsRemoteWrites() && $relationship === 'ahead' && $hasLocalToRemoteChanges;
+        $commitPushAllEnabled = $settings->allowsRemoteWrites()
+            && $hasAvailableManagedSet
             && in_array($relationship, ['in_sync', 'ahead'], true)
             && ($hasLiveToLocalChanges || $pushEnabled);
-        $pullApplyAllEnabled = $hasAvailableManagedSet
+        $pullApplyAllEnabled = $settings->allowsLiveWrites()
+            && $hasAvailableManagedSet
             && ($hasLiveToLocalChanges || $pullEnabled || $mergeEnabled);
 
         return [
             'managedSetKey' => $managedSetKey,
             'commitPushAll' => [
                 'enabled' => $commitPushAllEnabled,
-                'reason' => $commitPushAllEnabled ? null : $this->commitPushAllDisabledReason($hasAvailableManagedSet, (string) $relationship, $hasLiveToLocalChanges, $hasLocalToRemoteChanges),
+                'reason' => $commitPushAllEnabled ? null : $this->commitPushAllDisabledReason($settings, $hasAvailableManagedSet, (string) $relationship, $hasLiveToLocalChanges, $hasLocalToRemoteChanges),
             ],
             'pullApplyAll' => [
                 'enabled' => $pullApplyAllEnabled,
-                'reason' => $pullApplyAllEnabled ? null : $this->pullApplyAllDisabledReason($hasAvailableManagedSet, (string) $relationship, $hasLiveToLocalChanges),
+                'reason' => $pullApplyAllEnabled ? null : $this->pullApplyAllDisabledReason($settings, $hasAvailableManagedSet, (string) $relationship, $hasLiveToLocalChanges),
             ],
             'fetch' => ['enabled' => true, 'reason' => null],
             'pull' => ['enabled' => $pullEnabled, 'reason' => $pullEnabled ? null : $this->pullDisabledReason((string) $relationship, $hasLocalToRemoteChanges)],
             'merge' => ['enabled' => $mergeEnabled, 'reason' => $mergeEnabled ? null : $this->mergeDisabledReason((string) $relationship)],
-            'push' => ['enabled' => $pushEnabled, 'reason' => $pushEnabled ? null : $this->pushDisabledReason((string) $relationship, $hasLocalToRemoteChanges, $hasLiveToLocalChanges)],
+            'push' => ['enabled' => $pushEnabled, 'reason' => $pushEnabled ? null : $this->pushDisabledReason($settings, (string) $relationship, $hasLocalToRemoteChanges, $hasLiveToLocalChanges)],
         ];
     }
 
@@ -1848,7 +1905,7 @@ final class ManagedContentPage
     /**
      * @return array{enabled: bool, reason: ?string}
      */
-    private function applyActionState(bool $managedSetEnabled, bool $available, ?ManagedSetDiffResult $diffResult): array
+    private function applyActionState(\PushPull\Settings\PushPullSettings $settings, bool $managedSetEnabled, bool $available, ?ManagedSetDiffResult $diffResult): array
     {
         if (! $managedSetEnabled) {
             return ['enabled' => false, 'reason' => __('This domain is disabled in settings.', 'pushpull')];
@@ -1860,6 +1917,10 @@ final class ManagedContentPage
 
         if ($diffResult === null) {
             return ['enabled' => false, 'reason' => __('Status is currently unavailable for this domain.', 'pushpull')];
+        }
+
+        if (! $settings->allowsLiveWrites()) {
+            return ['enabled' => false, 'reason' => $this->liveWriteBlockedMessage()];
         }
 
         if (! $diffResult->liveToLocal->hasChanges()) {
@@ -1892,8 +1953,12 @@ final class ManagedContentPage
         };
     }
 
-    private function pushDisabledReason(string $relationship, bool $hasLocalToRemoteChanges, bool $hasLiveToLocalChanges): string
+    private function pushDisabledReason(\PushPull\Settings\PushPullSettings $settings, string $relationship, bool $hasLocalToRemoteChanges, bool $hasLiveToLocalChanges): string
     {
+        if (! $settings->allowsRemoteWrites()) {
+            return $this->remoteWriteBlockedMessage();
+        }
+
         return match ($relationship) {
             'in_sync' => __('Nothing to push. The local branch already matches the fetched remote state.', 'pushpull'),
             'behind' => __('Push is blocked. Fetch or pull the latest remote changes first.', 'pushpull'),
@@ -1907,10 +1972,14 @@ final class ManagedContentPage
         };
     }
 
-    private function commitPushAllDisabledReason(bool $hasAvailableManagedSet, string $relationship, bool $hasLiveToLocalChanges, bool $hasLocalToRemoteChanges): string
+    private function commitPushAllDisabledReason(\PushPull\Settings\PushPullSettings $settings, bool $hasAvailableManagedSet, string $relationship, bool $hasLiveToLocalChanges, bool $hasLocalToRemoteChanges): string
     {
         if (! $hasAvailableManagedSet) {
             return __('No enabled available domains can participate in this action.', 'pushpull');
+        }
+
+        if (! $settings->allowsRemoteWrites()) {
+            return $this->remoteWriteBlockedMessage();
         }
 
         return match ($relationship) {
@@ -1922,10 +1991,14 @@ final class ManagedContentPage
         };
     }
 
-    private function pullApplyAllDisabledReason(bool $hasAvailableManagedSet, string $relationship, bool $hasLiveToLocalChanges): string
+    private function pullApplyAllDisabledReason(\PushPull\Settings\PushPullSettings $settings, bool $hasAvailableManagedSet, string $relationship, bool $hasLiveToLocalChanges): string
     {
         if (! $hasAvailableManagedSet) {
             return __('No enabled available domains can participate in this action.', 'pushpull');
+        }
+
+        if (! $settings->allowsLiveWrites()) {
+            return $this->liveWriteBlockedMessage();
         }
 
         return match ($relationship) {
@@ -2204,6 +2277,34 @@ final class ManagedContentPage
         );
     }
 
+    /**
+     * @return array{adapters: array<string, ManifestManagedContentAdapterInterface>, skipped: array<int, array{label: string, message: string}>}
+     */
+    private function buildCommitPushAllPlan(\PushPull\Settings\PushPullSettings $settings): array
+    {
+        $eligibleAdapters = [];
+        $skippedManagedSets = [];
+
+        foreach ($this->enabledAvailableManagedSetAdapters($settings) as $managedSetKey => $adapter) {
+            $diffState = $this->buildDiffState($managedSetKey);
+
+            if ($diffState['result'] === null) {
+                $skippedManagedSets[] = [
+                    'label' => $adapter->getManagedSetLabel(),
+                    'message' => $diffState['error'] ?? __('Diff data is currently unavailable for this managed set.', 'pushpull'),
+                ];
+                continue;
+            }
+
+            $eligibleAdapters[$managedSetKey] = $adapter;
+        }
+
+        return [
+            'adapters' => $eligibleAdapters,
+            'skipped' => $skippedManagedSets,
+        ];
+    }
+
     private function visibleManagedSetKey(\PushPull\Settings\PushPullSettings $settings, ?string $requestedManagedSetKey): ?string
     {
         if ($requestedManagedSetKey === null || $requestedManagedSetKey === '') {
@@ -2313,7 +2414,7 @@ final class ManagedContentPage
         );
 
         if ($counts['mixed'] > 0) {
-            $summary .= sprintf(', %d mixed', $counts['mixed']);
+            $summary .= sprintf(', %d diverged', $counts['mixed']);
         }
 
         return $summary;
@@ -2351,6 +2452,46 @@ final class ManagedContentPage
         }
 
         return $counts;
+    }
+
+    private function liveWriteBlockedMessage(): string
+    {
+        return __('This site is configured as push-only. Applying repository state into WordPress is disabled.', 'pushpull');
+    }
+
+    private function remoteWriteBlockedMessage(): string
+    {
+        return __('This site is configured as pull-only. Pushing branch changes to the remote repository is disabled.', 'pushpull');
+    }
+
+    private function modeRestrictionMessage(\PushPull\Settings\PushPullSettings $settings, string $operationType): ?string
+    {
+        if (in_array($operationType, ['apply', 'pull_apply_all'], true) && ! $settings->allowsLiveWrites()) {
+            return $this->liveWriteBlockedMessage();
+        }
+
+        if (in_array($operationType, ['push', 'commit_push_all'], true) && ! $settings->allowsRemoteWrites()) {
+            return $this->remoteWriteBlockedMessage();
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<int, array{label: string, message: string}> $skippedManagedSets
+     */
+    private function skippedManagedSetsSummary(array $skippedManagedSets): string
+    {
+        $parts = array_map(
+            static fn (array $entry): string => sprintf('%s (%s)', $entry['label'], $entry['message']),
+            $skippedManagedSets
+        );
+
+        return sprintf(
+            'Skipped %d managed domain(s) due to diff/export errors: %s.',
+            count($skippedManagedSets),
+            implode('; ', $parts)
+        );
     }
 
     /**

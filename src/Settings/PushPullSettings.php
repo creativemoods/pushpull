@@ -6,6 +6,10 @@ namespace PushPull\Settings;
 
 final class PushPullSettings
 {
+    public const SITE_MODE_BOTH = 'both';
+    public const SITE_MODE_PUSH_ONLY = 'push_only';
+    public const SITE_MODE_PULL_ONLY = 'pull_only';
+
     /**
      * @param string[] $enabledManagedSets
      */
@@ -21,7 +25,8 @@ final class PushPullSettings
         public readonly string $authorName,
         public readonly string $authorEmail,
         public readonly array $enabledManagedSets = [],
-        public readonly int $fetchAvailabilityCheckIntervalMinutes = 5
+        public readonly int $fetchAvailabilityCheckIntervalMinutes = 5,
+        public readonly string $siteMode = self::SITE_MODE_BOTH
     ) {
     }
 
@@ -63,7 +68,8 @@ final class PushPullSettings
             (string) ($values['author_name'] ?? ''),
             (string) ($values['author_email'] ?? ''),
             array_values(array_unique($enabledManagedSets)),
-            (int) ($values['fetch_availability_check_interval_minutes'] ?? 5)
+            (int) ($values['fetch_availability_check_interval_minutes'] ?? 5),
+            self::normalizeSiteMode((string) ($values['site_mode'] ?? self::SITE_MODE_BOTH))
         );
     }
 
@@ -83,6 +89,7 @@ final class PushPullSettings
             'enabled_managed_sets' => array_values($this->enabledManagedSets),
             'auto_apply_enabled' => $this->autoApplyEnabled,
             'diagnostics_enabled' => $this->diagnosticsEnabled,
+            'site_mode' => $this->siteMode,
             'author_name' => $this->authorName,
             'author_email' => $this->authorEmail,
         ];
@@ -112,5 +119,24 @@ final class PushPullSettings
         $suffix = substr($this->apiToken, -4);
 
         return sprintf('Stored token ending in %s', $suffix);
+    }
+
+    public function allowsLiveWrites(): bool
+    {
+        return $this->siteMode !== self::SITE_MODE_PUSH_ONLY;
+    }
+
+    public function allowsRemoteWrites(): bool
+    {
+        return $this->siteMode !== self::SITE_MODE_PULL_ONLY;
+    }
+
+    private static function normalizeSiteMode(string $siteMode): string
+    {
+        return match ($siteMode) {
+            self::SITE_MODE_PUSH_ONLY,
+            self::SITE_MODE_PULL_ONLY => $siteMode,
+            default => self::SITE_MODE_BOTH,
+        };
     }
 }

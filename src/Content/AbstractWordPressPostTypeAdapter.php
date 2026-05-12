@@ -7,6 +7,7 @@ namespace PushPull\Content;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Content\Exception\ManagedContentExportException;
+use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use WP_Post;
@@ -231,6 +232,12 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
             throw new ManagedContentExportException(sprintf('%s logical key cannot be empty.', $this->getManagedSetLabel()));
         }
 
+        $languageCode = $this->translationLanguageCode($wpRecord);
+
+        if ($languageCode !== null) {
+            $logicalKey .= '--' . $languageCode;
+        }
+
         return $logicalKey;
     }
 
@@ -433,12 +440,28 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
     {
         foreach ($this->allPosts() as $post) {
             $candidateLogicalKey = $this->computeLogicalKey([
+                'wp_object_id' => (int) $post->ID,
                 'post_title' => (string) $post->post_title,
                 'post_name' => (string) $post->post_name,
             ]);
 
             if ($candidateLogicalKey === $logicalKey) {
                 return (int) $post->ID;
+            }
+        }
+
+        $baseLogicalKey = $this->baseLogicalKey($logicalKey);
+
+        if ($baseLogicalKey !== null) {
+            foreach ($this->allPosts() as $post) {
+                $candidateLogicalKey = $this->computeLogicalKey([
+                    'post_title' => (string) $post->post_title,
+                    'post_name' => (string) $post->post_name,
+                ]);
+
+                if ($candidateLogicalKey === $baseLogicalKey) {
+                    return (int) $post->ID;
+                }
             }
         }
 
@@ -494,14 +517,24 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
     public function deleteMissingItems(array $desiredLogicalKeys): array
     {
         $deletedLogicalKeys = [];
+        $knownDesiredKeys = $desiredLogicalKeys;
+
+        foreach (array_keys($desiredLogicalKeys) as $logicalKey) {
+            $baseLogicalKey = $this->baseLogicalKey((string) $logicalKey);
+
+            if ($baseLogicalKey !== null) {
+                $knownDesiredKeys[$baseLogicalKey] = true;
+            }
+        }
 
         foreach ($this->allPosts() as $post) {
             $logicalKey = $this->computeLogicalKey([
+                'wp_object_id' => (int) $post->ID,
                 'post_title' => (string) $post->post_title,
                 'post_name' => (string) $post->post_name,
             ]);
 
-            if (isset($desiredLogicalKeys[$logicalKey])) {
+            if (isset($knownDesiredKeys[$logicalKey])) {
                 continue;
             }
 
@@ -867,7 +900,118 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
     protected function assertUniqueLogicalKeys(array $logicalKeys): void
     {
         if (count(array_unique($logicalKeys)) !== count($logicalKeys)) {
-            throw new ManagedContentExportException(sprintf('%s logical keys must be unique.', $this->getManagedSetLabel()));
+            $message = sprintf('%s logical keys must be unique.', $this->getManagedSetLabel());
+
+            if (! $this->translationManagementEnabled()) {
+                $message .= ' If these are translations, enable the Translation Management domain so language can be added to logical keys. Otherwise rename the conflicting items so each one has a unique slug or title.';
+            } else {
+                $message .= ' Rename the conflicting items so each one has a unique slug or title.';
+            }
+
+            throw new ManagedContentExportException($message);
         }
+    }
+
+    private function translationManagementEnabled(): bool
+    {
+        $settings = get_option(SettingsRepository::OPTION_KEY, []);
+
+        if (! is_array($settings) || ! is_array($settings['enabled_managed_sets'] ?? null)) {
+            return false;
+        }
+
+        return in_array('translation_management', array_map('strval', $settings['enabled_managed_sets']), true);
+    }
+
+    private function translationLanguageCode(array $wpRecord): ?string
+    {
+        if (! $this->translationManagementEnabled()) {
+            return null;
+        }
+
+        $postId = isset($wpRecord['wp_object_id']) ? (int) $wpRecord['wp_object_id'] : 0;
+
+        if ($postId <= 0) {
+            return null;
+        }
+
+        $languageCode = $this->findTranslationLanguageCode($postId);
+
+        if ($languageCode === '') {
+            return null;
+        }
+
+        return sanitize_key($languageCode);
+    }
+
+    private function findTranslationLanguageCode(int $postId): string
+    {
+        $elementType = 'post_' . $this->postType();
+        $cacheKey = sprintf('translation_language_code:%s:%d', $elementType, $postId);
+        $cacheGroup = 'pushpull';
+
+        if (isset($GLOBALS['pushpull_test_wpml_translations']) && is_array($GLOBALS['pushpull_test_wpml_translations'])) {
+            foreach ($GLOBALS['pushpull_test_wpml_translations'] as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                if ((string) ($row['element_type'] ?? '') !== $elementType || (int) ($row['element_id'] ?? 0) !== $postId) {
+                    continue;
+                }
+
+                return (string) ($row['language_code'] ?? '');
+            }
+
+            return '';
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return '';
+        }
+
+        $cachedLanguageCode = wp_cache_get($cacheKey, $cacheGroup, false, $cacheFound);
+
+        if ($cacheFound) {
+            return is_string($cachedLanguageCode) ? $cachedLanguageCode : '';
+        }
+
+        $table = $wpdb->prefix . 'icl_translations';
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
+        $row = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT language_code FROM {$table} WHERE element_type = %s AND element_id = %d LIMIT 1",
+                $elementType,
+                $postId
+            ),
+            ARRAY_A
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        if (! is_array($row)) {
+            wp_cache_set($cacheKey, '', $cacheGroup);
+
+            return '';
+        }
+
+        $languageCode = (string) ($row['language_code'] ?? '');
+
+        wp_cache_set($cacheKey, $languageCode, $cacheGroup);
+
+        return $languageCode;
+    }
+
+    private function baseLogicalKey(string $logicalKey): ?string
+    {
+        $baseLogicalKey = preg_replace('/--[a-z0-9_]+$/', '', $logicalKey);
+
+        if (! is_string($baseLogicalKey) || $baseLogicalKey === '' || $baseLogicalKey === $logicalKey) {
+            return null;
+        }
+
+        return $baseLogicalKey;
     }
 }

@@ -37,6 +37,7 @@ final class SettingsRepository
             'enabled_managed_sets' => [],
             'auto_apply_enabled' => false,
             'diagnostics_enabled' => true,
+            'site_mode' => PushPullSettings::SITE_MODE_BOTH,
             'author_name' => '',
             'author_email' => '',
         ]);
@@ -82,6 +83,7 @@ final class SettingsRepository
                 : [],
             'auto_apply_enabled' => ! empty($input['auto_apply_enabled']),
             'diagnostics_enabled' => ! array_key_exists('diagnostics_enabled', $input) || ! empty($input['diagnostics_enabled']),
+            'site_mode' => sanitize_key((string) ($input['site_mode'] ?? $existing->siteMode)),
             'author_name' => sanitize_text_field((string) ($input['author_name'] ?? '')),
             'author_email' => sanitize_email((string) ($input['author_email'] ?? '')),
         ]);
