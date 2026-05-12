@@ -19,6 +19,7 @@ final class DomainsPage
 {
     public const MENU_SLUG = 'pushpull-domains';
     private const SAVE_ACTION = 'pushpull_save_domains';
+    private const HEADER_LOGO_PATH = 'plugin-assets/images/pushpull_logo_transp.png';
 
     /**
      * @var array<string, array{label: string, source: string}>
@@ -72,8 +73,17 @@ final class DomainsPage
         $customContent = $this->customContentPanels();
 
         echo '<div class="wrap pushpull-admin">';
+        echo '<div class="pushpull-page-header">';
+        echo '<div class="pushpull-page-header__content">';
         echo '<h1>' . esc_html__('PushPull Domains', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('Choose what PushPull manages on this site. Domains are grouped first by source, then by role, so WordPress core, installed plugin integrations, and future custom content can scale without turning Settings into one long checkbox list.', 'pushpull') . '</p>';
+        echo '</div>';
+        printf(
+            '<div class="pushpull-page-logo"><img src="%s" alt="%s" /></div>',
+            esc_url(PUSHPULL_PLUGIN_URL . self::HEADER_LOGO_PATH),
+            esc_attr__('PushPull', 'pushpull')
+        );
+        echo '</div>';
         $this->renderPrimaryNavigation();
 
         $notice = $this->notice();

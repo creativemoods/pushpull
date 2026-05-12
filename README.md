@@ -1,13 +1,4 @@
-# PushPull
-
-Contributors: jeromesteunenberg
-Tags: git, github, generateblocks, content sync, devops
-Requires at least: 6.0
-Tested up to: 6.9
-Requires PHP: 8.1
-Stable tag: 0.0.21
-License: GPLv2
-License URI: [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
+![PushPull banner](plugin-assets/images/pushpull_banner.png)
 
 Git-backed content workflows for selected WordPress content domains.
 
@@ -236,7 +227,7 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 2. Choose the next semantic version, for example `0.2.0`.
 3. Run `composer bump-version -- 0.2.0`.
 4. Update the changelog in `README.md` and `readme.txt` for that version.
-5. Review the changes in `pushpull.php`, `README.md`, and `readme.txt`.
+5. Review the changes in `pushpull.php` and `readme.txt`, plus the changelog update in `README.md`.
 6. Commit the version bump.
 7. Create and push a Git tag in the form `v0.2.0` on that commit.
 8. Let GitLab run the tag pipeline.
@@ -252,6 +243,13 @@ When pushing to GitLab, PushPull currently linearizes local merge results into a
 4. Surface unresolved logical-reference mapping issues, such as GeneratePress condition IDs that could not be converted to logical placeholders, instead of silently leaving mixed raw IDs and canonical refs.
 
 ## Changelog
+
+### 0.0.22
+
+1. Refreshed PushPull branding across the project and plugin assets, including new banner and logo artwork plus updated WordPress.org icons and banners.
+2. Updated the WordPress admin screens with branded page headers and improved styling so Settings, Domains, Managed Content, and Audit Log share a more polished visual identity.
+3. Hardened remote-availability state tracking so fetch status is marked up to date after fetch, pull, push, and remote-initialize/reset flows, avoiding stale `Fetch` prompts after successful sync operations.
+4. Fixed remote repository initialization so the local branch and `HEAD` are seeded from the first fetched remote commit when starting from an empty local repository.
 
 ### 0.0.21
 

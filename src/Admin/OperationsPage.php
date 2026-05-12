@@ -11,6 +11,7 @@ use PushPull\Support\Capabilities;
 final class OperationsPage
 {
     public const MENU_SLUG = 'pushpull-audit-log';
+    private const HEADER_LOGO_PATH = 'plugin-assets/images/pushpull_logo_transp.png';
 
     public function __construct(private readonly OperationLogRepository $operationLogRepository)
     {
@@ -51,8 +52,17 @@ final class OperationsPage
         $records = $this->operationLogRepository->recent(100);
 
         echo '<div class="wrap pushpull-admin">';
+        echo '<div class="pushpull-page-header">';
+        echo '<div class="pushpull-page-header__content">';
         echo '<h1>' . esc_html__('PushPull Audit Log', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('This screen shows the recorded history of recent PushPull sync and repository actions, including inputs, normalized outcomes, and failure details.', 'pushpull') . '</p>';
+        echo '</div>';
+        printf(
+            '<div class="pushpull-page-logo"><img src="%s" alt="%s" /></div>',
+            esc_url(PUSHPULL_PLUGIN_URL . self::HEADER_LOGO_PATH),
+            esc_attr__('PushPull', 'pushpull')
+        );
+        echo '</div>';
         $this->renderPrimaryNavigation();
 
         if ($records === []) {

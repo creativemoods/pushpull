@@ -12,6 +12,50 @@
     color: var(--pushpull-muted);
 }
 
+.pushpull-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 10px;
+}
+
+.pushpull-page-header__content {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.pushpull-page-header__content h1 {
+    margin-bottom: 0.35rem;
+}
+
+.pushpull-page-logo {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+}
+
+.pushpull-page-logo img {
+    display: block;
+    width: auto;
+    max-width: 220px;
+    max-height: 56px;
+    height: auto;
+}
+
+@media (max-width: 782px) {
+    .pushpull-page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .pushpull-page-logo img {
+        max-width: min(220px, 70vw);
+        max-height: 48px;
+    }
+}
+
 .pushpull-page-nav-row {
     display: flex;
     align-items: flex-end;

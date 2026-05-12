@@ -29,6 +29,7 @@ use Throwable;
 final class ManagedContentPage
 {
     public const MENU_SLUG = 'pushpull-managed-content';
+    private const HEADER_LOGO_PATH = 'plugin-assets/images/pushpull_logo_transp.png';
     private const COMMIT_ACTION = 'pushpull_commit_managed_set';
     private const PULL_ACTION = 'pushpull_pull_managed_set';
     private const FETCH_ACTION = 'pushpull_fetch_managed_set';
@@ -112,8 +113,17 @@ final class ManagedContentPage
         $activeManagedSetKey = $this->visibleManagedSetKey($settings, $requestedManagedSetKey);
 
         echo '<div class="wrap pushpull-admin">';
+        echo '<div class="pushpull-page-header">';
+        echo '<div class="pushpull-page-header__content">';
         echo '<h1>' . esc_html__('Managed Content', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('Review managed content state across all enabled domains, then drill into a specific managed set for fetch, merge, apply, commit, and push actions.', 'pushpull') . '</p>';
+        echo '</div>';
+        printf(
+            '<div class="pushpull-page-logo"><img src="%s" alt="%s" /></div>',
+            esc_url(PUSHPULL_PLUGIN_URL . self::HEADER_LOGO_PATH),
+            esc_attr__('PushPull', 'pushpull')
+        );
+        echo '</div>';
 
         try {
             $this->renderPrimaryNavigation($settings);

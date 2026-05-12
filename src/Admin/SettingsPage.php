@@ -28,6 +28,7 @@ final class SettingsPage
     private const RESET_REMOTE_BRANCH_ACTION = 'pushpull_reset_remote_branch';
     private const INITIALIZE_REMOTE_REPOSITORY_ACTION = 'pushpull_initialize_remote_repository';
     private const MENU_ICON_PATH = 'plugin-assets/icons/menu.svg';
+    private const HEADER_LOGO_PATH = 'plugin-assets/images/pushpull_logo_transp.png';
 
     public function __construct(
         private readonly SettingsRepository $settingsRepository,
@@ -85,8 +86,17 @@ final class SettingsPage
         $settings = $this->settingsRepository->get();
 
         echo '<div class="wrap pushpull-admin">';
+        echo '<div class="pushpull-page-header">';
+        echo '<div class="pushpull-page-header__content">';
         echo '<h1>' . esc_html__('PushPull Settings', 'pushpull') . '</h1>';
         echo '<p class="pushpull-intro">' . esc_html__('Configure the remote provider, repository, branch, author identity, and operational behavior that drive PushPull fetch, merge, apply, and push workflows.', 'pushpull') . '</p>';
+        echo '</div>';
+        printf(
+            '<div class="pushpull-page-logo"><img src="%s" alt="%s" /></div>',
+            esc_url(PUSHPULL_PLUGIN_URL . self::HEADER_LOGO_PATH),
+            esc_attr__('PushPull', 'pushpull')
+        );
+        echo '</div>';
         $this->renderPrimaryNavigation();
         $notice = $this->notice();
         if ($notice !== null) {

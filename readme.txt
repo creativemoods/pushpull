@@ -4,7 +4,7 @@ Tags: git, github, generateblocks, content sync, devops
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.0.21
+Stable tag: 0.0.22
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -260,6 +260,13 @@ GitLab terms: https://about.gitlab.com/terms/
 GitLab privacy statement: https://about.gitlab.com/privacy/
 
 == Changelog ==
+
+= 0.0.22 =
+
+1. Refreshed PushPull branding across the project and plugin assets, including new banner and logo artwork plus updated WordPress.org icons and banners.
+2. Updated the WordPress admin screens with branded page headers and improved styling so Settings, Domains, Managed Content, and Audit Log share a more polished visual identity.
+3. Hardened remote-availability state tracking so fetch status is marked up to date after fetch, pull, push, and remote-initialize/reset flows, avoiding stale Fetch prompts after successful sync operations.
+4. Fixed remote repository initialization so the local branch and HEAD are seeded from the first fetched remote commit when starting from an empty local repository.
 
 = 0.0.21 =
 
