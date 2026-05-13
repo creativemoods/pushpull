@@ -394,6 +394,42 @@ final class GitProviderTest extends TestCase
         self::assertSame('file.json', $transport->requests[3]->json['actions'][0]['file_path'] ?? null);
     }
 
+    public function testGitlabUpdateRefUsesPrimedFileMapsWithoutReadingRemoteTreeSnapshot(): void
+    {
+        $transport = new RecordingFakeTransport([
+            new HttpResponse(200, '{"name":"main","commit":{"id":"remote-1"}}'),
+            new HttpResponse(201, '{"id":"remote-2"}'),
+        ]);
+        $provider = new GitLabProvider($transport);
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+        $blobHash = $provider->createBlob($config, 'hello');
+        $treeHash = $provider->createTree($config, [[
+            'path' => 'file.json',
+            'type' => 'blob',
+            'hash' => $blobHash,
+        ]]);
+        $commitHash = $provider->createCommit($config, new CreateRemoteCommitRequest(
+            $treeHash,
+            ['remote-1'],
+            'Add file',
+            'PushPull',
+            'pushpull@example.com'
+        ));
+        $provider->primeCurrentFiles('remote-1', []);
+        $provider->primeCommitFiles($commitHash, ['file.json' => 'hello']);
+
+        $result = $provider->updateRef(
+            $config,
+            new UpdateRemoteRefRequest('refs/heads/main', $commitHash, 'remote-1')
+        );
+
+        self::assertTrue($result->success);
+        self::assertSame('remote-2', $result->commitHash);
+        self::assertCount(2, $transport->requests);
+        self::assertSame('POST', $transport->requests[1]->method);
+        self::assertSame('create', $transport->requests[1]->json['actions'][0]['action'] ?? null);
+    }
+
     public function testGitlabFlattensMergeCommitPushesIntoLinearCommitActions(): void
     {
         $transport = new RecordingFakeTransport([

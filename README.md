@@ -228,7 +228,7 @@ See [`docs/releasing.md`](./docs/releasing.md) for the maintainer release proces
 ## TODO
 
 1. Cache the admin-bar PushPull status summary so the high-level live/local and local/remote aggregation is not recomputed on every page view.
-2. Move chunked async provider resumability fully into the provider layer so `AsyncBranchOperationRunner` no longer needs provider-specific GitLab staging rehydration logic.
+2. Move chunked async provider resumability fully into the provider layer so `BranchAsyncOperationCoordinator` no longer needs provider-specific GitLab staging rehydration logic.
 3. Improve push progress and recap reporting to distinguish newly uploaded objects from objects reused from the remote history.
 4. Surface unresolved logical-reference mapping issues, such as GeneratePress condition IDs that could not be converted to logical placeholders, instead of silently leaving mixed raw IDs and canonical refs.
 

@@ -21,7 +21,7 @@ use PushPull\Persistence\ContentMap\ContentMapRepository;
 use PushPull\Persistence\Operations\OperationLogRepository;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Settings\SettingsRepository;
-use PushPull\Support\Operations\AsyncBranchOperationRunner;
+use PushPull\Support\Operations\BranchAsyncOperationCoordinator;
 use PushPull\Support\Operations\OperationLockService;
 
 final class AsyncBranchOperationRunnerTest extends TestCase
@@ -41,7 +41,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
 
         $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
-        $runner = new AsyncBranchOperationRunner(
+        $runner = new BranchAsyncOperationCoordinator(
             new OperationLogRepository($wpdb),
             new OperationLockService(),
             $settingsRepository,
@@ -85,7 +85,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
 
         $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
-        $runner = new AsyncBranchOperationRunner(
+        $runner = new BranchAsyncOperationCoordinator(
             new OperationLogRepository($wpdb),
             new OperationLockService(),
             $settingsRepository,
@@ -113,6 +113,71 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertSame('indeterminate', $response['progress']['mode']);
         self::assertSame('commit-1', $repository->getRef('refs/remotes/origin/main')?->commitHash);
         self::assertSame('commit-1', $repository->getRef('refs/heads/main')?->commitHash);
+    }
+
+    public function testSecondChunkedFetchTraversesOnlyNewRemoteDelta(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new AsyncInMemoryProvider();
+        $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'commit-2');
+        $provider->commits['commit-1'] = new \PushPull\Provider\RemoteCommit('commit-1', 'tree-1', [], 'Initial remote commit');
+        $provider->commits['commit-2'] = new \PushPull\Provider\RemoteCommit('commit-2', 'tree-2', ['commit-1'], 'Second remote commit');
+        $provider->trees['tree-1'] = new \PushPull\Provider\RemoteTree('tree-1', [
+            ['path' => 'generateblocks/global-styles/gbp-section.json', 'type' => 'blob', 'hash' => 'blob-1'],
+        ]);
+        $provider->trees['tree-2'] = new \PushPull\Provider\RemoteTree('tree-2', [
+            ['path' => 'generateblocks/global-styles/gbp-section.json', 'type' => 'blob', 'hash' => 'blob-1'],
+            ['path' => 'generateblocks/global-styles/manifest.json', 'type' => 'blob', 'hash' => 'blob-2'],
+        ]);
+        $provider->blobs['blob-1'] = new \PushPull\Provider\RemoteBlob('blob-1', "{\n  \"style\": true\n}\n");
+        $provider->blobs['blob-2'] = new \PushPull\Provider\RemoteBlob('blob-2', "{\n  \"manifest\": true\n}\n");
+
+        $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
+        $runner = new BranchAsyncOperationCoordinator(
+            new OperationLogRepository($wpdb),
+            new OperationLockService(),
+            $settingsRepository,
+            $repository,
+            new AsyncInMemoryProviderFactory($provider),
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
+        );
+
+        $started = $runner->start('generateblocks_global_styles', 'fetch');
+        for ($index = 0; $index < 20; $index++) {
+            $response = $runner->continue($started['operationId']);
+
+            if ($response['done']) {
+                break;
+            }
+        }
+
+        $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'commit-3');
+        $provider->commits['commit-3'] = new \PushPull\Provider\RemoteCommit('commit-3', 'tree-3', ['commit-2'], 'Third remote commit');
+        $provider->trees['tree-3'] = new \PushPull\Provider\RemoteTree('tree-3', [
+            ['path' => 'generateblocks/global-styles/gbp-section.json', 'type' => 'blob', 'hash' => 'blob-1'],
+            ['path' => 'generateblocks/global-styles/manifest.json', 'type' => 'blob', 'hash' => 'blob-3'],
+        ]);
+        $provider->blobs['blob-3'] = new \PushPull\Provider\RemoteBlob('blob-3', "{\n  \"manifest\": false\n}\n");
+
+        $secondStarted = $runner->start('generateblocks_global_styles', 'fetch');
+        $secondResponse = null;
+
+        for ($index = 0; $index < 20; $index++) {
+            $secondResponse = $runner->continue($secondStarted['operationId']);
+
+            if ($secondResponse['done']) {
+                break;
+            }
+        }
+
+        self::assertNotNull($secondResponse);
+        self::assertTrue($secondResponse['done']);
+        self::assertStringContainsString('Newly imported 1 commit(s), 1 tree(s), and 1 blob(s); traversed 1 commit(s), 1 tree(s), and 1 blob(s).', $secondResponse['message']);
     }
 
     public function testChunkedPushReportsDeterminateProgressAndUpdatesRefs(): void
@@ -147,7 +212,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
 
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
-        $runner = new AsyncBranchOperationRunner(
+        $runner = new BranchAsyncOperationCoordinator(
             new OperationLogRepository($wpdb),
             new OperationLockService(),
             $settingsRepository,
@@ -211,7 +276,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
 
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
-        $runner = new AsyncBranchOperationRunner(
+        $runner = new BranchAsyncOperationCoordinator(
             new OperationLogRepository($wpdb),
             new OperationLockService(),
             $settingsRepository,
@@ -238,6 +303,48 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertSame('provider-commit-2', $repository->getRef('refs/heads/main')?->commitHash);
         self::assertSame('provider-commit-2', $repository->getRef('refs/remotes/origin/main')?->commitHash);
         self::assertNotNull($repository->getCommit('provider-commit-2'));
+    }
+
+    public function testChunkedResetRemoteBranchCompletesAndUpdatesTrackingRef(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new AsyncInMemoryPushProvider();
+        $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $provider->trees['remote-tree-base'] = new \PushPull\Provider\RemoteTree('remote-tree-base', []);
+        $provider->commits['remote-base'] = new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base');
+        $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
+
+        $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
+        $runner = new BranchAsyncOperationCoordinator(
+            new OperationLogRepository($wpdb),
+            new OperationLockService(),
+            $settingsRepository,
+            $repository,
+            new AsyncInMemoryProviderFactory($provider),
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
+        );
+
+        $started = $runner->start('generateblocks_global_styles', 'reset_remote_branch');
+        self::assertSame('indeterminate', $started['progress']['mode']);
+        $response = null;
+
+        for ($index = 0; $index < 10; $index++) {
+            $response = $runner->continue($started['operationId']);
+
+            if ($response['done']) {
+                break;
+            }
+        }
+
+        self::assertNotNull($response);
+        self::assertTrue($response['done']);
+        self::assertSame('success', $response['status']);
+        self::assertStringContainsString('Reset remote branch main to commit', $response['message']);
+        self::assertSame($provider->refs['refs/heads/main']->commitHash, $repository->getRef('refs/remotes/origin/main')?->commitHash);
     }
 
     public function testChunkedApplyProcessesManagedSetAndRedirectsBackToDetailView(): void
@@ -285,7 +392,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $GLOBALS['pushpull_test_next_post_id'] = 1;
 
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
-        $runner = new AsyncBranchOperationRunner(
+        $runner = new BranchAsyncOperationCoordinator(
             new OperationLogRepository($wpdb),
             new OperationLockService(),
             $settingsRepository,
@@ -352,7 +459,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         ];
 
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
-        $runner = new AsyncBranchOperationRunner(
+        $runner = new BranchAsyncOperationCoordinator(
             new OperationLogRepository($wpdb),
             new OperationLockService(),
             $settingsRepository,
@@ -459,7 +566,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         $GLOBALS['pushpull_test_next_post_id'] = 1;
 
         $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
-        $runner = new AsyncBranchOperationRunner(
+        $runner = new BranchAsyncOperationCoordinator(
             new OperationLogRepository($wpdb),
             new OperationLockService(),
             $settingsRepository,

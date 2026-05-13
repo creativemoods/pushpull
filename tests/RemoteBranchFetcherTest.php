@@ -102,7 +102,9 @@ final class RemoteBranchFetcherTest extends TestCase
             new GitRemoteConfig('github', 'owner', 'repo', 'main', 'token', null)
         ))->fetchManagedSet('generateblocks_global_styles');
 
-        self::assertSame(['commit-1', 'commit-2', 'commit-3'], $secondResult->traversedCommitHashes);
+        self::assertSame(['commit-3'], $secondResult->traversedCommitHashes);
+        self::assertSame(['tree-3'], $secondResult->traversedTreeHashes);
+        self::assertSame(['blob-3'], $secondResult->traversedBlobHashes);
         self::assertSame(['commit-3'], $secondResult->newCommitHashes);
         self::assertSame(['tree-3'], $secondResult->newTreeHashes);
         self::assertSame(['blob-3'], $secondResult->newBlobHashes);

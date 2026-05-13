@@ -13,19 +13,6 @@ use RuntimeException;
 
 final class RemoteBranchFetcher
 {
-    /** @var array<string, bool> */
-    private array $visitedCommits = [];
-    /** @var array<string, bool> */
-    private array $visitedTrees = [];
-    /** @var array<string, bool> */
-    private array $visitedBlobs = [];
-    /** @var array<string, bool> */
-    private array $newCommits = [];
-    /** @var array<string, bool> */
-    private array $newTrees = [];
-    /** @var array<string, bool> */
-    private array $newBlobs = [];
-
     public function __construct(
         private readonly GitProviderInterface $provider,
         private readonly LocalRepositoryInterface $localRepository,
@@ -42,7 +29,13 @@ final class RemoteBranchFetcher
             throw new RuntimeException(sprintf('Remote branch "%s" was not found.', $this->remoteConfig->branch));
         }
 
-        $this->importCommitGraph($remoteRef->commitHash);
+        $walker = new FetchObjectGraphWalker($this->provider, $this->localRepository, $this->remoteConfig);
+        $state = $walker->initialState($remoteRef->commitHash);
+
+        while (! $walker->isComplete($state)) {
+            $state = $walker->continue($state, PHP_INT_MAX);
+        }
+
         $trackingRefName = 'refs/remotes/origin/' . $this->remoteConfig->branch;
         $this->localRepository->updateRef($trackingRefName, $remoteRef->commitHash);
 
@@ -50,94 +43,24 @@ final class RemoteBranchFetcher
             $managedSetKey,
             $trackingRefName,
             $remoteRef->commitHash,
-            array_keys($this->visitedCommits),
-            array_keys($this->visitedTrees),
-            array_keys($this->visitedBlobs),
-            array_keys($this->newCommits),
-            array_keys($this->newTrees),
-            array_keys($this->newBlobs)
+            $this->sortedHashKeys($state['visitedCommitHashes']),
+            $this->sortedHashKeys($state['visitedTreeHashes']),
+            $this->sortedHashKeys($state['visitedBlobHashes']),
+            $this->sortedHashKeys($state['newCommitHashes']),
+            $this->sortedHashKeys($state['newTreeHashes']),
+            $this->sortedHashKeys($state['newBlobHashes'])
         );
     }
 
-    private function importCommitGraph(string $commitHash): void
+    /**
+     * @param array<string, bool> $hashMap
+     * @return list<string>
+     */
+    private function sortedHashKeys(array $hashMap): array
     {
-        if (isset($this->visitedCommits[$commitHash])) {
-            return;
-        }
+        $hashes = array_keys($hashMap);
+        sort($hashes);
 
-        $remoteCommit = $this->provider->getCommit($this->remoteConfig, $commitHash);
-
-        if ($remoteCommit === null) {
-            throw new RuntimeException(sprintf('Remote commit "%s" could not be loaded.', $commitHash));
-        }
-
-        foreach ($remoteCommit->parents as $parentHash) {
-            $this->importCommitGraph($parentHash);
-        }
-
-        $this->importTree($remoteCommit->treeHash);
-        if ($this->localRepository->getCommit($commitHash) === null) {
-            $this->newCommits[$commitHash] = true;
-        }
-        $this->localRepository->importRemoteCommit($remoteCommit);
-        $this->visitedCommits[$commitHash] = true;
-    }
-
-    private function importTree(string $treeHash): void
-    {
-        if (isset($this->visitedTrees[$treeHash])) {
-            return;
-        }
-
-        $remoteTree = $this->provider->getTree($this->remoteConfig, $treeHash);
-
-        if ($remoteTree === null) {
-            throw new RuntimeException(sprintf('Remote tree "%s" could not be loaded.', $treeHash));
-        }
-
-        foreach ($remoteTree->entries as $entry) {
-            if (! is_array($entry)) {
-                continue;
-            }
-
-            $entryType = (string) ($entry['type'] ?? 'blob');
-            $entryHash = (string) ($entry['hash'] ?? '');
-
-            if ($entryHash === '') {
-                continue;
-            }
-
-            if ($entryType === 'tree') {
-                $this->importTree($entryHash);
-                continue;
-            }
-
-            $this->importBlob($entryHash);
-        }
-
-        if ($this->localRepository->getTree($treeHash) === null) {
-            $this->newTrees[$treeHash] = true;
-        }
-        $this->localRepository->importRemoteTree($remoteTree);
-        $this->visitedTrees[$treeHash] = true;
-    }
-
-    private function importBlob(string $blobHash): void
-    {
-        if (isset($this->visitedBlobs[$blobHash])) {
-            return;
-        }
-
-        $remoteBlob = $this->provider->getBlob($this->remoteConfig, $blobHash);
-
-        if ($remoteBlob === null) {
-            throw new RuntimeException(sprintf('Remote blob "%s" could not be loaded.', $blobHash));
-        }
-
-        if ($this->localRepository->getBlob($blobHash) === null) {
-            $this->newBlobs[$blobHash] = true;
-        }
-        $this->localRepository->importRemoteBlob($remoteBlob);
-        $this->visitedBlobs[$blobHash] = true;
+        return $hashes;
     }
 }

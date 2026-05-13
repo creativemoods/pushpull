@@ -21,7 +21,7 @@ use PushPull\Provider\Exception\ProviderException;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Capabilities;
 use PushPull\Support\FetchAvailability\FetchAvailabilityService;
-use PushPull\Support\Operations\AsyncBranchOperationRunner;
+use PushPull\Support\Operations\BranchAsyncOperationCoordinator;
 use PushPull\Support\Operations\OperationExecutor;
 use RuntimeException;
 use Throwable;
@@ -50,7 +50,7 @@ final class ManagedContentPage
         private readonly WorkingStateRepository $workingStateRepository,
         private readonly ManagedSetConflictResolutionService $conflictResolutionService,
         private readonly OperationExecutor $operationExecutor,
-        private readonly AsyncBranchOperationRunner $asyncBranchOperationRunner,
+        private readonly BranchAsyncOperationCoordinator $asyncBranchOperationRunner,
         private readonly FetchAvailabilityService $fetchAvailabilityService
     ) {
     }
@@ -1031,7 +1031,7 @@ final class ManagedContentPage
         $settings = $this->settingsRepository->get();
         $managedContentAdapter = $this->managedSetRegistry->get($managedSetKey);
 
-        if (! $this->isManagedSetEnabled($settings, $managedSetKey)) {
+        if (! $this->isRepositoryAsyncOperation($operationType) && ! $this->isManagedSetEnabled($settings, $managedSetKey)) {
             wp_send_json_error(['message' => sprintf('%s is not enabled in settings.', $managedContentAdapter->getManagedSetLabel())], 400);
         }
 
@@ -2470,11 +2470,16 @@ final class ManagedContentPage
             return $this->liveWriteBlockedMessage();
         }
 
-        if (in_array($operationType, ['push', 'commit_push_all'], true) && ! $settings->allowsRemoteWrites()) {
+        if (in_array($operationType, ['push', 'commit_push_all', 'reset_remote_branch'], true) && ! $settings->allowsRemoteWrites()) {
             return $this->remoteWriteBlockedMessage();
         }
 
         return null;
+    }
+
+    private function isRepositoryAsyncOperation(string $operationType): bool
+    {
+        return in_array($operationType, ['reset_remote_branch'], true);
     }
 
     /**

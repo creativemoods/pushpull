@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.26
+
+1. Fixed repeated fetch performance so PushPull stops redownloading already imported commits, trees, and blobs, making subsequent fetches complete against only the true remote delta.
+2. Improved push performance, including GitLab push planning, by reusing locally materialized tracked-remote and staged commit file maps instead of rereading the full remote tree state during small pushes.
+3. Refactored fetch and push so synchronous and asynchronous flows now share the same core traversal and push-state implementations, eliminating duplicated logic between the normal and chunked execution paths.
+4. Reworked the async architecture into a generic `AsyncOperationEngine` with per-operation handlers, then split branch actions into dedicated handlers for fetch/pull, push, apply, reset remote branch, `Commit + Push All`, and `Pull + Apply All`.
+5. Renamed the remaining branch-specific async wrapper to `BranchAsyncOperationCoordinator` so the codebase now distinguishes clearly between the generic async engine and the branch-operation coordination layer built on top of it.
+
 ## 0.0.25
 
 1. Fixed WordPress menu and WPML translation-management exports so translated menus are exported consistently even when WPML filters the admin request to a single language, preventing partial menu manifests and one-sided translation groups after `Commit + Push All`.

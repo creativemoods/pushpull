@@ -60,7 +60,7 @@ use PushPull\Settings\SettingsRegistrar;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Integration\Wpml\WpmlSiteKeyActivationService;
 use PushPull\Support\Operations\OperationExecutor;
-use PushPull\Support\Operations\AsyncBranchOperationRunner;
+use PushPull\Support\Operations\BranchAsyncOperationCoordinator;
 use PushPull\Support\FetchAvailability\FetchAvailabilityScheduler;
 use PushPull\Support\FetchAvailability\FetchAvailabilityService;
 use PushPull\Support\Operations\OperationLockService;
@@ -246,7 +246,7 @@ final class Plugin
             $workingStateRepository,
             $conflictResolutionService,
             $operationExecutor,
-            new AsyncBranchOperationRunner(
+            new BranchAsyncOperationCoordinator(
                 $operationLogRepository,
                 $operationLockService,
                 $settingsRepository,

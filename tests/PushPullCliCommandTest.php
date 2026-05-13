@@ -148,6 +148,27 @@ final class PushPullCliCommandTest extends TestCase
         self::assertSame('wpml', $GLOBALS['pushpull_test_wpml_save_site_key_calls'][0]['repository_id']);
     }
 
+    public function testResetRemoteBranchDoesNotRequireEnabledManagedDomains(): void
+    {
+        $settingsRepository = new SettingsRepository();
+        $settingsRepository->save($settingsRepository->sanitize([
+            'provider_key' => 'github',
+            'owner_or_workspace' => 'owner',
+            'repository' => 'repo',
+            'branch' => 'main',
+            'api_token' => 'token',
+            'enabled_managed_sets' => [],
+        ]));
+        $registry = new ManagedSetRegistry([
+            new GenerateBlocksGlobalStylesAdapter(),
+        ]);
+        $command = $this->buildCommand($settingsRepository, $registry, new CliSyncServiceStub());
+
+        $command->resetRemoteBranch([], []);
+
+        self::assertSame('Reset remote branch main from old to new.', \WP_CLI::$successes[0]);
+    }
+
     private function buildCommand(
         SettingsRepository $settingsRepository,
         ManagedSetRegistry $registry,

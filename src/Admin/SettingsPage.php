@@ -75,6 +75,26 @@ final class SettingsPage
             [],
             PUSHPULL_VERSION
         );
+
+        wp_enqueue_script(
+            'pushpull-managed-content',
+            PUSHPULL_PLUGIN_URL . 'plugin-assets/js/managed-content.js',
+            [],
+            PUSHPULL_VERSION,
+            true
+        );
+        wp_localize_script('pushpull-managed-content', 'pushpullManagedContent', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'ajaxNonce' => wp_create_nonce('pushpull_async_branch_action'),
+            'strings' => [
+                'working' => __('Working…', 'pushpull'),
+                'close' => __('Close', 'pushpull'),
+                'failed' => __('The PushPull operation could not be completed.', 'pushpull'),
+                'checkingStatus' => __('Connection interrupted while checking PushPull progress. Retrying operation status…', 'pushpull'),
+                /* translators: %d: completion percentage. */
+                'progressPercent' => __('%d% complete', 'pushpull'),
+            ],
+        ]);
     }
 
     public function render(): void
@@ -125,6 +145,7 @@ final class SettingsPage
         $this->renderProviderStatus($settings);
         echo '</aside>';
         echo '</div>';
+        $this->renderAsyncOperationModal();
         echo '</div>';
     }
 
@@ -187,8 +208,9 @@ final class SettingsPage
         if (! $settings->allowsRemoteWrites()) {
             printf('<p class="description">%s</p>', esc_html($this->remoteWriteBlockedMessage()));
         } else {
-            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return window.confirm(\'Reset the remote branch to an empty commit? This will not delete Git history, but it will create one new remote commit that removes all tracked files from the branch.\');">';
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="reset_remote_branch" data-pushpull-async-label="' . esc_attr__('Reset remote branch', 'pushpull') . '" data-pushpull-confirm="Reset the remote branch to an empty commit? This will not delete Git history, but it will create one new remote commit that removes all tracked files from the branch.">';
             echo '<input type="hidden" name="action" value="pushpull_reset_remote_branch" />';
+            echo '<input type="hidden" name="managed_set" value="' . esc_attr($this->repositoryActionManagedSetKey()) . '" />';
             wp_nonce_field(self::RESET_REMOTE_BRANCH_ACTION);
             submit_button(__('Reset remote branch', 'pushpull'), 'delete', 'submit', false);
             echo '</form>';
@@ -322,12 +344,14 @@ final class SettingsPage
             $this->redirectWithNotice('error', $this->remoteWriteBlockedMessage());
         }
 
+        $managedSetKey = $this->repositoryActionManagedSetKey();
+
         try {
             $result = $this->operationExecutor->run(
-                'generateblocks_global_styles',
+                $managedSetKey,
                 'initialize_remote_repository',
                 ['branch' => $settings->branch],
-                fn () => $this->remoteRepositoryInitializer->initialize('generateblocks_global_styles', $settings)
+                fn () => $this->remoteRepositoryInitializer->initialize($managedSetKey, $settings)
             );
             $this->fetchAvailabilityService->markUpToDate($settings, $result->remoteCommitHash, $result->fetchResult->remoteCommitHash);
         } catch (\Throwable $exception) {
@@ -355,14 +379,10 @@ final class SettingsPage
         check_admin_referer(self::RESET_REMOTE_BRANCH_ACTION);
 
         $settings = $this->settingsRepository->get();
-        $managedSetKey = $this->branchActionManagedSetKey($settings);
+        $managedSetKey = $this->repositoryActionManagedSetKey();
 
         if (! $settings->allowsRemoteWrites()) {
             $this->redirectWithNotice('error', $this->remoteWriteBlockedMessage());
-        }
-
-        if ($managedSetKey === null) {
-            $this->redirectWithNotice('error', 'Enable at least one managed set before resetting the remote branch.');
         }
 
         try {
@@ -423,9 +443,36 @@ final class SettingsPage
         return null;
     }
 
+    private function repositoryActionManagedSetKey(): string
+    {
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $managedSetKey => $_adapter) {
+            return $managedSetKey;
+        }
+
+        throw new \RuntimeException('No managed sets are registered.');
+    }
+
     private function remoteWriteBlockedMessage(): string
     {
         return __('This site is configured as pull-only. Remote repository write actions are disabled.', 'pushpull');
+    }
+
+    private function renderAsyncOperationModal(): void
+    {
+        echo '<div class="pushpull-async-modal" hidden="hidden">';
+        echo '<div class="pushpull-async-modal__backdrop"></div>';
+        echo '<div class="pushpull-async-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="pushpull-async-modal-title">';
+        echo '<h2 id="pushpull-async-modal-title">' . esc_html__('Working…', 'pushpull') . '</h2>';
+        echo '<p class="pushpull-async-modal__message">' . esc_html__('Preparing operation…', 'pushpull') . '</p>';
+        echo '<div class="pushpull-async-modal__progress" hidden="hidden">';
+        echo '<div class="pushpull-async-modal__progress-bar is-indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">';
+        echo '<span class="pushpull-async-modal__progress-fill"></span>';
+        echo '</div>';
+        echo '<p class="pushpull-async-modal__progress-label"></p>';
+        echo '</div>';
+        echo '<button type="button" class="button button-secondary pushpull-async-modal__close" hidden="hidden">' . esc_html__('Close', 'pushpull') . '</button>';
+        echo '</div>';
+        echo '</div>';
     }
 
     private function siteModeLabel(PushPullSettings $settings): string

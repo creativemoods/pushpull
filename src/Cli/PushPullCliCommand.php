@@ -157,11 +157,11 @@ final class PushPullCliCommand extends WP_CLI_Command
      * ## OPTIONS
      *
      * [--managed-set=<managed-set>]
-     * : Managed set key used for the initial fetch. Defaults to the first enabled domain.
+     * : Managed set key used for the initial fetch. Defaults to the first registered domain.
      */
     public function initializeRemoteRepository(array $args, array $assocArgs): void
     {
-        $managedSetKey = $this->managedSetKeyFromAssocArgs($assocArgs, false);
+        $managedSetKey = $this->repositoryManagedSetKeyFromAssocArgs($assocArgs);
         $settings = $this->settingsRepository->get();
         $this->guardRemoteWritesAllowed($settings);
 
@@ -187,11 +187,11 @@ final class PushPullCliCommand extends WP_CLI_Command
      * ## OPTIONS
      *
      * [--managed-set=<managed-set>]
-     * : Managed set key used for the branch operation. Defaults to the first enabled domain.
+     * : Managed set key used for the branch operation. Defaults to the first registered domain.
      */
     public function resetRemoteBranch(array $args, array $assocArgs): void
     {
-        $managedSetKey = $this->managedSetKeyFromAssocArgs($assocArgs, false);
+        $managedSetKey = $this->repositoryManagedSetKeyFromAssocArgs($assocArgs);
         $this->guardRemoteWritesAllowed($this->settingsRepository->get());
 
         try {
@@ -741,11 +741,33 @@ final class PushPullCliCommand extends WP_CLI_Command
         return $branchManagedSetKey;
     }
 
-    private function requireEnabledManagedSet(string $managedSetKey): void
+    private function repositoryManagedSetKeyFromAssocArgs(array $assocArgs): string
+    {
+        $managedSetKey = sanitize_key((string) ($assocArgs['managed-set'] ?? ''));
+
+        if ($managedSetKey !== '') {
+            $this->requireSupportedManagedSet($managedSetKey);
+
+            return $managedSetKey;
+        }
+
+        foreach ($this->managedSetRegistry->allInDependencyOrder() as $registeredManagedSetKey => $_adapter) {
+            return $registeredManagedSetKey;
+        }
+
+        WP_CLI::error('No managed domains are registered.');
+    }
+
+    private function requireSupportedManagedSet(string $managedSetKey): void
     {
         if (! $this->managedSetRegistry->has($managedSetKey)) {
             WP_CLI::error(sprintf('Managed set "%s" is not supported.', $managedSetKey));
         }
+    }
+
+    private function requireEnabledManagedSet(string $managedSetKey): void
+    {
+        $this->requireSupportedManagedSet($managedSetKey);
 
         if (! $this->settingsRepository->get()->isManagedSetEnabled($managedSetKey)) {
             WP_CLI::error(sprintf('Managed set "%s" is not enabled.', $managedSetKey));

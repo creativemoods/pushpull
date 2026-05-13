@@ -46,6 +46,10 @@ final class GitLabProvider implements GitProviderInterface
 
     /** @var array<string, array<string, string>> */
     private array $materializedTreeFiles = [];
+    /** @var array<string, array<string, string>> */
+    private array $precomputedCommitFiles = [];
+    /** @var array<string, array<string, string>> */
+    private array $precomputedCurrentFiles = [];
 
     public function __construct(private readonly ?HttpTransportInterface $transport = null)
     {
@@ -291,7 +295,7 @@ final class GitLabProvider implements GitProviderInterface
         $commitOrder = [];
         $this->collectStagedCommitOrder($request->newCommitHash, $request->expectedOldCommitHash, [], $commitOrder);
         $currentHeadHash = $currentRemoteRef->commitHash;
-        $currentFiles = $this->readFilesForCommit($config, $currentHeadHash);
+        $currentFiles = $this->precomputedCurrentFiles[$currentHeadHash] ?? $this->readFilesForCommit($config, $currentHeadHash);
 
         foreach ($commitOrder as $stagedCommitHash) {
             $stagedCommit = $this->stagedCommits[$stagedCommitHash] ?? null;
@@ -303,7 +307,7 @@ final class GitLabProvider implements GitProviderInterface
                 );
             }
 
-            $targetFiles = $this->materializeTreeFiles($config, $stagedCommit->treeHash);
+            $targetFiles = $this->precomputedCommitFiles[$stagedCommitHash] ?? $this->materializeTreeFiles($config, $stagedCommit->treeHash);
             $actions = $this->buildCommitActions($currentFiles, $targetFiles);
 
             if ($actions === []) {
@@ -352,6 +356,24 @@ final class GitLabProvider implements GitProviderInterface
         }
 
         return new UpdateRefResult(true, 'refs/heads/' . $branch, $currentHeadHash);
+    }
+
+    /**
+     * @param array<string, string> $files
+     */
+    public function primeCurrentFiles(string $commitHash, array $files): void
+    {
+        ksort($files);
+        $this->precomputedCurrentFiles[$commitHash] = $files;
+    }
+
+    /**
+     * @param array<string, string> $files
+     */
+    public function primeCommitFiles(string $commitHash, array $files): void
+    {
+        ksort($files);
+        $this->precomputedCommitFiles[$commitHash] = $files;
     }
 
     public function initializeEmptyRepository(GitRemoteConfig $config, string $commitMessage): RemoteRef
