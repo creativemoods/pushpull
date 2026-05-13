@@ -1653,7 +1653,32 @@ if (! function_exists('get_current_user_id')) {
 if (! function_exists('wp_get_nav_menus')) {
     function wp_get_nav_menus(array $args = []): array
     {
-        return array_values($GLOBALS['pushpull_test_terms']['nav_menu'] ?? []);
+        $menus = array_values($GLOBALS['pushpull_test_terms']['nav_menu'] ?? []);
+        $currentLanguage = (string) ($GLOBALS['pushpull_test_wpml_current_language'] ?? '');
+
+        if ($currentLanguage === '') {
+            return $menus;
+        }
+
+        return array_values(array_filter(
+            $menus,
+            static function (mixed $menu) use ($currentLanguage): bool {
+                if (! $menu instanceof WP_Term) {
+                    return false;
+                }
+
+                foreach ($GLOBALS['pushpull_test_wpml_translations'] ?? [] as $row) {
+                    if (
+                        (string) ($row['element_type'] ?? '') === 'tax_nav_menu'
+                        && (int) ($row['element_id'] ?? 0) === (int) $menu->term_id
+                    ) {
+                        return (string) ($row['language_code'] ?? '') === $currentLanguage;
+                    }
+                }
+
+                return true;
+            }
+        ));
     }
 }
 

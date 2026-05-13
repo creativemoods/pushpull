@@ -67,6 +67,10 @@ use PushPull\Support\Operations\OperationLockService;
 
 final class Plugin
 {
+    private const REVIEWS_URL = 'https://wordpress.org/support/plugin/pushpull/reviews/#new-post';
+    private const PLUGIN_URL = 'https://wordpress.org/plugins/pushpull/';
+    private const CREATIVE_MOODS_URL = 'https://creativemoods.pt/pushpull/';
+
     public function boot(): void
     {
         $schemaMigrator = new SchemaMigrator();
@@ -287,5 +291,52 @@ final class Plugin
         add_action('admin_enqueue_scripts', [$domainsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$operationsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$managedContentPage, 'enqueueAssets']);
+        add_filter('admin_footer_text', [self::class, 'filterAdminFooterText'], 11);
+        add_filter('update_footer', [self::class, 'filterUpdateFooter'], 11);
+    }
+
+    public static function filterAdminFooterText(string $text): string
+    {
+        if (! self::isPushPullAdminScreen()) {
+            return $text;
+        }
+
+        $reviewsUrl = esc_url(self::REVIEWS_URL);
+        $pluginUrl = esc_url(self::PLUGIN_URL);
+        $creativeMoodsUrl = esc_url(self::CREATIVE_MOODS_URL);
+
+        return sprintf(
+            '<a href="%s" target="_blank" rel="noopener noreferrer">PushPull</a> v%s by <a href="%s" target="_blank" rel="noopener noreferrer">Creative Moods</a>. Please <a href="%s" target="_blank" rel="noopener noreferrer">rate the plugin</a> <a href="%s" target="_blank" rel="noopener noreferrer" aria-label="Rate PushPull five stars">★★★★★</a>',
+            $pluginUrl,
+            esc_html(PUSHPULL_VERSION),
+            $creativeMoodsUrl,
+            $reviewsUrl,
+            $reviewsUrl
+        );
+    }
+
+    public static function filterUpdateFooter(string $text): string
+    {
+        if (! self::isPushPullAdminScreen()) {
+            return $text;
+        }
+
+        return '';
+    }
+
+    private static function isPushPullAdminScreen(): bool
+    {
+        $screen = get_current_screen();
+
+        if ($screen === null) {
+            return false;
+        }
+
+        return in_array($screen->id, [
+            'toplevel_page_' . SettingsPage::MENU_SLUG,
+            'pushpull_page_' . DomainsPage::MENU_SLUG,
+            'pushpull_page_' . ManagedContentPage::MENU_SLUG,
+            'pushpull_page_' . OperationsPage::MENU_SLUG,
+        ], true);
     }
 }

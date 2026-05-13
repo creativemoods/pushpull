@@ -20,6 +20,7 @@ final class WordPressMenusAdapterTest extends TestCase
         $GLOBALS['pushpull_test_terms']['nav_menu'] = [];
         $GLOBALS['pushpull_test_next_term_id'] = 1;
         $GLOBALS['pushpull_test_next_post_id'] = 1;
+        unset($GLOBALS['pushpull_test_wpml_current_language']);
     }
 
     public function testExportSnapshotNormalizesMenuRefsAndLocations(): void
@@ -64,5 +65,40 @@ final class WordPressMenusAdapterTest extends TestCase
         self::assertSame('page', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['postType']);
         self::assertSame('home', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['logicalKey']);
         self::assertSame('{{pushpull.home_url}}/about', $snapshot->items[0]->payload['items'][1]['url']);
+    }
+
+    public function testExportSnapshotIncludesAllMenusWhenWpmlFiltersWpGetNavMenusByLanguage(): void
+    {
+        $menuEnId = (int) wp_create_nav_menu('Footer menu EN');
+        wp_update_term($menuEnId, 'nav_menu', ['slug' => 'footer-menu-en']);
+        $menuFrId = (int) wp_create_nav_menu('Footer menu FR');
+        wp_update_term($menuFrId, 'nav_menu', ['slug' => 'footer-menu-fr']);
+        $menuOtherId = (int) wp_create_nav_menu('Premium menu');
+        wp_update_term($menuOtherId, 'nav_menu', ['slug' => 'premium-menu']);
+
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'tax_nav_menu',
+                'element_id' => $menuEnId,
+                'trid' => 500,
+                'language_code' => 'en',
+                'source_language_code' => 'fr',
+            ],
+            [
+                'translation_id' => 2,
+                'element_type' => 'tax_nav_menu',
+                'element_id' => $menuFrId,
+                'trid' => 500,
+                'language_code' => 'fr',
+                'source_language_code' => null,
+            ],
+        ];
+        $GLOBALS['pushpull_test_wpml_current_language'] = 'fr';
+
+        $adapter = new WordPressMenusAdapter();
+        $snapshot = $adapter->exportSnapshot();
+
+        self::assertSame(['footer-menu-en', 'footer-menu-fr', 'premium-menu'], $snapshot->orderedLogicalKeys);
     }
 }

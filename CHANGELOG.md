@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.25
+
+1. Fixed WordPress menu and WPML translation-management exports so translated menus are exported consistently even when WPML filters the admin request to a single language, preventing partial menu manifests and one-sided translation groups after `Commit + Push All`.
+2. Updated the custom PushPull admin footer on plugin screens so `PushPull` links to the WordPress.org plugin page, `Creative Moods` links to the project site, and the five-star review prompt remains available directly from the footer.
+
 ## 0.0.24
 
 1. Added site sync modes for `both`, `push_only`, and `pull_only` so environments can explicitly block live-content apply operations or remote push operations while still allowing safe fetch and pull alignment flows.

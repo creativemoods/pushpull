@@ -880,10 +880,24 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
     private function termsByTaxonomy(string $taxonomy): array
     {
         if ($taxonomy === 'nav_menu') {
-            return array_values(array_filter(
-                wp_get_nav_menus(),
+            $terms = get_terms([
+                'taxonomy' => $taxonomy,
+                'hide_empty' => false,
+                'lang' => '',
+            ]);
+
+            if (! is_array($terms)) {
+                return [];
+            }
+
+            $terms = array_values(array_filter(
+                $terms,
                 static fn (mixed $term): bool => $term instanceof WP_Term
             ));
+
+            usort($terms, static fn (WP_Term $left, WP_Term $right): int => [$left->slug, $left->term_id] <=> [$right->slug, $right->term_id]);
+
+            return $terms;
         }
 
         return [];

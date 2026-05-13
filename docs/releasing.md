@@ -5,7 +5,7 @@
 3. Run `composer bump-version -- 0.2.0`.
 4. Update [`CHANGELOG.md`](../CHANGELOG.md) for that version.
 5. Review the changes in `pushpull.php`, `readme.txt`, and `CHANGELOG.md`.
-6. Commit the version bump.
+6. Commit the version bump with "Release 0.0.24" .
 7. Create and push a Git tag in the form `v0.2.0` on that commit.
 8. Let GitLab run the tag pipeline.
 9. The package job will build `build/pushpull-0.2.0.zip` from that tagged commit.

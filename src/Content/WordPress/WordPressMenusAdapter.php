@@ -491,12 +491,24 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
      */
     private function allMenus(): array
     {
-        $menus = wp_get_nav_menus();
+        $menus = get_terms([
+            'taxonomy' => self::MENU_TAXONOMY,
+            'hide_empty' => false,
+            'lang' => '',
+        ]);
 
-        return array_values(array_filter(
-            is_array($menus) ? $menus : [],
+        if (! is_array($menus)) {
+            return [];
+        }
+
+        $menus = array_values(array_filter(
+            $menus,
             static fn (mixed $menu): bool => $menu instanceof WP_Term
         ));
+
+        usort($menus, static fn (WP_Term $left, WP_Term $right): int => [$left->slug, $left->term_id] <=> [$right->slug, $right->term_id]);
+
+        return $menus;
     }
 
     /**
