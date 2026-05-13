@@ -101,4 +101,52 @@ final class WordPressMenusAdapterTest extends TestCase
 
         self::assertSame(['footer-menu-en', 'footer-menu-fr', 'premium-menu'], $snapshot->orderedLogicalKeys);
     }
+
+    public function testExportSnapshotKeepsTranslatedPageReferencesWhenCurrentLanguageDiffers(): void
+    {
+        update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
+            'enabled_managed_sets' => ['wordpress_pages', 'wordpress_menus', 'translation_management'],
+        ]);
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(10, 'Home', 'home', 'publish', 0, 'page'),
+            new \WP_Post(11, 'Accueil', 'accueil', 'publish', 0, 'page'),
+        ];
+
+        $menuEnId = (int) wp_create_nav_menu('Footer menu EN');
+        wp_update_term($menuEnId, 'nav_menu', ['slug' => 'footer-menu-en']);
+        wp_update_nav_menu_item($menuEnId, 0, [
+            'menu-item-title' => 'Home',
+            'menu-item-type' => 'post_type',
+            'menu-item-object' => 'page',
+            'menu-item-object-id' => 10,
+            'menu-item-position' => 1,
+            'menu-item-status' => 'publish',
+        ]);
+
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'post_page',
+                'element_id' => 10,
+                'trid' => 100,
+                'language_code' => 'en',
+                'source_language_code' => null,
+            ],
+            [
+                'translation_id' => 2,
+                'element_type' => 'post_page',
+                'element_id' => 11,
+                'trid' => 100,
+                'language_code' => 'fr',
+                'source_language_code' => 'en',
+            ],
+        ];
+        $GLOBALS['pushpull_test_wpml_current_language'] = 'fr';
+
+        $snapshot = (new WordPressMenusAdapter())->exportSnapshot();
+
+        self::assertSame('page:home--en', $snapshot->items[0]->payload['items'][0]['itemKey']);
+        self::assertSame('home--en', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['logicalKey']);
+    }
 }

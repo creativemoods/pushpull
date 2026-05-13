@@ -51,13 +51,30 @@ final class AsyncOperationEngine
                 ];
             }
 
-            $this->operationLogRepository->updateRunning($record->id, $state);
+            $response = $this->handler->continueAsyncOperation($record, $state);
+
+            if ($response['done']) {
+                $this->handler->finalizeAsyncOperation($response['finalResult']);
+                $this->operationLogRepository->markSucceeded($record->id, $response['finalResult']);
+                $this->operationLockService->release($lock);
+
+                return [
+                    'operationId' => $record->id,
+                    'progressMessage' => (string) $response['finalResult']['summaryMessage'],
+                    'done' => true,
+                    'status' => (string) $response['finalResult']['summaryType'],
+                    'redirectUrl' => (string) ($response['finalResult']['redirectUrl'] ?? ''),
+                    'progress' => $this->progressPayload($response['finalResult']),
+                ];
+            }
+
+            $this->operationLogRepository->updateRunning($record->id, $response['state']);
 
             return [
                 'operationId' => $record->id,
-                'progressMessage' => (string) $state['progressMessage'],
+                'progressMessage' => (string) $response['state']['progressMessage'],
                 'done' => false,
-                'progress' => $this->progressPayload($state),
+                'progress' => $this->progressPayload($response['state']),
             ];
         } catch (\Throwable $exception) {
             $this->operationLogRepository->markFailed($record->id, $this->normalizeFailure($exception));

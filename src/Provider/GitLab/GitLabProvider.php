@@ -50,6 +50,11 @@ final class GitLabProvider implements GitProviderInterface
     private array $precomputedCommitFiles = [];
     /** @var array<string, array<string, string>> */
     private array $precomputedCurrentFiles = [];
+    /** @var array<string, array<string, RemoteBlob>> */
+    private array $preloadedArchiveBlobs = [];
+    private bool $archivePreloadUnavailable = false;
+    /** @var array{status: string, message: string}|null */
+    private ?array $lastArchivePreloadReport = null;
 
     public function __construct(private readonly ?HttpTransportInterface $transport = null)
     {
@@ -162,6 +167,21 @@ final class GitLabProvider implements GitProviderInterface
 
     public function getCommit(GitRemoteConfig $config, string $hash): ?RemoteCommit
     {
+        return $this->loadCommit($config, $hash, true);
+    }
+
+    public function getCommitWithoutTreeSnapshot(GitRemoteConfig $config, string $hash): ?RemoteCommit
+    {
+        return $this->loadCommit($config, $hash, false);
+    }
+
+    public function hasRegisteredTreeSnapshot(string $treeHash): bool
+    {
+        return isset($this->registeredTrees[$treeHash]);
+    }
+
+    private function loadCommit(GitRemoteConfig $config, string $hash, bool $hydrateTreeSnapshot): ?RemoteCommit
+    {
         $payload = $this->requestJson(
             'GET',
             $config,
@@ -171,10 +191,15 @@ final class GitLabProvider implements GitProviderInterface
                 404 => ProviderException::REPOSITORY_NOT_FOUND,
             ]
         );
-        $treeHash = $this->registerCommitTrees($config, (string) ($payload['id'] ?? $hash));
+        $commitHash = (string) ($payload['id'] ?? $hash);
+        $treeHash = self::ROOT_TREE_PREFIX . $commitHash;
+
+        if ($hydrateTreeSnapshot) {
+            $treeHash = $this->registerCommitTrees($config, $commitHash);
+        }
 
         return new RemoteCommit(
-            (string) ($payload['id'] ?? $hash),
+            $commitHash,
             $treeHash,
             array_values(array_filter(array_map('strval', (array) ($payload['parent_ids'] ?? [])), static fn (string $parent): bool => $parent !== '')),
             (string) ($payload['message'] ?? ''),
@@ -216,6 +241,163 @@ final class GitLabProvider implements GitProviderInterface
         );
 
         return new RemoteBlob($hash, $response->body);
+    }
+
+    /**
+     * @return array<string, RemoteBlob>|null
+     */
+    public function preloadCommitArchiveBlobs(GitRemoteConfig $config, string $treeHash): ?array
+    {
+        $this->lastArchivePreloadReport = null;
+
+        if ($this->archivePreloadUnavailable) {
+            $this->lastArchivePreloadReport = [
+                'status' => 'fallback',
+                'message' => 'GitLab archive preload is disabled for this fetch after a previous archive request failed. Continuing with standard object fetches.',
+            ];
+
+            return null;
+        }
+
+        if (! class_exists(\ZipArchive::class) || ! str_starts_with($treeHash, self::ROOT_TREE_PREFIX)) {
+            return null;
+        }
+
+        if (isset($this->preloadedArchiveBlobs[$treeHash])) {
+            $this->lastArchivePreloadReport = [
+                'status' => 'success',
+                'message' => 'GitLab archive preload was reused for the head snapshot. Historical commits remain commit-only until their tree contents are needed.',
+            ];
+
+            return $this->preloadedArchiveBlobs[$treeHash];
+        }
+
+        $entries = $this->registeredTrees[$treeHash] ?? null;
+
+        if (! is_array($entries) || $entries === []) {
+            return null;
+        }
+
+        $commitHash = substr($treeHash, strlen(self::ROOT_TREE_PREFIX));
+
+        if ($commitHash === '') {
+            return null;
+        }
+
+        try {
+            $response = $this->requestResponse(
+                'GET',
+                $config,
+                '/projects/' . $this->projectPath($config) . '/repository/archive.zip?sha=' . rawurlencode($commitHash),
+                'get_archive',
+                [
+                    404 => ProviderException::REPOSITORY_NOT_FOUND,
+                ]
+            );
+        } catch (ProviderException $exception) {
+            if ($exception->category === ProviderException::RATE_LIMIT) {
+                $this->archivePreloadUnavailable = true;
+            }
+
+            $this->lastArchivePreloadReport = [
+                'status' => 'fallback',
+                'message' => sprintf(
+                    'GitLab archive preload failed: %s Continuing with standard object fetches.',
+                    $exception->getMessage()
+                ),
+            ];
+
+            return null;
+        }
+
+        $archivePath = tempnam(sys_get_temp_dir(), 'pushpull-gitlab-archive-');
+
+        if (! is_string($archivePath) || $archivePath === '') {
+            $this->lastArchivePreloadReport = [
+                'status' => 'fallback',
+                'message' => 'GitLab archive preload could not create a temporary archive file. Continuing with standard object fetches.',
+            ];
+
+            return null;
+        }
+
+        file_put_contents($archivePath, $response->body);
+
+        $zip = new \ZipArchive();
+        $opened = $zip->open($archivePath);
+
+        if ($opened !== true) {
+            $this->deleteTemporaryFile($archivePath);
+            $this->lastArchivePreloadReport = [
+                'status' => 'fallback',
+                'message' => 'GitLab archive preload could not open the downloaded archive. Continuing with standard object fetches.',
+            ];
+
+            return null;
+        }
+
+        $contentsByPath = [];
+
+        for ($index = 0; $index < $zip->numFiles; $index++) {
+            $entryName = (string) $zip->getNameIndex($index);
+
+            if ($entryName === '' || str_ends_with($entryName, '/')) {
+                continue;
+            }
+
+            $segments = explode('/', $entryName, 2);
+
+            if (count($segments) < 2 || $segments[1] === '') {
+                continue;
+            }
+
+            $content = $zip->getFromIndex($index);
+
+            if (! is_string($content)) {
+                continue;
+            }
+
+            $contentsByPath[$segments[1]] = $content;
+        }
+
+        $zip->close();
+        $this->deleteTemporaryFile($archivePath);
+
+        $blobs = [];
+
+        foreach ($entries as $entry) {
+            if (! is_array($entry) || (string) ($entry['type'] ?? '') !== 'blob') {
+                continue;
+            }
+
+            $path = (string) ($entry['path'] ?? '');
+            $hash = (string) ($entry['hash'] ?? '');
+
+            if ($path === '' || $hash === '' || ! isset($contentsByPath[$path])) {
+                continue;
+            }
+
+            $blobs[$hash] = new RemoteBlob($hash, $contentsByPath[$path]);
+        }
+
+        $this->preloadedArchiveBlobs[$treeHash] = $blobs;
+        $this->lastArchivePreloadReport = [
+            'status' => 'success',
+            'message' => sprintf(
+                'GitLab archive preload imported %d blob(s) for the head snapshot. Historical commits were imported without hydrating their tree contents.',
+                count($blobs)
+            ),
+        ];
+
+        return $blobs;
+    }
+
+    /**
+     * @return array{status: string, message: string}|null
+     */
+    public function archivePreloadReport(): ?array
+    {
+        return $this->lastArchivePreloadReport;
     }
 
     public function createBlob(GitRemoteConfig $config, string $content): string
@@ -717,6 +899,7 @@ final class GitLabProvider implements GitProviderInterface
             400 => $this->isEmptyRepositoryMessage($message) ? ProviderException::EMPTY_REPOSITORY : ProviderException::VALIDATION,
             401 => ProviderException::AUTHENTICATION,
             403 => $this->isRateLimitMessage($message) ? ProviderException::RATE_LIMIT : ProviderException::AUTHORIZATION,
+            429 => ProviderException::RATE_LIMIT,
             404 => ProviderException::REPOSITORY_NOT_FOUND,
             409 => ProviderException::CONFLICT,
             default => $statusCode >= 500 ? ProviderException::SERVICE_UNAVAILABLE : ProviderException::TRANSPORT,
@@ -882,6 +1065,18 @@ final class GitLabProvider implements GitProviderInterface
     private function isRateLimitMessage(?string $message): bool
     {
         return is_string($message) && str_contains(strtolower($message), 'rate limit');
+    }
+
+    private function deleteTemporaryFile(string $path): void
+    {
+        if (function_exists('wp_delete_file')) {
+            \wp_delete_file($path);
+
+            return;
+        }
+
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Test/bootstrap fallback when core helper is unavailable.
+        @unlink($path);
     }
 
     private function shouldRetryException(ProviderException $exception): bool

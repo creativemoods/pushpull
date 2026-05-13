@@ -852,6 +852,30 @@ if (! function_exists('get_posts')) {
             ));
         }
 
+        $currentLanguage = (string) ($GLOBALS['pushpull_test_wpml_current_language'] ?? '');
+
+        if ($currentLanguage !== '' && (! isset($args['lang']) || (string) $args['lang'] !== '')) {
+            $posts = array_values(array_filter(
+                $posts,
+                static function (WP_Post $post) use ($currentLanguage): bool {
+                    foreach ($GLOBALS['pushpull_test_wpml_translations'] ?? [] as $row) {
+                        if (! is_array($row)) {
+                            continue;
+                        }
+
+                        if (
+                            (string) ($row['element_type'] ?? '') === 'post_' . $post->post_type
+                            && (int) ($row['element_id'] ?? 0) === (int) $post->ID
+                        ) {
+                            return (string) ($row['language_code'] ?? '') === $currentLanguage;
+                        }
+                    }
+
+                    return true;
+                }
+            ));
+        }
+
         usort(
             $posts,
             static fn (WP_Post $left, WP_Post $right): int => $left->ID <=> $right->ID
@@ -872,6 +896,19 @@ if (! function_exists('get_posts')) {
         }
 
         return $posts;
+    }
+}
+
+if (! function_exists('get_post')) {
+    function get_post(int $postId): ?WP_Post
+    {
+        foreach ($GLOBALS['pushpull_test_generateblocks_posts'] ?? [] as $post) {
+            if ($post instanceof WP_Post && (int) $post->ID === $postId) {
+                return $post;
+            }
+        }
+
+        return null;
     }
 }
 

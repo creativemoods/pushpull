@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.27
+
+1. Added a Settings-page performance diagnostics panel that reports whether `ZipArchive` is available, with a non-blocking warning when the GitLab cold-fetch archive optimization cannot be used.
+2. Improved GitLab cold fetch performance by hydrating only the head snapshot tree during initial imports, while still importing full commit ancestry without recursively scanning every historical tree.
+3. Added GitLab archive-preload fallback reporting in fetch progress and completion messages so the UI now states explicitly when archive preload succeeds, is reused, or falls back to standard object fetches.
+4. Hardened GitLab archive preload handling around rate limits and temporary file cleanup, including graceful fallback when archive downloads are throttled or unavailable.
+5. Fixed WPML translation-management apply so destination post lookups ignore current-language filtering, preventing translated page mappings from disappearing during full-suite and multilingual apply flows.
+
 ## 0.0.26
 
 1. Fixed repeated fetch performance so PushPull stops redownloading already imported commits, trees, and blobs, making subsequent fetches complete against only the true remote delta.

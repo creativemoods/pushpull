@@ -143,6 +143,7 @@ final class SettingsPage
         $this->renderDangerZone();
         $this->renderCurrentSummary($settings);
         $this->renderProviderStatus($settings);
+        $this->renderPerformanceDiagnostics($settings);
         echo '</aside>';
         echo '</div>';
         $this->renderAsyncOperationModal();
@@ -268,6 +269,52 @@ final class SettingsPage
             }
         } catch (UnsupportedProviderException $exception) {
             printf('<p>%s</p>', esc_html($exception->getMessage()));
+        }
+
+        echo '</div>';
+    }
+
+    private function renderPerformanceDiagnostics(PushPullSettings $settings): void
+    {
+        $hasZipArchive = class_exists(\ZipArchive::class);
+
+        echo '<div class="pushpull-panel">';
+        echo '<h2>' . esc_html__('Performance Diagnostics', 'pushpull') . '</h2>';
+
+        if ($hasZipArchive) {
+            printf(
+                '<div class="notice notice-success inline"><p>%s</p></div>',
+                esc_html__(
+                    'ZipArchive is available. GitLab cold-fetch archive preloading can be used when PushPull hydrates an empty local repository.',
+                    'pushpull'
+                )
+            );
+        } else {
+            printf(
+                '<div class="notice notice-warning inline"><p>%s</p></div>',
+                esc_html__(
+                    'ZipArchive is not available. PushPull will fall back to slower per-object GitLab fetches, so the cold-fetch optimization will not be used.',
+                    'pushpull'
+                )
+            );
+        }
+
+        if ($settings->providerKey === 'gitlab') {
+            printf(
+                '<p class="description">%s</p>',
+                esc_html__(
+                    'This mainly affects the first fetch into an empty local repository, including after a local reset.',
+                    'pushpull'
+                )
+            );
+        } else {
+            printf(
+                '<p class="description">%s</p>',
+                esc_html__(
+                    'This optimization is currently used for GitLab cold fetches. Other providers continue to use the standard object fetch path.',
+                    'pushpull'
+                )
+            );
         }
 
         echo '</div>';

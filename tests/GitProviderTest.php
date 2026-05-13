@@ -19,6 +19,8 @@ use PushPull\Provider\UpdateRemoteRefRequest;
 
 final class GitProviderTest extends TestCase
 {
+    use ZipArchiveBodyHelper;
+
     public function testFactoryReturnsGithubProvider(): void
     {
         $factory = new GitProviderFactory();
@@ -355,6 +357,49 @@ final class GitProviderTest extends TestCase
         self::assertSame('blob-1', $rootTree?->entries[0]['hash']);
     }
 
+    public function testGitlabCanPreloadCommitArchiveBlobsForRootTree(): void
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            self::markTestSkipped('ZipArchive is required for GitLab archive preload tests.');
+        }
+
+        $provider = new GitLabProvider(new FakeTransport([
+            new HttpResponse(200, '{"id":"commit-1","parent_ids":[],"message":"Hello"}'),
+            new HttpResponse(200, '[{"path":"dir/file.json","type":"blob","id":"blob-1","mode":"100644"},{"path":"manifest.json","type":"blob","id":"blob-2","mode":"100644"}]', ['X-Next-Page' => '']),
+            new HttpResponse(200, $this->zipArchiveBody([
+                'repo-commit-1/dir/file.json' => 'hello',
+                'repo-commit-1/manifest.json' => '{}',
+            ])),
+        ]));
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+
+        $commit = $provider->getCommit($config, 'commit-1');
+        $blobs = $provider->preloadCommitArchiveBlobs($config, $commit?->treeHash ?? '');
+
+        self::assertIsArray($blobs);
+        self::assertSame('hello', $blobs['blob-1']->content);
+        self::assertSame('{}', $blobs['blob-2']->content);
+    }
+
+    public function testGitlabArchivePreloadFallsBackCleanlyAfterRateLimit(): void
+    {
+        $transport = new RecordingFakeTransport([
+            new HttpResponse(200, '{"id":"commit-1","parent_ids":[],"message":"Hello"}'),
+            new HttpResponse(200, '[{"path":"dir/file.json","type":"blob","id":"blob-1","mode":"100644"}]', ['X-Next-Page' => '']),
+            new HttpResponse(429, '{"message":"This archive has been requested too many times. Try again later."}'),
+            new HttpResponse(429, '{"message":"This archive has been requested too many times. Try again later."}'),
+            new HttpResponse(429, '{"message":"This archive has been requested too many times. Try again later."}'),
+        ]);
+        $provider = new GitLabProvider($transport);
+        $config = new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com');
+
+        $commit = $provider->getCommit($config, 'commit-1');
+
+        self::assertNull($provider->preloadCommitArchiveBlobs($config, $commit?->treeHash ?? ''));
+        self::assertNull($provider->preloadCommitArchiveBlobs($config, $commit?->treeHash ?? ''));
+        self::assertCount(5, $transport->requests);
+    }
+
     public function testGitlabUpdateRefMaterializesLinearCommitIntoRepositoryCommitActions(): void
     {
         $transport = new RecordingFakeTransport([
@@ -503,6 +548,31 @@ final class GitProviderTest extends TestCase
             ],
             $tree->entries
         );
+    }
+}
+
+trait ZipArchiveBodyHelper
+{
+    /**
+     * @param array<string, string> $files
+     */
+    private function zipArchiveBody(array $files): string
+    {
+        $archivePath = tempnam(sys_get_temp_dir(), 'pushpull-gitlab-test-archive-');
+        self::assertIsString($archivePath);
+
+        $zip = new \ZipArchive();
+        self::assertSame(true, $zip->open($archivePath, \ZipArchive::OVERWRITE));
+
+        foreach ($files as $path => $content) {
+            $zip->addFromString($path, $content);
+        }
+
+        $zip->close();
+        $body = (string) file_get_contents($archivePath);
+        @unlink($archivePath);
+
+        return $body;
     }
 }
 

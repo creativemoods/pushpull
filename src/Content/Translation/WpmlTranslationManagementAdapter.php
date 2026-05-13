@@ -834,6 +834,7 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
             'post_type' => $postType,
             'numberposts' => -1,
             'post_status' => 'any',
+            'lang' => '',
         ]);
 
         return array_values(array_filter($posts, static fn (mixed $post): bool => $post instanceof WP_Post));

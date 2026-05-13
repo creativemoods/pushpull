@@ -889,6 +889,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
                 'posts_per_page' => -1,
                 'orderby' => 'ID',
                 'order' => 'ASC',
+                'lang' => '',
             ]),
             fn (mixed $post): bool => $post instanceof WP_Post && $this->includePostInExport($post)
         ));

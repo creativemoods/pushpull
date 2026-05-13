@@ -9,8 +9,13 @@ use PushPull\Domain\Repository\DatabaseLocalRepository;
 use PushPull\Domain\Sync\RemoteRepositoryInitializer;
 use PushPull\Domain\Sync\RemoteBranchFetcher;
 use PushPull\Provider\CreateRemoteCommitRequest;
+use PushPull\Provider\GitLab\GitLabProvider;
 use PushPull\Provider\GitProviderInterface;
 use PushPull\Provider\GitRemoteConfig;
+use PushPull\Provider\Http\HttpRequest;
+use PushPull\Provider\Http\HttpResponse;
+use PushPull\Provider\Http\HttpTransportInterface;
+use PushPull\Provider\Exception\ProviderException;
 use PushPull\Provider\ProviderCapabilities;
 use PushPull\Provider\ProviderConnectionResult;
 use PushPull\Provider\ProviderValidationResult;
@@ -122,6 +127,71 @@ final class RemoteBranchFetcherTest extends TestCase
         $fetcher->fetchManagedSet('generateblocks_global_styles');
     }
 
+    public function testGitlabColdFetchUsesArchivePreloadOnlyForHeadTree(): void
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            self::markTestSkipped('ZipArchive is required for GitLab archive preload tests.');
+        }
+
+        $transport = new RecordingTransport([
+            new HttpResponse(200, '{"name":"main","commit":{"id":"commit-2"}}'),
+            new HttpResponse(200, '{"id":"commit-2","parent_ids":["commit-1"],"message":"Second remote commit"}'),
+            new HttpResponse(200, '[{"path":"current.json","type":"blob","id":"blob-2","mode":"100644"}]', ['X-Next-Page' => '']),
+            new HttpResponse(200, '{"id":"commit-1","parent_ids":[],"message":"Initial remote commit"}'),
+            new HttpResponse(200, '[{"path":"old.json","type":"blob","id":"blob-1","mode":"100644"}]', ['X-Next-Page' => '']),
+            new HttpResponse(200, $this->zipArchiveBody([
+                'repo-commit-2/current.json' => "current\n",
+            ])),
+            new HttpResponse(200, "old\n"),
+        ]);
+        $provider = new GitLabProvider($transport);
+        $repository = new DatabaseLocalRepository(new \wpdb());
+        $fetcher = new RemoteBranchFetcher(
+            $provider,
+            $repository,
+            new GitRemoteConfig('gitlab', 'group', 'repo', 'main', 'token', 'https://gitlab.example.com')
+        );
+
+        $result = $fetcher->fetchManagedSet('wordpress_pages');
+        $archiveRequests = array_values(array_filter(
+            $transport->requests,
+            static fn (HttpRequest $request): bool => str_contains($request->url, '/repository/archive.zip?sha=')
+        ));
+        $treeRequests = array_values(array_filter(
+            $transport->requests,
+            static fn (HttpRequest $request): bool => str_contains($request->url, '/repository/tree?ref=')
+        ));
+
+        self::assertSame(['blob-2'], $result->newBlobHashes);
+        self::assertNull($repository->getTree('gitlab-root-tree-commit-1'));
+        self::assertNull($repository->getBlob('blob-1'));
+        self::assertCount(1, $archiveRequests);
+        self::assertCount(1, $treeRequests);
+        self::assertStringContainsString('sha=commit-2', $archiveRequests[0]->url);
+    }
+
+    /**
+     * @param array<string, string> $files
+     */
+    private function zipArchiveBody(array $files): string
+    {
+        $archivePath = tempnam(sys_get_temp_dir(), 'pushpull-gitlab-test-archive-');
+        self::assertIsString($archivePath);
+
+        $zip = new \ZipArchive();
+        self::assertSame(true, $zip->open($archivePath, \ZipArchive::OVERWRITE));
+
+        foreach ($files as $path => $content) {
+            $zip->addFromString($path, $content);
+        }
+
+        $zip->close();
+        $body = (string) file_get_contents($archivePath);
+        @unlink($archivePath);
+
+        return $body;
+    }
+
     public function testInitializerCreatesFirstRemoteCommitAndFetchesItIntoTrackingRef(): void
     {
         $provider = new InMemoryProvider();
@@ -159,6 +229,28 @@ final class InMemoryProviderFactory implements \PushPull\Provider\GitProviderFac
     public function make(string $providerKey): GitProviderInterface
     {
         return $this->provider;
+    }
+}
+
+final class RecordingTransport implements HttpTransportInterface
+{
+    /** @var HttpRequest[] */
+    public array $requests = [];
+
+    /** @param HttpResponse[] $responses */
+    public function __construct(private array $responses)
+    {
+    }
+
+    public function send(HttpRequest $request): HttpResponse
+    {
+        $this->requests[] = $request;
+
+        if ($this->responses === []) {
+            throw new ProviderException(ProviderException::TRANSPORT, 'No fake response queued.');
+        }
+
+        return array_shift($this->responses);
     }
 }
 

@@ -7,6 +7,7 @@ namespace PushPull\Domain\Sync;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Domain\Repository\LocalRepositoryInterface;
+use PushPull\Provider\GitLab\GitLabProvider;
 use PushPull\Provider\GitProviderInterface;
 use PushPull\Provider\GitRemoteConfig;
 use RuntimeException;
@@ -35,6 +36,9 @@ final class FetchObjectGraphWalker
             'newCommitHashes' => [],
             'newTreeHashes' => [],
             'newBlobHashes' => [],
+            'archivePreloadHeadCommitHash' => $remoteCommitHash,
+            'archivePreloadTreeHashes' => [],
+            'archivePreloadMessage' => '',
         ];
     }
 
@@ -58,7 +62,11 @@ final class FetchObjectGraphWalker
                     continue;
                 }
 
-                $remoteCommit = $this->provider->getCommit($this->remoteConfig, $commitHash);
+                $hydrateCommitTree = ! ($this->provider instanceof GitLabProvider)
+                    || ($state['archivePreloadHeadCommitHash'] ?? '') === $commitHash;
+                $remoteCommit = $this->provider instanceof GitLabProvider && ! $hydrateCommitTree
+                    ? $this->provider->getCommitWithoutTreeSnapshot($this->remoteConfig, $commitHash)
+                    : $this->provider->getCommit($this->remoteConfig, $commitHash);
 
                 if ($remoteCommit === null) {
                     throw new RuntimeException(sprintf('Remote commit "%s" could not be loaded.', $commitHash));
@@ -70,7 +78,14 @@ final class FetchObjectGraphWalker
                     }
                 }
 
-                $state['pendingTreeHashes'][$remoteCommit->treeHash] = true;
+                if ($hydrateCommitTree) {
+                    $state['pendingTreeHashes'][$remoteCommit->treeHash] = true;
+                }
+
+                if (($state['archivePreloadHeadCommitHash'] ?? '') === $commitHash) {
+                    $state['archivePreloadTreeHashes'][$remoteCommit->treeHash] = true;
+                    $state['archivePreloadHeadCommitHash'] = '';
+                }
                 $state['newCommitHashes'][$commitHash] = true;
                 $this->localRepository->importRemoteCommit($remoteCommit);
                 $state['visitedCommitHashes'][$commitHash] = true;
@@ -97,6 +112,19 @@ final class FetchObjectGraphWalker
                     throw new RuntimeException(sprintf('Remote tree "%s" could not be loaded.', $treeHash));
                 }
 
+                $preloadedBlobs = $this->provider instanceof GitLabProvider
+                    && isset($state['archivePreloadTreeHashes'][$treeHash])
+                    ? $this->provider->preloadCommitArchiveBlobs($this->remoteConfig, $treeHash)
+                    : null;
+
+                if ($this->provider instanceof GitLabProvider) {
+                    $archivePreloadReport = $this->provider->archivePreloadReport();
+
+                    if (is_array($archivePreloadReport) && ($archivePreloadReport['message'] ?? '') !== '') {
+                        $state['archivePreloadMessage'] = (string) $archivePreloadReport['message'];
+                    }
+                }
+
                 foreach ($remoteTree->entries as $entry) {
                     if (! is_array($entry)) {
                         continue;
@@ -111,6 +139,16 @@ final class FetchObjectGraphWalker
 
                     if ($entryType === 'tree') {
                         $state['pendingTreeHashes'][$entryHash] = true;
+                        continue;
+                    }
+
+                    if (is_array($preloadedBlobs) && isset($preloadedBlobs[$entryHash])) {
+                        if (! isset($state['visitedBlobHashes'][$entryHash]) && $this->localRepository->getBlob($entryHash) === null) {
+                            $state['newBlobHashes'][$entryHash] = true;
+                            $this->localRepository->importRemoteBlob($preloadedBlobs[$entryHash]);
+                        }
+
+                        $state['visitedBlobHashes'][$entryHash] = true;
                         continue;
                     }
 

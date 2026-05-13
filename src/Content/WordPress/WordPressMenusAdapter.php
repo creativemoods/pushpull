@@ -771,6 +771,14 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
 
     private function findPostById(int $postId, string $postType): ?object
     {
+        if (function_exists('get_post')) {
+            $post = get_post($postId);
+
+            if (is_object($post) && (string) ($post->post_type ?? '') === $postType) {
+                return $post;
+            }
+        }
+
         foreach (
             get_posts([
                 'post_type' => $postType,

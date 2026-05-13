@@ -277,19 +277,25 @@ final class BranchAsyncOperationCoordinator implements AsyncOperationHandlerInte
      */
     public function finalFetchResult(OperationRecord $record, array $state): array
     {
+        $summaryMessage = sprintf(
+            'Fetched remote commit %s into %s. Newly imported %d commit(s), %d tree(s), and %d blob(s); traversed %d commit(s), %d tree(s), and %d blob(s).',
+            $state['remoteCommitHash'],
+            $state['remoteRefName'],
+            count($state['newCommitHashes']),
+            count($state['newTreeHashes']),
+            count($state['newBlobHashes']),
+            count($state['visitedCommitHashes']),
+            count($state['visitedTreeHashes']),
+            count($state['visitedBlobHashes'])
+        );
+
+        if (($state['archivePreloadMessage'] ?? '') !== '') {
+            $summaryMessage .= ' ' . (string) $state['archivePreloadMessage'];
+        }
+
         return [
             'summaryType' => 'success',
-            'summaryMessage' => sprintf(
-                'Fetched remote commit %s into %s. Newly imported %d commit(s), %d tree(s), and %d blob(s); traversed %d commit(s), %d tree(s), and %d blob(s).',
-                $state['remoteCommitHash'],
-                $state['remoteRefName'],
-                count($state['newCommitHashes']),
-                count($state['newTreeHashes']),
-                count($state['newBlobHashes']),
-                count($state['visitedCommitHashes']),
-                count($state['visitedTreeHashes']),
-                count($state['visitedBlobHashes'])
-            ),
+            'summaryMessage' => $summaryMessage,
             'operationType' => $record->operationType,
             'managedSetKey' => $record->managedSetKey,
             'branch' => $state['branch'],
@@ -415,13 +421,19 @@ final class BranchAsyncOperationCoordinator implements AsyncOperationHandlerInte
      */
     private function fetchProgressMessage(array $state, string $prefix): string
     {
-        return sprintf(
+        $message = sprintf(
             '%s Traversed %d commit(s), %d tree(s), and %d blob(s) so far.',
             $prefix,
             count($state['visitedCommitHashes']),
             count($state['visitedTreeHashes']),
             count($state['visitedBlobHashes'])
         );
+
+        if (($state['archivePreloadMessage'] ?? '') !== '') {
+            $message .= ' ' . (string) $state['archivePreloadMessage'];
+        }
+
+        return $message;
     }
 
     /**
