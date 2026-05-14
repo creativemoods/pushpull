@@ -15,6 +15,9 @@ use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Domain\Push\ManagedSetPushService;
+use PushPull\Domain\Sync\BranchCommitService;
+use PushPull\Domain\Sync\CommitBranchResult;
+use PushPull\Domain\Sync\CommitManagedSetRequest;
 use PushPull\Domain\Sync\SyncServiceInterface;
 use PushPull\Domain\Sync\FetchObjectGraphWalker;
 use PushPull\Domain\Diff\RepositoryStateReader;
@@ -64,16 +67,16 @@ final class BranchAsyncOperationCoordinator implements AsyncOperationHandlerInte
     /**
      * @return array{operationId: int, progressMessage: string, done: bool, status?: string, redirectUrl?: string, progress: array<string, mixed>}
      */
-    public function start(string $managedSetKey, string $operationType): array
+    public function start(string $managedSetKey, string $operationType, array $payload = []): array
     {
         $settings = $this->settingsRepository->get();
         $this->guardOperationAllowedBySiteMode($settings, $operationType);
 
-        return $this->asyncOperationEngine()->start($managedSetKey, $operationType, [
+        return $this->asyncOperationEngine()->start($managedSetKey, $operationType, array_merge([
             'branch' => $settings->branch,
             'async' => true,
             'asyncType' => self::ASYNC_TYPE,
-        ]);
+        ], $payload));
     }
 
     /**
@@ -82,6 +85,11 @@ final class BranchAsyncOperationCoordinator implements AsyncOperationHandlerInte
     public function continue(int $operationId): array
     {
         return $this->asyncOperationEngine()->continue($operationId);
+    }
+
+    public function cancel(int $operationId): OperationRecord
+    {
+        return $this->asyncOperationEngine()->cancel($operationId);
     }
 
     public function supportsAsyncOperation(string $operationType): bool
@@ -459,13 +467,31 @@ final class BranchAsyncOperationCoordinator implements AsyncOperationHandlerInte
         }
     }
 
-    public function noticeUrl(string $status, string $message): string
+    public function noticeUrl(string $status, string $message, ?string $pageSlug = null): string
     {
         return add_query_arg([
-            'page' => \PushPull\Admin\ManagedContentPage::MENU_SLUG,
+            'page' => $pageSlug !== null && $pageSlug !== '' ? $pageSlug : \PushPull\Admin\ManagedContentPage::MENU_SLUG,
             'pushpull_commit_status' => $status,
             'pushpull_commit_message' => $message,
         ], admin_url('admin.php'));
+    }
+
+    /**
+     * @param string[] $managedSetKeys
+     */
+    public function commitManagedSets(array $managedSetKeys, CommitManagedSetRequest $request): CommitBranchResult
+    {
+        if (! $this->managedSetRegistry instanceof ManagedSetRegistry) {
+            throw new RuntimeException('Managed set registry is unavailable for branch commits.');
+        }
+
+        $adapters = [];
+
+        foreach ($this->managedSetRegistry->sortManagedSetKeysInDependencyOrder($managedSetKeys) as $managedSetKey) {
+            $adapters[$managedSetKey] = $this->managedSetRegistry->get($managedSetKey);
+        }
+
+        return (new BranchCommitService($this->localRepository))->commitManagedSets($adapters, $request);
     }
 
     /**

@@ -15,6 +15,7 @@ final class OperationLogRepository
     public const STATUS_RUNNING = 'running';
     public const STATUS_SUCCEEDED = 'succeeded';
     public const STATUS_FAILED = 'failed';
+    public const STATUS_CANCELLED = 'cancelled';
 
     private readonly string $tableName;
 
@@ -57,6 +58,14 @@ final class OperationLogRepository
     public function markFailed(int $operationId, array $result = []): OperationRecord
     {
         return $this->updateStatus($operationId, self::STATUS_FAILED, $result);
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     */
+    public function markCancelled(int $operationId, array $result = []): OperationRecord
+    {
+        return $this->updateStatus($operationId, self::STATUS_CANCELLED, $result);
     }
 
     /**

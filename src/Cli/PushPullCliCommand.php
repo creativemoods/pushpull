@@ -7,7 +7,9 @@ namespace PushPull\Cli;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Domain\Merge\ManagedSetConflictResolutionService;
+use PushPull\Domain\Diff\ManagedSetDiffResult;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
+use PushPull\Domain\Sync\BranchCommitService;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
 use PushPull\Domain\Sync\RemoteRepositoryInitializer;
 use PushPull\Domain\Sync\SyncServiceInterface;
@@ -54,7 +56,7 @@ final class PushPullCliCommand extends WP_CLI_Command
                 'managed_set' => $managedSetKey,
                 'label' => $adapter->getManagedSetLabel(),
                 'available' => $adapter->isAvailable() ? 'yes' : 'no',
-                'branch_state' => array_key_exists($adapter->getManifestPath(), $diff->local->files) ? 'present' : 'absent',
+                'branch_state' => $this->isManagedSetPresentInLocalBranch($adapter, $diff) ? 'present' : 'absent',
                 'live_local' => $diff->liveToLocal->hasChanges() ? 'changed' : 'clean',
                 'local_remote' => $diff->localToRemote->hasChanges() ? 'changed' : 'clean',
                 'relationship' => $diff->repositoryRelationship->status,
@@ -104,6 +106,21 @@ final class PushPullCliCommand extends WP_CLI_Command
         }
 
         $this->renderRows($rows, ['managed_set', 'label', 'enabled', 'available']);
+    }
+
+    private function isManagedSetPresentInLocalBranch(ManifestManagedContentAdapterInterface $adapter, ManagedSetDiffResult $diff): bool
+    {
+        if (array_key_exists($adapter->getManifestPath(), $diff->local->files)) {
+            return true;
+        }
+
+        foreach (array_keys($diff->local->files) as $path) {
+            if ($adapter->ownsRepositoryPath($path)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -421,28 +438,25 @@ final class PushPullCliCommand extends WP_CLI_Command
             WP_CLI::error('Enable at least one available managed domain to use this action.');
         }
 
-        $committedDomainCount = 0;
-        $committedFileCount = 0;
+        $commitMessage = isset($assocArgs['message']) && is_string($assocArgs['message']) && trim($assocArgs['message']) !== ''
+            ? trim($assocArgs['message'])
+            : $settings->defaultCommitMessage;
         try {
+            $adapters = [];
+
             foreach ($managedSetKeys as $managedSetKey) {
-                $adapter = $this->managedSetRegistry->get($managedSetKey);
-                $result = $this->syncService->commitManagedSet(
-                    $managedSetKey,
-                    new CommitManagedSetRequest(
-                        $settings->branch,
-                        $adapter->buildCommitMessage(),
-                        $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
-                        $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
-                    )
-                );
-
-                if (! $result->createdNewCommit) {
-                    continue;
-                }
-
-                $committedDomainCount++;
-                $committedFileCount += count($result->pathHashes);
+                $adapters[$managedSetKey] = $this->managedSetRegistry->get($managedSetKey);
             }
+
+            $commitResult = (new BranchCommitService($this->localRepository))->commitManagedSets(
+                $adapters,
+                new CommitManagedSetRequest(
+                    $settings->branch,
+                    $commitMessage,
+                    $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
+                    $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
+                )
+            );
 
             $pushResult = $managedSetKeys !== []
                 ? $this->syncService->push($branchManagedSetKey)
@@ -462,15 +476,21 @@ final class PushPullCliCommand extends WP_CLI_Command
             return;
         }
 
-        $message = $pushResult->status === 'already_up_to_date' && $committedDomainCount === 0
+        $message = $pushResult->status === 'already_up_to_date' && ! $commitResult->createdNewCommit
             ? 'Nothing to commit or push. Live content and the remote branch are already up to date.'
-            : sprintf(
-                'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
-                $committedDomainCount,
-                $committedFileCount,
-                $pushResult->branch,
-                $pushResult->remoteCommitHash
-            );
+            : ($commitResult->createdNewCommit
+                ? sprintf(
+                    'Committed %1$d changed domain(s) in one branch commit touching %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
+                    count($managedSetKeys),
+                    $commitResult->changedPathCount,
+                    $pushResult->branch,
+                    $pushResult->remoteCommitHash
+                )
+                : sprintf(
+                    'No new bulk commit was created. Pushed the existing local branch %1$s to remote commit %2$s.',
+                    $pushResult->branch,
+                    $pushResult->remoteCommitHash
+                ));
 
         if ($skippedManagedSets !== []) {
             $message .= ' ' . $this->skippedManagedSetsSummary($skippedManagedSets);

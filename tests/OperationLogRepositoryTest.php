@@ -58,4 +58,15 @@ final class OperationLogRepositoryTest extends TestCase
         self::assertSame($second->id, $recent[0]->id);
         self::assertSame($first->id, $recent[1]->id);
     }
+
+    public function testCancelledOperationPersistsCancelledStatus(): void
+    {
+        $repository = new OperationLogRepository($this->wpdb);
+        $record = $repository->start('generateblocks_global_styles', 'fetch', ['branch' => 'main']);
+        $cancelled = $repository->markCancelled($record->id, ['summaryMessage' => 'Cancelled']);
+
+        self::assertSame(OperationLogRepository::STATUS_CANCELLED, $cancelled->status);
+        self::assertSame('Cancelled', $cancelled->result['summaryMessage']);
+        self::assertNotNull($cancelled->finishedAt);
+    }
 }

@@ -109,6 +109,7 @@ final class SettingsRepositoryTest extends TestCase
             'author_name' => ' <script>Jane</script> Doe ',
             'author_email' => 'Jane Doe <jane@example.com>',
             'base_url' => 'https://gitlab.example.com/group/repo?x=<bad>',
+            'default_commit_message' => "  Release sync \n",
         ]);
 
         self::assertSame('team', $settings->ownerOrWorkspace);
@@ -117,6 +118,7 @@ final class SettingsRepositoryTest extends TestCase
         self::assertSame('Jane Doe', $settings->authorName);
         self::assertSame('JaneDoejane@example.com', $settings->authorEmail);
         self::assertStringStartsWith('https://gitlab.example.com/', $settings->baseUrl);
+        self::assertSame('Release sync', $settings->defaultCommitMessage);
     }
 
     public function testSiteModeFallsBackToBothWhenInvalid(): void
@@ -144,5 +146,15 @@ final class SettingsRepositoryTest extends TestCase
         self::assertSame('pull_only', $pullOnly->siteMode);
         self::assertTrue($pullOnly->allowsLiveWrites());
         self::assertFalse($pullOnly->allowsRemoteWrites());
+    }
+
+    public function testDefaultCommitMessageFallsBackWhenBlank(): void
+    {
+        $repository = new SettingsRepository();
+        $settings = $repository->sanitize([
+            'default_commit_message' => '   ',
+        ]);
+
+        self::assertSame('PushPull export', $settings->defaultCommitMessage);
     }
 }

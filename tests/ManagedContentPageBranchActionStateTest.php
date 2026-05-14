@@ -7,6 +7,7 @@ namespace PushPull\Tests;
 use PHPUnit\Framework\TestCase;
 use PushPull\Admin\ManagedContentPage;
 use PushPull\Content\ManagedSetRegistry;
+use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressPagesAdapter;
 use PushPull\Domain\Apply\ApplyManagedSetResult;
 use PushPull\Domain\Diff\CanonicalDiffEntry;
@@ -199,6 +200,30 @@ final class ManagedContentPageBranchActionStateTest extends TestCase
         self::assertSame('Partners logical keys must be unique.', $plan['skipped'][0]['message']);
     }
 
+    public function testAttachmentsAreNotMarkedAbsentWhenLocalBranchContainsOwnedFiles(): void
+    {
+        $adapter = new WordPressAttachmentsAdapter();
+        $page = $this->managedContentPage(
+            new SettingsRepository(),
+            new ManagedSetRegistry([$adapter]),
+            new ManagedContentPageFakeSyncService([])
+        );
+
+        $diffResult = new ManagedSetDiffResult(
+            'wordpress_attachments',
+            new CanonicalManagedState('live', null, null, 'live', []),
+            new CanonicalManagedState('local', null, null, 'local', $this->managedFiles([
+                'wordpress/attachments/2026/03/bali-jpg/attachment.json' => '{}',
+            ])),
+            new CanonicalManagedState('remote', null, null, 'remote', []),
+            new CanonicalDiffResult([]),
+            new CanonicalDiffResult([]),
+            new RepositoryRelationship(RepositoryRelationship::IN_SYNC)
+        );
+
+        self::assertFalse($this->isManagedSetAbsentFromLocalBranch($page, $adapter, $diffResult));
+    }
+
     private function managedContentPage(
         SettingsRepository $settingsRepository,
         ManagedSetRegistry $managedSetRegistry,
@@ -369,6 +394,16 @@ final class ManagedContentPageBranchActionStateTest extends TestCase
         $plan = $reflection->invoke($page, $settings);
 
         return $plan;
+    }
+
+    private function isManagedSetAbsentFromLocalBranch(
+        ManagedContentPage $page,
+        \PushPull\Content\ManifestManagedContentAdapterInterface $adapter,
+        ManagedSetDiffResult $diffResult
+    ): bool {
+        $reflection = new \ReflectionMethod($page, 'isManagedSetAbsentFromLocalBranch');
+
+        return $reflection->invoke($page, $adapter, $diffResult);
     }
 }
 

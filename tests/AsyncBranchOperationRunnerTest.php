@@ -115,6 +115,67 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertSame('commit-1', $repository->getRef('refs/heads/main')?->commitHash);
     }
 
+    public function testCancelStopsFurtherAsyncChunksAndReleasesLock(): void
+    {
+        $wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($wpdb);
+        $adapter = new GenerateBlocksGlobalStylesAdapter();
+        $provider = new AsyncInMemoryPushProvider();
+        $settingsRepository = $this->settingsRepositoryWithStylesEnabled();
+        $repository->importRemoteTree(new \PushPull\Provider\RemoteTree('remote-tree-base', []));
+        $repository->importRemoteCommit(new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base'));
+        $repository->updateRef('refs/remotes/origin/main', 'remote-base');
+        $repository->updateRef('refs/heads/main', 'remote-base');
+        $repository->updateRef('HEAD', 'remote-base');
+        $provider->trees['remote-tree-base'] = new \PushPull\Provider\RemoteTree('remote-tree-base', []);
+        $provider->commits['remote-base'] = new \PushPull\Provider\RemoteCommit('remote-base', 'remote-tree-base', [], 'Base');
+        $provider->refs['refs/heads/main'] = new \PushPull\Provider\RemoteRef('refs/heads/main', 'remote-base');
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(
+                1,
+                '.gbp-section',
+                'gbp-section',
+                'publish',
+                0,
+                'gblocks_styles'
+            ),
+        ];
+        $GLOBALS['pushpull_test_generateblocks_meta'] = [
+            1 => [
+                'gb_style_selector' => '.gbp-section',
+                'gb_style_data' => serialize(['paddingTop' => '7rem']),
+                'gb_style_css' => '.gbp-section { color: red; }',
+            ],
+        ];
+
+        $syncService = $this->buildSyncService($wpdb, $repository, $adapter, $provider, $settingsRepository);
+        $runner = new BranchAsyncOperationCoordinator(
+            new OperationLogRepository($wpdb),
+            new OperationLockService(),
+            $settingsRepository,
+            $repository,
+            new AsyncInMemoryProviderFactory($provider),
+            $syncService,
+            [],
+            new ManagedSetRegistry([$adapter])
+        );
+
+        $started = $runner->start('generateblocks_global_styles', 'commit_push_all', [
+            'commitMessage' => 'Deploy homepage sync',
+        ]);
+        self::assertFalse($started['done']);
+        $cancelled = $runner->cancel($started['operationId']);
+        $response = $runner->continue($started['operationId']);
+        $secondStarted = $runner->start('generateblocks_global_styles', 'commit_push_all');
+        $runner->cancel($secondStarted['operationId']);
+
+        self::assertSame(OperationLogRepository::STATUS_CANCELLED, $cancelled->status);
+        self::assertTrue($response['done']);
+        self::assertSame('warning', $response['status']);
+        self::assertSame('Operation cancelled. No further async steps will run.', $response['message']);
+        self::assertGreaterThan($started['operationId'], $secondStarted['operationId']);
+    }
+
     public function testSecondChunkedFetchTraversesOnlyNewRemoteDelta(): void
     {
         $wpdb = new \wpdb();
@@ -470,8 +531,10 @@ final class AsyncBranchOperationRunnerTest extends TestCase
             new ManagedSetRegistry([$adapter])
         );
 
-        $started = $runner->start('generateblocks_global_styles', 'commit_push_all');
-        self::assertSame('indeterminate', $started['progress']['mode']);
+        $started = $runner->start('generateblocks_global_styles', 'commit_push_all', [
+            'commitMessage' => 'Deploy homepage sync',
+        ]);
+        self::assertSame('determinate', $started['progress']['mode']);
         $response = null;
 
         for ($index = 0; $index < 30; $index++) {
@@ -487,6 +550,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertSame('success', $response['status']);
         self::assertStringContainsString('Committed 1 changed domain(s)', $response['message']);
         self::assertSame($provider->refs['refs/heads/main']->commitHash, $repository->getRef('refs/heads/main')?->commitHash);
+        self::assertSame('Deploy homepage sync', $repository->getHeadCommit('main')?->message);
     }
 
     public function testPullApplyAllPullsAndAppliesEnabledDomains(): void
@@ -596,17 +660,20 @@ final class AsyncBranchOperationRunnerTest extends TestCase
         self::assertCount(2, $GLOBALS['pushpull_test_generateblocks_posts']);
     }
 
-    private function settingsRepositoryWithStylesEnabled(): SettingsRepository
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function settingsRepositoryWithStylesEnabled(array $overrides = []): SettingsRepository
     {
         $settingsRepository = new SettingsRepository();
-        $settingsRepository->save($settingsRepository->sanitize([
+        $settingsRepository->save($settingsRepository->sanitize(array_merge([
             'provider_key' => 'github',
             'owner_or_workspace' => 'owner',
             'repository' => 'repo',
             'branch' => 'main',
             'api_token' => 'token',
             'enabled_managed_sets' => ['generateblocks_global_styles'],
-        ]));
+        ], $overrides)));
 
         return $settingsRepository;
     }

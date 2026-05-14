@@ -131,6 +131,13 @@ final class AdminBarStatus
         ]);
 
         $adminBar->add_node([
+            'id' => 'pushpull-status-local-repository',
+            'parent' => 'pushpull-status',
+            'title' => esc_html__('Sync Status', 'pushpull'),
+            'href' => admin_url('admin.php?page=' . LocalRepositoryPage::MENU_SLUG),
+        ]);
+
+        $adminBar->add_node([
             'id' => 'pushpull-status-audit-log',
             'parent' => 'pushpull-status',
             'title' => esc_html__('Audit Log', 'pushpull'),

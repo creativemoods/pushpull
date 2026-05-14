@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use PushPull\Cli\PushPullCliCommand;
 use PushPull\Content\GenerateBlocks\GenerateBlocksGlobalStylesAdapter;
 use PushPull\Content\ManagedSetRegistry;
+use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Domain\Apply\ApplyManagedSetResult;
 use PushPull\Domain\Diff\CanonicalDiffResult;
 use PushPull\Domain\Diff\CanonicalManagedState;
@@ -101,14 +102,6 @@ final class PushPullCliCommandTest extends TestCase
         $adapter = new GenerateBlocksGlobalStylesAdapter();
         $registry = new ManagedSetRegistry([$adapter]);
         $syncService = new CliSyncServiceStub();
-        $syncService->commitResults['generateblocks_global_styles'] = new CommitManagedSetResult(
-            'generateblocks_global_styles',
-            true,
-            null,
-            null,
-            ['manifest.json' => 'hash-1', 'item.json' => 'hash-2'],
-            true
-        );
         $syncService->pushResult = new PushManagedSetResult(
             'generateblocks_global_styles',
             'main',
@@ -119,16 +112,24 @@ final class PushPullCliCommandTest extends TestCase
             ['tree-1'],
             ['blob-1']
         );
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(1, '.gbp-section', 'gbp-section', 'publish', 0, 'gblocks_styles'),
+        ];
+        $GLOBALS['pushpull_test_generateblocks_meta'] = [
+            1 => [
+                'gb_style_selector' => '.gbp-section',
+                'gb_style_data' => serialize(['paddingTop' => '7rem']),
+                'gb_style_css' => '.gbp-section { color: red; }',
+            ],
+        ];
         $command = $this->buildCommand($settingsRepository, $registry, $syncService);
 
-        $command->commitPushAll([], []);
+        $command->commitPushAll([], ['message' => 'Deploy homepage sync']);
 
-        self::assertCount(1, $syncService->commitRequests);
-        self::assertSame('generateblocks_global_styles', $syncService->commitRequests[0]['managedSetKey']);
-        self::assertSame('main', $syncService->commitRequests[0]['request']->branch);
+        self::assertCount(0, $syncService->commitRequests);
         self::assertSame('generateblocks_global_styles', $syncService->pushManagedSetKey);
         self::assertSame(
-            'Committed 1 changed domain(s) across 2 file(s) and pushed branch main to remote commit remote-2.',
+            'Committed 1 changed domain(s) in one branch commit touching 2 file(s) and pushed branch main to remote commit remote-2.',
             \WP_CLI::$successes[0]
         );
     }
@@ -169,6 +170,40 @@ final class PushPullCliCommandTest extends TestCase
         self::assertSame('Reset remote branch main from old to new.', \WP_CLI::$successes[0]);
     }
 
+    public function testStatusDoesNotWarnWhenAttachmentsExistWithoutVirtualManifest(): void
+    {
+        $settingsRepository = new SettingsRepository();
+        $settingsRepository->save($settingsRepository->sanitize([
+            'provider_key' => 'github',
+            'owner_or_workspace' => 'owner',
+            'repository' => 'repo',
+            'branch' => 'main',
+            'api_token' => 'token',
+            'enabled_managed_sets' => ['wordpress_attachments'],
+        ]));
+        $registry = new ManagedSetRegistry([new WordPressAttachmentsAdapter()]);
+        $syncService = new CliSyncServiceStub();
+        $syncService->diffs['wordpress_attachments'] = new ManagedSetDiffResult(
+            'wordpress_attachments',
+            new CanonicalManagedState('live', null, null, null, []),
+            new CanonicalManagedState('local', null, null, null, [
+                'wordpress/attachments/2026/03/bali-jpg/attachment.json' => new \PushPull\Domain\Diff\CanonicalManagedFile(
+                    'wordpress/attachments/2026/03/bali-jpg/attachment.json',
+                    '{}'
+                ),
+            ]),
+            new CanonicalManagedState('remote', null, null, null, []),
+            new CanonicalDiffResult([]),
+            new CanonicalDiffResult([]),
+            new RepositoryRelationship(RepositoryRelationship::IN_SYNC)
+        );
+        $command = $this->buildCommand($settingsRepository, $registry, $syncService);
+
+        $command->status([], []);
+
+        self::assertSame([], \WP_CLI::$warnings);
+    }
+
     private function buildCommand(
         SettingsRepository $settingsRepository,
         ManagedSetRegistry $registry,
@@ -197,6 +232,8 @@ final class CliSyncServiceStub implements SyncServiceInterface
 {
     /** @var array<string, CommitManagedSetResult> */
     public array $commitResults = [];
+    /** @var array<string, ManagedSetDiffResult> */
+    public array $diffs = [];
     /** @var array<int, array{managedSetKey: string, request: CommitManagedSetRequest}> */
     public array $commitRequests = [];
     public ?PushManagedSetResult $pushResult = null;
@@ -229,6 +266,10 @@ final class CliSyncServiceStub implements SyncServiceInterface
 
     public function diff(string $managedSetKey): ManagedSetDiffResult
     {
+        if (isset($this->diffs[$managedSetKey])) {
+            return $this->diffs[$managedSetKey];
+        }
+
         return new ManagedSetDiffResult(
             $managedSetKey,
             new CanonicalManagedState('live', null, null, null, []),

@@ -30,7 +30,7 @@ final class CommitPushAllBranchAsyncOperationHandler implements BranchAsyncOpera
                 'phase' => 'complete',
                 'summaryType' => 'success',
                 'summaryMessage' => $message,
-                'redirectUrl' => $this->context->noticeUrl('success', $message),
+                'redirectUrl' => $this->context->noticeUrl('success', $message, is_string($record->payload['sourcePage'] ?? null) ? (string) $record->payload['sourcePage'] : null),
                 'progressMode' => 'indeterminate',
                 'progressCurrent' => 0,
                 'progressTotal' => 0,
@@ -38,18 +38,15 @@ final class CommitPushAllBranchAsyncOperationHandler implements BranchAsyncOpera
         }
 
         return $baseState + [
-            'phase' => 'commit_all',
+            'phase' => 'commit_branch',
             'managedSetKeys' => $managedSetKeys,
             'skippedManagedSets' => $skippedManagedSets,
-            'managedSetIndex' => 0,
-            'createdCommitCount' => 0,
-            'committedDomainCount' => 0,
-            'committedFileCount' => 0,
+            'commitMessage' => trim((string) ($record->payload['commitMessage'] ?? $this->context->settings()->defaultCommitMessage)),
             'progressMode' => 'indeterminate',
             'progressCurrent' => 0,
             'progressTotal' => 0,
             'progressMessage' => sprintf(
-                'Preparing commits for %d enabled available domain(s) on branch %s.',
+                'Preparing one branch commit for %d enabled available domain(s) on branch %s.',
                 count($managedSetKeys),
                 $branch
             ),
@@ -58,37 +55,15 @@ final class CommitPushAllBranchAsyncOperationHandler implements BranchAsyncOpera
 
     public function continue(OperationRecord $record, array $state): array
     {
-        if (($state['phase'] ?? '') === 'commit_all') {
-            if ((int) $state['managedSetIndex'] < count($state['managedSetKeys'])) {
-                $managedSetKey = (string) $state['managedSetKeys'][(int) $state['managedSetIndex']];
-                $settings = $this->context->settings();
-                $result = $this->context->syncService()->commitManagedSet($managedSetKey, new \PushPull\Domain\Sync\CommitManagedSetRequest(
-                    $settings->branch,
-                    'PushPull export',
-                    $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
-                    $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
-                ));
-
-                if ($result->createdNewCommit) {
-                    $state['createdCommitCount']++;
-                    $state['committedDomainCount']++;
-                    $state['committedFileCount'] += count($result->pathHashes);
-                }
-
-                $state['managedSetIndex']++;
-                $state['progressMessage'] = sprintf(
-                    'Committed %s. Processed %d of %d domain(s).',
-                    $managedSetKey,
-                    $state['managedSetIndex'],
-                    count($state['managedSetKeys'])
-                );
-
-                return [
-                    'done' => false,
-                    'state' => $state,
-                ];
-            }
-
+        if (($state['phase'] ?? '') === 'commit_branch') {
+            $settings = $this->context->settings();
+            $commitMessage = trim((string) ($state['commitMessage'] ?? $settings->defaultCommitMessage));
+            $result = $this->context->commitManagedSets((array) ($state['managedSetKeys'] ?? []), new \PushPull\Domain\Sync\CommitManagedSetRequest(
+                $settings->branch,
+                $commitMessage !== '' ? $commitMessage : $settings->defaultCommitMessage,
+                $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
+                $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
+            ));
             $pushState = $this->context->pushService()->initializePushState($this->context->settings());
             $pushState += [
                 'asyncType' => (string) ($state['asyncType'] ?? ''),
@@ -98,10 +73,11 @@ final class CommitPushAllBranchAsyncOperationHandler implements BranchAsyncOpera
                 'branch' => (string) ($state['branch'] ?? ''),
                 'lockToken' => (string) ($state['lockToken'] ?? ''),
             ];
-            $pushState['createdCommitCount'] = $state['createdCommitCount'];
-            $pushState['committedDomainCount'] = $state['committedDomainCount'];
-            $pushState['committedFileCount'] = $state['committedFileCount'];
+            $pushState['createdCommitCount'] = $result->createdNewCommit ? 1 : 0;
+            $pushState['committedDomainCount'] = $result->createdNewCommit ? count((array) ($state['managedSetKeys'] ?? [])) : 0;
+            $pushState['committedFileCount'] = $result->changedPathCount;
             $pushState['skippedManagedSets'] = $state['skippedManagedSets'] ?? [];
+            $pushState['commitMessage'] = $commitMessage;
 
             if (($pushState['phase'] ?? '') === 'complete') {
                 $summaryMessage = __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull');
@@ -123,9 +99,9 @@ final class CommitPushAllBranchAsyncOperationHandler implements BranchAsyncOpera
             }
 
             $pushState['progressMessage'] = sprintf(
-                'Prepared push plan after committing %d changed domain(s) across %d file(s).',
-                $state['committedDomainCount'],
-                $state['committedFileCount']
+                'Prepared push plan after creating one branch commit for %d domain(s) across %d changed file(s).',
+                $pushState['committedDomainCount'],
+                $pushState['committedFileCount']
             );
 
             return [
@@ -143,13 +119,19 @@ final class CommitPushAllBranchAsyncOperationHandler implements BranchAsyncOpera
             ];
         }
 
-        $summaryMessage = sprintf(
-            'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
-            (int) ($state['committedDomainCount'] ?? 0),
-            (int) ($state['committedFileCount'] ?? 0),
-            (string) ($state['branch'] ?? ''),
-            (string) ($state['remoteCommitHash'] ?? '')
-        );
+        $summaryMessage = (int) ($state['createdCommitCount'] ?? 0) > 0
+            ? sprintf(
+                'Committed %1$d changed domain(s) in one branch commit touching %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
+                (int) ($state['committedDomainCount'] ?? 0),
+                (int) ($state['committedFileCount'] ?? 0),
+                (string) ($state['branch'] ?? ''),
+                (string) ($state['remoteCommitHash'] ?? '')
+            )
+            : sprintf(
+                'No new bulk commit was created. Pushed the existing local branch %1$s to remote commit %2$s.',
+                (string) ($state['branch'] ?? ''),
+                (string) ($state['remoteCommitHash'] ?? '')
+            );
 
         if (($state['skippedManagedSets'] ?? []) !== []) {
             $summaryMessage .= ' ' . $this->context->skippedManagedSetsSummary((array) $state['skippedManagedSets']);

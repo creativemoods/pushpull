@@ -26,7 +26,8 @@ final class PushPullSettings
         public readonly string $authorEmail,
         public readonly array $enabledManagedSets = [],
         public readonly int $fetchAvailabilityCheckIntervalMinutes = 5,
-        public readonly string $siteMode = self::SITE_MODE_BOTH
+        public readonly string $siteMode = self::SITE_MODE_BOTH,
+        public readonly string $defaultCommitMessage = 'PushPull export'
     ) {
     }
 
@@ -69,7 +70,8 @@ final class PushPullSettings
             (string) ($values['author_email'] ?? ''),
             array_values(array_unique($enabledManagedSets)),
             (int) ($values['fetch_availability_check_interval_minutes'] ?? 5),
-            self::normalizeSiteMode((string) ($values['site_mode'] ?? self::SITE_MODE_BOTH))
+            self::normalizeSiteMode((string) ($values['site_mode'] ?? self::SITE_MODE_BOTH)),
+            self::normalizeDefaultCommitMessage((string) ($values['default_commit_message'] ?? 'PushPull export'))
         );
     }
 
@@ -92,6 +94,7 @@ final class PushPullSettings
             'site_mode' => $this->siteMode,
             'author_name' => $this->authorName,
             'author_email' => $this->authorEmail,
+            'default_commit_message' => $this->defaultCommitMessage,
         ];
     }
 
@@ -138,5 +141,12 @@ final class PushPullSettings
             self::SITE_MODE_PULL_ONLY => $siteMode,
             default => self::SITE_MODE_BOTH,
         };
+    }
+
+    private static function normalizeDefaultCommitMessage(string $message): string
+    {
+        $normalized = trim($message);
+
+        return $normalized !== '' ? $normalized : 'PushPull export';
     }
 }

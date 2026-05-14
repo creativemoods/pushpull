@@ -9,6 +9,7 @@ if (! defined('ABSPATH')) {
 }
 
 use PushPull\Admin\ManagedContentPage;
+use PushPull\Admin\LocalRepositoryPage;
 use PushPull\Admin\OperationsPage;
 use PushPull\Admin\AttachmentSyncField;
 use PushPull\Admin\AdminBarStatus;
@@ -204,7 +205,21 @@ final class Plugin
             $managedSetRegistry,
             $wordPressDomainDiscovery
         );
-        $operationsPage = new OperationsPage($operationLogRepository);
+        $branchAsyncOperationCoordinator = new BranchAsyncOperationCoordinator(
+            $operationLogRepository,
+            $operationLockService,
+            $settingsRepository,
+            $localRepository,
+            $providerFactory,
+            $syncService,
+            $managedSetApplyServices,
+            $managedSetRegistry,
+            $stateReader,
+            $contentMapRepository,
+            $workingStateRepository,
+            $fetchAvailabilityService
+        );
+        $operationsPage = new OperationsPage($operationLogRepository, $branchAsyncOperationCoordinator);
         $adminBarStatus = new AdminBarStatus(
             $settingsRepository,
             $managedSetRegistry,
@@ -246,22 +261,10 @@ final class Plugin
             $workingStateRepository,
             $conflictResolutionService,
             $operationExecutor,
-            new BranchAsyncOperationCoordinator(
-                $operationLogRepository,
-                $operationLockService,
-                $settingsRepository,
-                $localRepository,
-                $providerFactory,
-                $syncService,
-                $managedSetApplyServices,
-                $managedSetRegistry,
-                $stateReader,
-                $contentMapRepository,
-                $workingStateRepository,
-                $fetchAvailabilityService
-            ),
+            $branchAsyncOperationCoordinator,
             $fetchAvailabilityService
         );
+        $localRepositoryPage = new LocalRepositoryPage($settingsRepository, $localRepository, $managedContentPage);
         $attachmentSyncField = new AttachmentSyncField();
 
         add_action('admin_init', [$settingsRegistrar, 'register']);
@@ -269,6 +272,7 @@ final class Plugin
         add_action('admin_menu', [$settingsPage, 'register']);
         add_action('admin_menu', [$domainsPage, 'register']);
         add_action('admin_menu', [$managedContentPage, 'register']);
+        add_action('admin_menu', [$localRepositoryPage, 'register']);
         add_action('admin_menu', [$operationsPage, 'register']);
         add_action('admin_post_pushpull_save_domains', [$domainsPage, 'handleSave']);
         add_action('admin_post_pushpull_test_connection', [$settingsPage, 'handleTestConnection']);
@@ -283,6 +287,7 @@ final class Plugin
         add_action('admin_post_pushpull_push_managed_set', [$managedContentPage, 'handlePush']);
         add_action('admin_post_pushpull_commit_push_all', [$managedContentPage, 'handleCommitPushAll']);
         add_action('admin_post_pushpull_pull_apply_all', [$managedContentPage, 'handlePullApplyAll']);
+        add_action('admin_post_pushpull_cancel_operation', [$operationsPage, 'handleCancelOperation']);
         add_action('wp_ajax_pushpull_start_branch_action', [$managedContentPage, 'handleAjaxStartBranchAction']);
         add_action('wp_ajax_pushpull_continue_branch_action', [$managedContentPage, 'handleAjaxContinueBranchAction']);
         add_action('admin_post_pushpull_resolve_conflict_managed_set', [$managedContentPage, 'handleResolveConflict']);
@@ -291,6 +296,7 @@ final class Plugin
         add_action('admin_enqueue_scripts', [$domainsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$operationsPage, 'enqueueAssets']);
         add_action('admin_enqueue_scripts', [$managedContentPage, 'enqueueAssets']);
+        add_action('admin_enqueue_scripts', [$localRepositoryPage, 'enqueueAssets']);
         add_filter('admin_footer_text', [self::class, 'filterAdminFooterText'], 11);
         add_filter('update_footer', [self::class, 'filterUpdateFooter'], 11);
     }
@@ -336,6 +342,7 @@ final class Plugin
             'toplevel_page_' . SettingsPage::MENU_SLUG,
             'pushpull_page_' . DomainsPage::MENU_SLUG,
             'pushpull_page_' . ManagedContentPage::MENU_SLUG,
+            'pushpull_page_' . LocalRepositoryPage::MENU_SLUG,
             'pushpull_page_' . OperationsPage::MENU_SLUG,
         ], true);
     }

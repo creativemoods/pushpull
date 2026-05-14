@@ -6,6 +6,8 @@ namespace PushPull\Support\Operations;
 
 use PushPull\Domain\Apply\ManagedSetApplyServiceInterface;
 use PushPull\Domain\Push\ManagedSetPushService;
+use PushPull\Domain\Sync\CommitBranchResult;
+use PushPull\Domain\Sync\CommitManagedSetRequest;
 use PushPull\Domain\Sync\SyncServiceInterface;
 use PushPull\Persistence\Operations\OperationRecord;
 use PushPull\Provider\GitProviderInterface;
@@ -65,7 +67,12 @@ interface BranchAsyncOperationContextInterface
 
     public function chunkNodeLimit(): int;
 
-    public function noticeUrl(string $status, string $message): string;
+    public function noticeUrl(string $status, string $message, ?string $pageSlug = null): string;
+
+    /**
+     * @param string[] $managedSetKeys
+     */
+    public function commitManagedSets(array $managedSetKeys, CommitManagedSetRequest $request): CommitBranchResult;
 
     /**
      * @return array{managedSetKeys: string[], skippedManagedSets: array<int, array{label: string, message: string}>}

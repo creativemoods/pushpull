@@ -75,6 +75,7 @@ final class SettingsRegistrar
         $this->registerField('pushpull_sync', 'site_mode', __('Site sync mode', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_name', __('Commit author name', 'pushpull'));
         $this->registerField('pushpull_sync', 'author_email', __('Commit author email', 'pushpull'));
+        $this->registerField('pushpull_sync', 'default_commit_message', __('Default bulk commit message', 'pushpull'));
     }
 
     /**
@@ -128,6 +129,11 @@ final class SettingsRegistrar
 
                     case 'author_email':
                         $this->renderInput($name, (string) $value, 'email', 'name@example.com');
+                        break;
+
+                    case 'default_commit_message':
+                        $this->renderInput($name, (string) $value, 'text', 'PushPull export');
+                        echo '<p class="description">' . esc_html__('Used for Commit + Push All so branch commits have a predictable, editable message instead of the built-in default.', 'pushpull') . '</p>';
                         break;
 
                     case 'base_url':

@@ -26,7 +26,7 @@ final class PushBranchAsyncOperationHandler implements BranchAsyncOperationHandl
                 'phase' => 'complete',
                 'summaryType' => 'success',
                 'summaryMessage' => (string) $pushState['progressMessage'],
-                'redirectUrl' => $this->context->noticeUrl('success', (string) $pushState['progressMessage']),
+                'redirectUrl' => $this->context->noticeUrl('success', (string) $pushState['progressMessage'], is_string($record->payload['sourcePage'] ?? null) ? (string) $record->payload['sourcePage'] : null),
                 'progressMode' => 'determinate',
                 'progressCurrent' => 1,
                 'progressTotal' => 1,

@@ -76,6 +76,10 @@
     const title = modal.querySelector('#pushpull-async-modal-title');
     const message = modal.querySelector('.pushpull-async-modal__message');
     const closeButton = modal.querySelector('.pushpull-async-modal__close');
+    const promptWrap = modal.querySelector('.pushpull-async-modal__prompt');
+    const promptLabel = modal.querySelector('.pushpull-async-modal__prompt-label');
+    const promptInput = modal.querySelector('.pushpull-async-modal__prompt-input');
+    const promptSubmit = modal.querySelector('.pushpull-async-modal__prompt-submit');
     const progressWrap = modal.querySelector('.pushpull-async-modal__progress');
     const progressBar = modal.querySelector('.pushpull-async-modal__progress-bar');
     const progressFill = modal.querySelector('.pushpull-async-modal__progress-fill');
@@ -86,7 +90,11 @@
         title.textContent = label || config.strings.working;
         lastStableMessage = currentMessage || config.strings.working;
         message.textContent = lastStableMessage;
+        closeButton.textContent = config.strings.close;
         closeButton.hidden = true;
+        if (promptWrap) {
+            promptWrap.hidden = true;
+        }
         updateProgress({ mode: 'indeterminate', current: 0, total: 0 });
         modal.hidden = false;
         document.body.classList.add('pushpull-modal-open');
@@ -156,6 +164,10 @@
         return data.data;
     };
 
+    const submitForm = function (form) {
+        HTMLFormElement.prototype.submit.call(form);
+    };
+
     const continueOperation = async function (operationId, label, retryCount) {
         const currentRetryCount = retryCount || 0;
 
@@ -184,6 +196,7 @@
             }
 
             title.textContent = label;
+            closeButton.textContent = config.strings.close;
             closeButton.hidden = false;
         } catch (error) {
             if (currentRetryCount < 5) {
@@ -203,7 +216,69 @@
     const handleFailure = function (error) {
         title.textContent = config.strings.failed;
         message.textContent = error.message || config.strings.failed;
+        if (promptWrap) {
+            promptWrap.hidden = true;
+        }
+        closeButton.textContent = config.strings.close;
         closeButton.hidden = false;
+    };
+
+    const requestCommitMessage = function (label, defaultMessage, helpText) {
+        openModal(config.strings.commitMessageTitle || label, helpText || config.strings.commitMessageHelp || '');
+        progressWrap.hidden = true;
+        if (!promptWrap || !promptInput || !promptSubmit) {
+            return Promise.resolve(defaultMessage);
+        }
+
+        promptWrap.hidden = false;
+        promptLabel.textContent = config.strings.commitMessageLabel || 'Commit message';
+        promptSubmit.textContent = config.strings.commitMessageConfirm || 'Continue';
+        closeButton.textContent = config.strings.cancel || 'Cancel';
+        closeButton.hidden = false;
+        promptInput.value = defaultMessage || '';
+
+        return new Promise(function (resolve, reject) {
+            const cleanup = function () {
+                promptSubmit.removeEventListener('click', handleSubmit);
+                closeButton.removeEventListener('click', handleCancel);
+                promptInput.removeEventListener('keydown', handleKeydown);
+            };
+
+            const handleSubmit = function () {
+                const value = promptInput.value.trim() || defaultMessage || '';
+                cleanup();
+                promptWrap.hidden = true;
+                resolve(value);
+            };
+
+            const handleCancel = function () {
+                cleanup();
+                promptWrap.hidden = true;
+                closeModal();
+                reject(new Error('cancelled'));
+            };
+
+            const handleKeydown = function (event) {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    handleSubmit();
+                    return;
+                }
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    handleCancel();
+                }
+            };
+
+            promptSubmit.addEventListener('click', handleSubmit);
+            closeButton.addEventListener('click', handleCancel);
+            promptInput.addEventListener('keydown', handleKeydown);
+            window.setTimeout(function () {
+                promptInput.focus();
+                promptInput.select();
+            }, 0);
+        });
     };
 
     document.querySelectorAll('.pushpull-async-branch-form').forEach(function (form) {
@@ -211,34 +286,99 @@
             event.preventDefault();
 
             const managedSetInput = form.querySelector('input[name="managed_set"]');
+            const commitMessageInput = form.querySelector('input[name="commit_message"]');
             const operationType = form.getAttribute('data-pushpull-async-operation') || '';
             const label = form.getAttribute('data-pushpull-async-label') || config.strings.working;
             const confirmationMessage = form.getAttribute('data-pushpull-confirm');
+            const commitMessageDefault = form.getAttribute('data-pushpull-commit-message-default') || '';
+            const commitMessagePrompt = form.getAttribute('data-pushpull-commit-message-prompt') || '';
 
             if (confirmationMessage && !window.confirm(confirmationMessage)) {
                 return;
             }
 
-            openModal(label, config.strings.working);
+            const preparePayload = function () {
+                const payload = {
+                    operation_type: operationType,
+                    managed_set: managedSetInput ? managedSetInput.value : '',
+                    source_page: config.pageSlug || ''
+                };
 
-            postJson('pushpull_start_branch_action', {
-                operation_type: operationType,
-                managed_set: managedSetInput ? managedSetInput.value : ''
-            }).then(function (data) {
-                if (data.message) {
-                    lastStableMessage = data.message;
+                if (commitMessageInput) {
+                    payload.commit_message = commitMessageInput.value;
                 }
 
-                message.textContent = lastStableMessage;
-                updateProgress(data.progress);
+                return payload;
+            };
 
-                if (data.done && data.redirectUrl) {
-                    window.location.assign(data.redirectUrl);
-                    return null;
+            const runOperation = function () {
+                openModal(label, config.strings.working);
+
+                postJson('pushpull_start_branch_action', preparePayload()).then(function (data) {
+                    if (data.message) {
+                        lastStableMessage = data.message;
+                    }
+
+                    message.textContent = lastStableMessage;
+                    updateProgress(data.progress);
+
+                    if (data.done && data.redirectUrl) {
+                        window.location.assign(data.redirectUrl);
+                        return null;
+                    }
+
+                    return continueOperation(data.operationId, label, 0);
+                }).catch(function (error) {
+                    if (error && error.message === 'cancelled') {
+                        return;
+                    }
+
+                    handleFailure(error);
+                });
+            };
+
+            if (commitMessageInput && commitMessagePrompt) {
+                requestCommitMessage(label, commitMessageInput.value || commitMessageDefault, commitMessagePrompt).then(function (enteredMessage) {
+                    commitMessageInput.value = enteredMessage;
+                    runOperation();
+                }).catch(function (error) {
+                    if (error && error.message === 'cancelled') {
+                        return;
+                    }
+
+                    handleFailure(error);
+                });
+                return;
+            }
+
+            runOperation();
+        });
+    });
+
+    document.querySelectorAll('.pushpull-commit-form').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const commitMessageInput = form.querySelector('input[name="commit_message"]');
+            const label = form.getAttribute('data-pushpull-commit-label') || config.strings.commitMessageTitle || 'Commit';
+            const commitMessageDefault = form.getAttribute('data-pushpull-commit-message-default') || '';
+            const commitMessagePrompt = form.getAttribute('data-pushpull-commit-message-prompt') || config.strings.commitMessageHelp || '';
+
+            if (!commitMessageInput) {
+                submitForm(form);
+                return;
+            }
+
+            requestCommitMessage(label, commitMessageInput.value || commitMessageDefault, commitMessagePrompt).then(function (enteredMessage) {
+                commitMessageInput.value = enteredMessage;
+                submitForm(form);
+            }).catch(function (error) {
+                if (error && error.message === 'cancelled') {
+                    return;
                 }
 
-                return continueOperation(data.operationId, label, 0);
-            }).catch(handleFailure);
+                handleFailure(error);
+            });
         });
     });
 }());

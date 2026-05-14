@@ -15,6 +15,7 @@ use PushPull\Domain\Merge\ManagedSetConflictResolutionService;
 use PushPull\Domain\Merge\MergeConflict;
 use PushPull\Domain\Repository\LocalRepositoryInterface;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
+use PushPull\Domain\Sync\BranchCommitService;
 use PushPull\Domain\Sync\SyncServiceInterface;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\Exception\ProviderException;
@@ -90,11 +91,17 @@ final class ManagedContentPage
         wp_localize_script('pushpull-managed-content', 'pushpullManagedContent', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'ajaxNonce' => wp_create_nonce('pushpull_async_branch_action'),
+            'pageSlug' => self::MENU_SLUG,
             'strings' => [
                 'working' => __('Working…', 'pushpull'),
                 'close' => __('Close', 'pushpull'),
                 'failed' => __('The PushPull operation could not be completed.', 'pushpull'),
                 'checkingStatus' => __('Connection interrupted while checking PushPull progress. Retrying operation status…', 'pushpull'),
+                'commitMessageTitle' => __('Commit Message', 'pushpull'),
+                'commitMessageHelp' => __('Review or replace the commit message for this bulk branch commit.', 'pushpull'),
+                'commitMessageLabel' => __('Commit message', 'pushpull'),
+                'commitMessageConfirm' => __('Continue', 'pushpull'),
+                'cancel' => __('Cancel', 'pushpull'),
                 /* translators: %d: completion percentage. */
                 'progressPercent' => __('%d% complete', 'pushpull'),
             ],
@@ -161,10 +168,6 @@ final class ManagedContentPage
 
     private function renderPrimaryNavigation(\PushPull\Settings\PushPullSettings $settings): void
     {
-        $branchActionState = $this->branchActionState($settings);
-        $fetchAvailabilityState = $this->fetchAvailabilityService->getCachedState($settings);
-        $managedSetKey = $branchActionState['managedSetKey'];
-
         echo '<div class="pushpull-page-nav-row">';
         echo '<nav class="nav-tab-wrapper wp-clearfix pushpull-page-nav">';
         printf(
@@ -184,10 +187,26 @@ final class ManagedContentPage
         );
         printf(
             '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . LocalRepositoryPage::MENU_SLUG)),
+            esc_html__('Sync Status', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
             esc_url(admin_url('admin.php?page=' . OperationsPage::MENU_SLUG)),
             esc_html__('Audit Log', 'pushpull')
         );
         echo '</nav>';
+        $this->renderBranchActionToolbar($settings);
+        echo '</div>';
+        echo '<p class="description pushpull-top-actions-note">' . esc_html__('Branch actions operate on the whole branch. Pull runs Fetch + Merge, and Merge brings fetched remote-tracking changes into the local branch.', 'pushpull') . '</p>';
+    }
+
+    public function renderBranchActionToolbar(\PushPull\Settings\PushPullSettings $settings): void
+    {
+        $branchActionState = $this->branchActionState($settings);
+        $fetchAvailabilityState = $this->fetchAvailabilityService->getCachedState($settings);
+        $managedSetKey = $branchActionState['managedSetKey'];
+
         echo '<div class="pushpull-top-actions">';
         $this->renderCommitPushAllButton($managedSetKey, $branchActionState['commitPushAll']['enabled'], $branchActionState['commitPushAll']['reason']);
         $this->renderPullApplyAllButton($managedSetKey, $branchActionState['pullApplyAll']['enabled'], $branchActionState['pullApplyAll']['reason']);
@@ -196,8 +215,6 @@ final class ManagedContentPage
         $this->renderTopLevelMergeButton($managedSetKey, $branchActionState['merge']['enabled'], $branchActionState['merge']['reason']);
         $this->renderPushButton($managedSetKey, $branchActionState['push']['enabled'], $branchActionState['push']['reason']);
         echo '</div>';
-        echo '</div>';
-        echo '<p class="description pushpull-top-actions-note">' . esc_html__('Branch actions operate on the whole branch. Pull runs Fetch + Merge, and Merge brings fetched remote-tracking changes into the local branch.', 'pushpull') . '</p>';
     }
 
     private function renderManagedSetDetail(\PushPull\Settings\PushPullSettings $settings, ManifestManagedContentAdapterInterface $managedContentAdapter): void
@@ -593,7 +610,17 @@ final class ManagedContentPage
 
     private function isManagedSetAbsentFromLocalBranch(ManifestManagedContentAdapterInterface $managedContentAdapter, ManagedSetDiffResult $diffResult): bool
     {
-        return ! array_key_exists($managedContentAdapter->getManifestPath(), $diffResult->local->files);
+        if (array_key_exists($managedContentAdapter->getManifestPath(), $diffResult->local->files)) {
+            return false;
+        }
+
+        foreach (array_keys($diffResult->local->files) as $path) {
+            if ($managedContentAdapter->ownsRepositoryPath($path)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function renderDiffList(
@@ -944,15 +971,18 @@ final class ManagedContentPage
         }
 
         try {
+            $commitMessage = isset($_POST['commit_message'])
+                ? sanitize_text_field((string) wp_unslash((string) $_POST['commit_message']))
+                : $managedContentAdapter->buildCommitMessage();
             $result = $this->operationExecutor->run(
                 $managedSetKey,
                 'commit',
-                ['branch' => $settings->branch],
+                ['branch' => $settings->branch, 'commitMessage' => $commitMessage],
                 fn () => $this->syncService->commitManagedSet(
                     $managedSetKey,
                     new CommitManagedSetRequest(
                         $settings->branch,
-                        $managedContentAdapter->buildCommitMessage(),
+                        $commitMessage !== '' ? $commitMessage : $managedContentAdapter->buildCommitMessage(),
                         $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
                         $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
                     )
@@ -1023,6 +1053,8 @@ final class ManagedContentPage
 
         $operationType = isset($_POST['operation_type']) ? sanitize_key(wp_unslash((string) $_POST['operation_type'])) : '';
         $managedSetKey = isset($_POST['managed_set']) ? sanitize_key(wp_unslash((string) $_POST['managed_set'])) : '';
+        $commitMessage = isset($_POST['commit_message']) ? sanitize_text_field((string) wp_unslash($_POST['commit_message'])) : '';
+        $sourcePage = isset($_POST['source_page']) ? sanitize_key(wp_unslash((string) $_POST['source_page'])) : '';
 
         if ($managedSetKey === '' || ! $this->managedSetRegistry->has($managedSetKey)) {
             wp_send_json_error(['message' => __('The managed set is not supported.', 'pushpull')], 400);
@@ -1042,7 +1074,17 @@ final class ManagedContentPage
         }
 
         try {
-            $started = $this->asyncBranchOperationRunner->start($managedSetKey, $operationType);
+            $payload = [];
+
+            if ($operationType === 'commit_push_all' && $commitMessage !== '') {
+                $payload['commitMessage'] = $commitMessage;
+            }
+
+            if ($sourcePage !== '') {
+                $payload['sourcePage'] = $sourcePage;
+            }
+
+            $started = $this->asyncBranchOperationRunner->start($managedSetKey, $operationType, $payload);
         } catch (\Throwable $exception) {
             $message = $exception instanceof ProviderException ? $exception->debugSummary() : $exception->getMessage();
             wp_send_json_error(['message' => $message], 400);
@@ -1081,32 +1123,23 @@ final class ManagedContentPage
         }
 
         try {
-            $createdCommitCount = 0;
-            $committedFileCount = 0;
-            $committedDomainCount = 0;
-
-            foreach ($availableAdapters as $managedSetKey => $adapter) {
-                $result = $this->operationExecutor->run(
-                    $managedSetKey,
-                    'commit',
-                    ['branch' => $settings->branch, 'bulk' => true],
-                    fn () => $this->syncService->commitManagedSet(
-                        $managedSetKey,
-                        new CommitManagedSetRequest(
-                            $settings->branch,
-                            $adapter->buildCommitMessage(),
-                            $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
-                            $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
-                        )
+            $commitMessage = isset($_POST['commit_message'])
+                ? sanitize_text_field((string) wp_unslash($_POST['commit_message']))
+                : $settings->defaultCommitMessage;
+            $commitResult = $this->operationExecutor->run(
+                $branchManagedSetKey,
+                'commit',
+                ['branch' => $settings->branch, 'bulk' => true, 'commitMessage' => $commitMessage],
+                fn () => (new BranchCommitService($this->localRepository))->commitManagedSets(
+                    $availableAdapters,
+                    new CommitManagedSetRequest(
+                        $settings->branch,
+                        $commitMessage !== '' ? $commitMessage : $settings->defaultCommitMessage,
+                        $settings->authorName !== '' ? $settings->authorName : wp_get_current_user()->display_name,
+                        $settings->authorEmail !== '' ? $settings->authorEmail : (wp_get_current_user()->user_email ?? '')
                     )
-                );
-
-                if ($result->createdNewCommit) {
-                    $createdCommitCount++;
-                    $committedDomainCount++;
-                    $committedFileCount += count($result->pathHashes);
-                }
-            }
+                )
+            );
 
             $pushResult = null;
 
@@ -1127,15 +1160,21 @@ final class ManagedContentPage
         if ($pushResult === null) {
             $message = __('No managed domains were committed or pushed.', 'pushpull');
         } else {
-            $message = $pushResult->status === 'already_up_to_date'
+            $message = $pushResult->status === 'already_up_to_date' && ! $commitResult->createdNewCommit
                 ? __('Nothing to commit or push. Live content and the remote branch are already up to date.', 'pushpull')
-                : sprintf(
-                    'Committed %1$d changed domain(s) across %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
-                    $committedDomainCount,
-                    $committedFileCount,
+                : ($commitResult->createdNewCommit
+                ? sprintf(
+                    'Committed %1$d changed domain(s) in one branch commit touching %2$d file(s) and pushed branch %3$s to remote commit %4$s.',
+                    $commitResult->createdNewCommit ? count($availableAdapters) : 0,
+                    $commitResult->changedPathCount,
                     $pushResult->branch,
                     $pushResult->remoteCommitHash
-                );
+                )
+                : sprintf(
+                    'No new bulk commit was created. Pushed the existing local branch %1$s to remote commit %2$s.',
+                    $pushResult->branch,
+                    $pushResult->remoteCommitHash
+                ));
         }
 
         if ($skippedManagedSets !== []) {
@@ -1254,6 +1293,9 @@ final class ManagedContentPage
                 $response['message'],
                 isset($response['redirectManagedSetKey']) && is_string($response['redirectManagedSetKey'])
                     ? $response['redirectManagedSetKey']
+                    : null,
+                isset($response['redirectPageSlug']) && is_string($response['redirectPageSlug'])
+                    ? $response['redirectPageSlug']
                     : null
             ),
         ]);
@@ -1557,10 +1599,13 @@ final class ManagedContentPage
             return;
         }
 
+        $defaultCommitMessage = $managedContentAdapter->buildCommitMessage();
+
         echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Commit', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Export the current live WordPress state for this domain into the local branch as a new commit.', 'pushpull') . '">';
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-commit-form" data-pushpull-commit-label="' . esc_attr__('Commit', 'pushpull') . '" data-pushpull-commit-message-default="' . esc_attr($defaultCommitMessage) . '" data-pushpull-commit-message-prompt="' . esc_attr__('Review or replace the commit message for this domain commit.', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::COMMIT_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr($managedContentAdapter->getManagedSetKey()) . '" />';
+        echo '<input type="hidden" name="commit_message" value="' . esc_attr($defaultCommitMessage) . '" />';
         wp_nonce_field(self::COMMIT_ACTION);
         submit_button(__('Commit', 'pushpull'), 'primary', 'submit', false);
         echo '</form>';
@@ -1639,10 +1684,11 @@ final class ManagedContentPage
             return;
         }
 
-        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Commit + Push All', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Commit live changes for all enabled available domains in dependency order, then push the branch to the remote repository.', 'pushpull') . '">';
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="commit_push_all" data-pushpull-async-label="' . esc_attr__('Commit + Push All', 'pushpull') . '">';
+        echo '<div class="pushpull-action-control" data-pushpull-action-title="' . esc_attr__('Commit + Push All', 'pushpull') . '" data-pushpull-action-description="' . esc_attr__('Commit live changes for all enabled available domains into one branch commit, then push the branch to the remote repository.', 'pushpull') . '">';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="pushpull-async-branch-form" data-pushpull-async-operation="commit_push_all" data-pushpull-async-label="' . esc_attr__('Commit + Push All', 'pushpull') . '" data-pushpull-commit-message-default="' . esc_attr($this->settingsRepository->get()->defaultCommitMessage) . '" data-pushpull-commit-message-prompt="' . esc_attr__('Review or replace the commit message for this bulk branch commit.', 'pushpull') . '">';
         echo '<input type="hidden" name="action" value="' . esc_attr(self::COMMIT_PUSH_ALL_ACTION) . '" />';
         echo '<input type="hidden" name="managed_set" value="' . esc_attr((string) $managedSetKey) . '" />';
+        echo '<input type="hidden" name="commit_message" value="' . esc_attr($this->settingsRepository->get()->defaultCommitMessage) . '" />';
         wp_nonce_field(self::COMMIT_PUSH_ALL_ACTION);
         submit_button(__('Commit + Push All', 'pushpull'), 'primary', 'submit', false);
         echo '</form>';
@@ -1787,6 +1833,11 @@ final class ManagedContentPage
     /**
      * @return array{
      *   managedSetKey: ?string,
+     *   relationship: ?string,
+     *   hasLiveToLocalChanges: bool,
+     *   hasLocalToRemoteChanges: bool,
+     *   hasAvailableManagedSet: bool,
+     *   hasAvailableDiff: bool,
      *   commitPushAll: array{enabled: bool, reason: ?string},
      *   pullApplyAll: array{enabled: bool, reason: ?string},
      *   fetch: array{enabled: bool, reason: ?string},
@@ -1795,7 +1846,7 @@ final class ManagedContentPage
      *   push: array{enabled: bool, reason: ?string}
      * }
      */
-    private function branchActionState(\PushPull\Settings\PushPullSettings $settings): array
+    public function branchActionState(\PushPull\Settings\PushPullSettings $settings): array
     {
         $managedSetKey = $this->branchActionManagedSetKey($settings);
 
@@ -1804,6 +1855,11 @@ final class ManagedContentPage
 
             return [
                 'managedSetKey' => null,
+                'relationship' => null,
+                'hasLiveToLocalChanges' => false,
+                'hasLocalToRemoteChanges' => false,
+                'hasAvailableManagedSet' => false,
+                'hasAvailableDiff' => false,
                 'commitPushAll' => ['enabled' => false, 'reason' => $reason],
                 'pullApplyAll' => ['enabled' => false, 'reason' => $reason],
                 'fetch' => ['enabled' => false, 'reason' => $reason],
@@ -1841,6 +1897,11 @@ final class ManagedContentPage
 
             return [
                 'managedSetKey' => $managedSetKey,
+                'relationship' => $relationship,
+                'hasLiveToLocalChanges' => $hasLiveToLocalChanges,
+                'hasLocalToRemoteChanges' => $hasLocalToRemoteChanges,
+                'hasAvailableManagedSet' => $hasAvailableManagedSet,
+                'hasAvailableDiff' => false,
                 'commitPushAll' => ['enabled' => false, 'reason' => $hasAvailableManagedSet ? $reason : __('No enabled available domains can participate in this action.', 'pushpull')],
                 'pullApplyAll' => ['enabled' => false, 'reason' => $hasAvailableManagedSet ? $reason : __('No enabled available domains can participate in this action.', 'pushpull')],
                 'fetch' => ['enabled' => true, 'reason' => null],
@@ -1863,6 +1924,11 @@ final class ManagedContentPage
 
         return [
             'managedSetKey' => $managedSetKey,
+            'relationship' => $relationship,
+            'hasLiveToLocalChanges' => $hasLiveToLocalChanges,
+            'hasLocalToRemoteChanges' => $hasLocalToRemoteChanges,
+            'hasAvailableManagedSet' => $hasAvailableManagedSet,
+            'hasAvailableDiff' => true,
             'commitPushAll' => [
                 'enabled' => $commitPushAllEnabled,
                 'reason' => $commitPushAllEnabled ? null : $this->commitPushAllDisabledReason($settings, $hasAvailableManagedSet, (string) $relationship, $hasLiveToLocalChanges, $hasLocalToRemoteChanges),
@@ -2525,10 +2591,10 @@ final class ManagedContentPage
         exit;
     }
 
-    private function noticeUrl(string $status, string $message, ?string $managedSetKey = null): string
+    private function noticeUrl(string $status, string $message, ?string $managedSetKey = null, ?string $pageSlug = null): string
     {
         $queryArgs = [
-            'page' => self::MENU_SLUG,
+            'page' => $pageSlug !== null && $pageSlug !== '' ? $pageSlug : self::MENU_SLUG,
             'pushpull_commit_status' => $status,
             'pushpull_commit_message' => $message,
         ];
@@ -2540,13 +2606,20 @@ final class ManagedContentPage
         return add_query_arg($queryArgs, admin_url('admin.php'));
     }
 
-    private function renderAsyncOperationModal(): void
+    public function renderAsyncOperationModal(): void
     {
         echo '<div class="pushpull-async-modal" hidden="hidden">';
         echo '<div class="pushpull-async-modal__backdrop"></div>';
         echo '<div class="pushpull-async-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="pushpull-async-modal-title">';
         echo '<h2 id="pushpull-async-modal-title">' . esc_html__('Working…', 'pushpull') . '</h2>';
         echo '<p class="pushpull-async-modal__message">' . esc_html__('Preparing operation…', 'pushpull') . '</p>';
+        echo '<div class="pushpull-async-modal__prompt" hidden="hidden">';
+        echo '<label class="pushpull-async-modal__prompt-label" for="pushpull-async-modal-commit-message">' . esc_html__('Commit message', 'pushpull') . '</label>';
+        echo '<textarea id="pushpull-async-modal-commit-message" class="pushpull-async-modal__prompt-input" rows="4"></textarea>';
+        echo '<div class="pushpull-async-modal__prompt-actions">';
+        echo '<button type="button" class="button button-primary pushpull-async-modal__prompt-submit">' . esc_html__('Continue', 'pushpull') . '</button>';
+        echo '</div>';
+        echo '</div>';
         echo '<div class="pushpull-async-modal__progress" hidden="hidden">';
         echo '<div class="pushpull-async-modal__progress-bar is-indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">';
         echo '<span class="pushpull-async-modal__progress-fill"></span>';

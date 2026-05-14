@@ -196,6 +196,11 @@ final class DomainsPage
         );
         printf(
             '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . LocalRepositoryPage::MENU_SLUG)),
+            esc_html__('Sync Status', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
             esc_url(admin_url('admin.php?page=' . OperationsPage::MENU_SLUG)),
             esc_html__('Audit Log', 'pushpull')
         );

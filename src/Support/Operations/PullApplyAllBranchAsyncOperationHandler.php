@@ -28,7 +28,7 @@ final class PullApplyAllBranchAsyncOperationHandler implements BranchAsyncOperat
                 'phase' => 'complete',
                 'summaryType' => 'success',
                 'summaryMessage' => $message,
-                'redirectUrl' => $this->context->noticeUrl('success', $message),
+                'redirectUrl' => $this->context->noticeUrl('success', $message, is_string($record->payload['sourcePage'] ?? null) ? (string) $record->payload['sourcePage'] : null),
                 'progressMode' => 'indeterminate',
                 'progressCurrent' => 0,
                 'progressTotal' => 0,

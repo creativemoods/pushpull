@@ -39,7 +39,7 @@
     "scripts": {
         "test": "phpunit",
         "phpcs": "phpcs --standard=phpcs.xml.dist",
-        "phpstan": "phpstan analyse --configuration=phpstan.neon.dist --no-progress --debug --memory-limit=1G",
+        "phpstan": "phpstan analyse --configuration=phpstan.neon.dist --no-progress --memory-limit=2G",
         "bump-version": "sh bin/bump-version.sh",
         "sync-public-github": "sh bin/sync-public-github.sh",
         "pcp": "sh bin/run-pcp.sh",

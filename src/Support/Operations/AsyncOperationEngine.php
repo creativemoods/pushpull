@@ -88,7 +88,7 @@ final class AsyncOperationEngine
     }
 
     /**
-     * @return array{done: bool, status: string, message: string, progress: array<string, mixed>, redirectManagedSetKey?: string}
+     * @return array{done: bool, status: string, message: string, progress: array<string, mixed>, redirectManagedSetKey?: string, redirectPageSlug?: ?string}
      */
     public function continue(int $operationId): array
     {
@@ -108,6 +108,7 @@ final class AsyncOperationEngine
                 'message' => $summaryMessage,
                 'progress' => $this->progressPayload($record->result),
                 'redirectManagedSetKey' => is_string($record->result['redirectManagedSetKey'] ?? null) ? $record->result['redirectManagedSetKey'] : null,
+                'redirectPageSlug' => is_string($record->payload['sourcePage'] ?? null) ? $record->payload['sourcePage'] : null,
             ];
         }
 
@@ -145,12 +146,44 @@ final class AsyncOperationEngine
                 'message' => (string) $response['finalResult']['summaryMessage'],
                 'progress' => $this->progressPayload($response['finalResult']),
                 'redirectManagedSetKey' => is_string($response['finalResult']['redirectManagedSetKey'] ?? null) ? $response['finalResult']['redirectManagedSetKey'] : null,
+                'redirectPageSlug' => is_string($record->payload['sourcePage'] ?? null) ? $record->payload['sourcePage'] : null,
             ];
         } catch (\Throwable $exception) {
             $this->operationLogRepository->markFailed($record->id, $this->normalizeFailure($exception));
             $this->operationLockService->release($lock);
             throw $exception;
         }
+    }
+
+    public function cancel(int $operationId): OperationRecord
+    {
+        $record = $this->operationLogRepository->find($operationId);
+
+        if ($record === null) {
+            throw new RuntimeException(sprintf('Operation log %d could not be found.', $operationId));
+        }
+
+        if ($record->status !== OperationLogRepository::STATUS_RUNNING) {
+            return $record;
+        }
+
+        $lockToken = (string) ($record->result['lockToken'] ?? '');
+
+        if ($lockToken === '') {
+            throw new RuntimeException('This operation cannot be cancelled because it is not a resumable async branch action.');
+        }
+
+        $cancelled = $this->operationLogRepository->markCancelled($record->id, array_merge(
+            $record->result,
+            [
+                'summaryType' => 'warning',
+                'summaryMessage' => 'Operation cancelled. No further async steps will run.',
+                'cancelled' => true,
+            ]
+        ));
+        $this->operationLockService->releaseByToken($lockToken);
+
+        return $cancelled;
     }
 
     /**

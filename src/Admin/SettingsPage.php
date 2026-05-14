@@ -91,6 +91,11 @@ final class SettingsPage
                 'close' => __('Close', 'pushpull'),
                 'failed' => __('The PushPull operation could not be completed.', 'pushpull'),
                 'checkingStatus' => __('Connection interrupted while checking PushPull progress. Retrying operation status…', 'pushpull'),
+                'commitMessageTitle' => __('Commit Message', 'pushpull'),
+                'commitMessageHelp' => __('Review or replace the commit message for this bulk branch commit.', 'pushpull'),
+                'commitMessageLabel' => __('Commit message', 'pushpull'),
+                'commitMessageConfirm' => __('Continue', 'pushpull'),
+                'cancel' => __('Cancel', 'pushpull'),
                 /* translators: %d: completion percentage. */
                 'progressPercent' => __('%d% complete', 'pushpull'),
             ],
@@ -170,6 +175,11 @@ final class SettingsPage
         );
         printf(
             '<a href="%s" class="nav-tab">%s</a>',
+            esc_url(admin_url('admin.php?page=' . LocalRepositoryPage::MENU_SLUG)),
+            esc_html__('Sync Status', 'pushpull')
+        );
+        printf(
+            '<a href="%s" class="nav-tab">%s</a>',
             esc_url(admin_url('admin.php?page=' . OperationsPage::MENU_SLUG)),
             esc_html__('Audit Log', 'pushpull')
         );
@@ -228,6 +238,7 @@ final class SettingsPage
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Repository', 'pushpull'), esc_html(trim($settings->ownerOrWorkspace . '/' . $settings->repository, '/')));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Branch', 'pushpull'), esc_html($settings->branch));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Site sync mode', 'pushpull'), esc_html($this->siteModeLabel($settings)));
+        printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Bulk commit message', 'pushpull'), esc_html($settings->defaultCommitMessage));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Enabled domains', 'pushpull'), esc_html((string) count($settings->enabledManagedSets)));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Token', 'pushpull'), esc_html($settings->maskedApiToken() !== '' ? $settings->maskedApiToken() : 'Not stored'));
         printf('<dt>%s</dt><dd>%s</dd>', esc_html__('Schema', 'pushpull'), esc_html((new SchemaMigrator())->installedVersion() ?: 'Not installed'));
@@ -511,6 +522,13 @@ final class SettingsPage
         echo '<div class="pushpull-async-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="pushpull-async-modal-title">';
         echo '<h2 id="pushpull-async-modal-title">' . esc_html__('Working…', 'pushpull') . '</h2>';
         echo '<p class="pushpull-async-modal__message">' . esc_html__('Preparing operation…', 'pushpull') . '</p>';
+        echo '<div class="pushpull-async-modal__prompt" hidden="hidden">';
+        echo '<label class="pushpull-async-modal__prompt-label" for="pushpull-async-modal-commit-message">' . esc_html__('Commit message', 'pushpull') . '</label>';
+        echo '<textarea id="pushpull-async-modal-commit-message" class="pushpull-async-modal__prompt-input" rows="4"></textarea>';
+        echo '<div class="pushpull-async-modal__prompt-actions">';
+        echo '<button type="button" class="button button-primary pushpull-async-modal__prompt-submit">' . esc_html__('Continue', 'pushpull') . '</button>';
+        echo '</div>';
+        echo '</div>';
         echo '<div class="pushpull-async-modal__progress" hidden="hidden">';
         echo '<div class="pushpull-async-modal__progress-bar is-indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">';
         echo '<span class="pushpull-async-modal__progress-fill"></span>';

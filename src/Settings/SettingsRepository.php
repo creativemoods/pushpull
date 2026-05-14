@@ -40,6 +40,7 @@ final class SettingsRepository
             'site_mode' => PushPullSettings::SITE_MODE_BOTH,
             'author_name' => '',
             'author_email' => '',
+            'default_commit_message' => 'PushPull export',
         ]);
     }
 
@@ -86,6 +87,7 @@ final class SettingsRepository
             'site_mode' => sanitize_key((string) ($input['site_mode'] ?? $existing->siteMode)),
             'author_name' => sanitize_text_field((string) ($input['author_name'] ?? '')),
             'author_email' => sanitize_email((string) ($input['author_email'] ?? '')),
+            'default_commit_message' => sanitize_text_field((string) ($input['default_commit_message'] ?? $existing->defaultCommitMessage)),
         ]);
     }
 }

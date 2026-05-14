@@ -62,6 +62,15 @@ final class OperationLockService
         return new OperationLock(self::LOCK_OPTION, $token);
     }
 
+    public function releaseByToken(string $token): void
+    {
+        if ($token === '') {
+            return;
+        }
+
+        $this->release(new OperationLock(self::LOCK_OPTION, $token));
+    }
+
     public function refresh(OperationLock $lock): void
     {
         $existing = get_option($lock->optionKey, null);

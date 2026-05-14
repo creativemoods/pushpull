@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.28
+
+1. Added a dedicated `Sync Status` admin screen with branch-level action buttons, commit-stack summary cards, and a graphical branch view that highlights shared history, common ancestry, and local-versus-remote divergence.
+2. Improved commit visibility and authoring flows by surfacing outgoing and incoming branch commits in the admin UI and by prompting for editable commit messages for both `Commit + Push All` and individual domain `Commit` actions.
+3. Changed bulk `Commit + Push All` to create one combined branch commit per operation instead of one commit per managed domain, while keeping a configurable default bulk commit message in Settings.
+4. Added a repository-operations monitor to the Audit Log, including operation status summaries, payload and result inspection, and best-effort cancellation for resumable async branch actions.
+5. Fixed several branch-state and workflow edge cases, including false `WordPress attachments` absence warnings, async action redirects that jumped back to `Managed Content` instead of staying on the originating screen, and improved admin handling around the new sync-status flows.
+
 ## 0.0.27
 
 1. Added a Settings-page performance diagnostics panel that reports whether `ZipArchive` is available, with a non-blocking warning when the GitLab cold-fetch archive optimization cannot be used.
