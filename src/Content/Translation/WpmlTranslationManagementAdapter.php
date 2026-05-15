@@ -888,7 +888,7 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
             ]);
 
             if (! is_array($terms)) {
-                return [];
+                $terms = [];
             }
 
             $terms = array_values(array_filter(
@@ -896,12 +896,53 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 static fn (mixed $term): bool => $term instanceof WP_Term
             ));
 
+            $termsById = [];
+
+            foreach ($terms as $term) {
+                $termsById[(int) $term->term_id] = $term;
+            }
+
+            foreach ($this->wpmlTranslatedMenuTerms() as $term) {
+                $termsById[(int) $term->term_id] = $term;
+            }
+
+            $terms = array_values($termsById);
+
             usort($terms, static fn (WP_Term $left, WP_Term $right): int => [$left->slug, $left->term_id] <=> [$right->slug, $right->term_id]);
 
             return $terms;
         }
 
         return [];
+    }
+
+    /**
+     * @return WP_Term[]
+     */
+    private function wpmlTranslatedMenuTerms(): array
+    {
+        $rows = $this->translationRows();
+        $terms = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row) || (string) ($row['element_type'] ?? '') !== 'tax_nav_menu') {
+                continue;
+            }
+
+            $termId = (int) ($row['element_id'] ?? 0);
+
+            if ($termId <= 0) {
+                continue;
+            }
+
+            $term = get_term($termId, 'nav_menu');
+
+            if ($term instanceof WP_Term) {
+                $terms[] = $term;
+            }
+        }
+
+        return $terms;
     }
 
     private function findTermByLogicalKey(string $taxonomy, string $logicalKey): ?WP_Term

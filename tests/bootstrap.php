@@ -735,6 +735,30 @@ if (! function_exists('get_terms')) {
             static fn (mixed $term): bool => $term instanceof WP_Term
         ));
 
+        $currentLanguage = (string) ($GLOBALS['pushpull_test_wpml_current_language'] ?? '');
+
+        if ($taxonomy === 'nav_menu' && $currentLanguage !== '') {
+            $terms = array_values(array_filter(
+                $terms,
+                static function (WP_Term $term) use ($currentLanguage): bool {
+                    foreach ($GLOBALS['pushpull_test_wpml_translations'] ?? [] as $row) {
+                        if (! is_array($row)) {
+                            continue;
+                        }
+
+                        if (
+                            (string) ($row['element_type'] ?? '') === 'tax_nav_menu'
+                            && (int) ($row['element_id'] ?? 0) === (int) $term->term_id
+                        ) {
+                            return (string) ($row['language_code'] ?? '') === $currentLanguage;
+                        }
+                    }
+
+                    return true;
+                }
+            ));
+        }
+
         usort($terms, static fn (WP_Term $left, WP_Term $right): int => [$left->slug, $left->term_id] <=> [$right->slug, $right->term_id]);
 
         return $terms;

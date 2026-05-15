@@ -575,10 +575,7 @@ final class WpmlConfigurationApplier
             throw new RuntimeException('WPML SitePress instance does not expose set_setting() for post type translation modes.');
         }
 
-        $currentSettings = $this->currentSettings();
-        $syncOptions = is_array($currentSettings['custom_posts_sync_option'] ?? null)
-            ? $currentSettings['custom_posts_sync_option']
-            : [];
+        $syncOptions = [];
 
         foreach ($postTypeTranslationModes as $postType => $mode) {
             $wpmlMode = match ($mode) {
@@ -618,15 +615,23 @@ final class WpmlConfigurationApplier
         $slugSettings = is_array($currentSettings['posts_slug_translation'] ?? null)
             ? $currentSettings['posts_slug_translation']
             : [];
-        $slugSettings['types'] = is_array($slugSettings['types'] ?? null) ? $slugSettings['types'] : [];
+        $slugSettings['types'] = [];
         $hasEnabledTypes = false;
+
+        $currentPostTypes = array_fill_keys($this->registeredSlugTranslationRecordPostTypes(), true);
+
+        foreach ($currentPostTypes as $postType => $_unused) {
+            if (! array_key_exists($postType, $postTypeSlugTranslations)) {
+                $this->deletePostTypeSlugTranslations($postType);
+            }
+        }
 
         foreach ($postTypeSlugTranslations as $postType => $definition) {
             if ($definition['enabled']) {
                 $slugSettings['types'][$postType] = 1;
                 $hasEnabledTypes = true;
             } else {
-                unset($slugSettings['types'][$postType]);
+                $this->deletePostTypeSlugTranslations($postType);
             }
 
             $this->applyPostTypeSlugValues($postType, $definition['enabled'], $definition['values'], $defaultLanguage);
@@ -653,6 +658,10 @@ final class WpmlConfigurationApplier
     private function applyPostTypeSlugValues(string $postType, bool $enabled, array $postTypeSlugValues, string $defaultLanguage): void
     {
         if (! $enabled || $postTypeSlugValues === []) {
+            if (! $enabled) {
+                $this->deletePostTypeSlugTranslations($postType);
+            }
+
             return;
         }
 
@@ -732,6 +741,8 @@ final class WpmlConfigurationApplier
             ]);
             $this->flushSlugTranslationCaches($postType, $stringId, $language);
         }
+
+        $this->deleteStaleSlugTranslationRows($postType, $stringId, array_keys($postTypeSlugValues));
     }
 
     /**
@@ -805,5 +816,68 @@ final class WpmlConfigurationApplier
         if ($stringId !== null && $language !== null) {
             wp_cache_delete('slug_translation_row_' . $stringId . '_' . $language, self::CACHE_GROUP);
         }
+    }
+
+    /**
+     * @param string[] $languagesToKeep
+     */
+    private function deleteStaleSlugTranslationRows(string $postType, int $stringId, array $languagesToKeep): void
+    {
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb || $stringId <= 0) {
+            return;
+        }
+
+        $languagesToKeep = array_values(array_filter(array_map('strval', $languagesToKeep), static fn (string $language): bool => $language !== ''));
+        $rows = $this->readSlugTranslationRows($stringId);
+
+        foreach ($rows as $row) {
+            $language = (string) ($row['language'] ?? '');
+            $rowId = (int) ($row['id'] ?? 0);
+
+            if ($language === '' || $rowId <= 0 || in_array($language, $languagesToKeep, true)) {
+                continue;
+            }
+
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Deleting stale WPML translation rows requires touching WPML plugin tables directly and the affected caches are invalidated immediately after the write.
+            $wpdb->delete(
+                $wpdb->prefix . 'icl_string_translations',
+                ['id' => $rowId],
+                ['%d']
+            );
+            $this->flushSlugTranslationCaches($postType, $stringId, $language);
+        }
+    }
+
+    private function deletePostTypeSlugTranslations(string $postType): void
+    {
+        $record = $this->readSlugTranslationRecord($postType);
+
+        if (! is_array($record) || ! isset($record['id'])) {
+            return;
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return;
+        }
+
+        $stringId = (int) $record['id'];
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Deleting stale WPML translation rows requires touching WPML plugin tables directly and the affected caches are invalidated immediately after the write.
+        $wpdb->delete(
+            $wpdb->prefix . 'icl_string_translations',
+            ['string_id' => $stringId],
+            ['%d']
+        );
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Deleting stale WPML string records requires touching WPML plugin tables directly and the affected caches are invalidated immediately after the write.
+        $wpdb->delete(
+            $wpdb->prefix . 'icl_strings',
+            ['id' => $stringId],
+            ['%d']
+        );
+        $this->flushSlugTranslationCaches($postType, $stringId);
     }
 }

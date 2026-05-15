@@ -336,6 +336,17 @@ final class ManagedSetPushService
             }
 
             $finalRemoteHeadHash = $update->commitHash !== '' ? $update->commitHash : $remoteHeadHash;
+
+            if (
+                $finalRemoteHeadHash === (string) $state['stopAtRemoteHash']
+                && ! empty($state['pushedCommitHashes'])
+            ) {
+                throw new RuntimeException(sprintf(
+                    'Remote branch %s did not advance after PushPull uploaded commits. The provider likely rejected an empty or no-op branch update; local refs were left unchanged.',
+                    $settings->branch
+                ));
+            }
+
             $this->aliasRemoteCommitHash($remoteHeadHash, $finalRemoteHeadHash);
             $this->localRepository->updateRef('refs/heads/' . $settings->branch, $finalRemoteHeadHash);
             $this->localRepository->updateRef('refs/remotes/origin/' . $settings->branch, $finalRemoteHeadHash);

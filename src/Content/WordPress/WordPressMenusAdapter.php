@@ -498,7 +498,7 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
         ]);
 
         if (! is_array($menus)) {
-            return [];
+            $menus = [];
         }
 
         $menus = array_values(array_filter(
@@ -506,7 +506,74 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
             static fn (mixed $menu): bool => $menu instanceof WP_Term
         ));
 
+        $menusById = [];
+
+        foreach ($menus as $menu) {
+            $menusById[(int) $menu->term_id] = $menu;
+        }
+
+        foreach ($this->wpmlTranslatedMenuTerms() as $menu) {
+            $menusById[(int) $menu->term_id] = $menu;
+        }
+
+        $menus = array_values($menusById);
+
         usort($menus, static fn (WP_Term $left, WP_Term $right): int => [$left->slug, $left->term_id] <=> [$right->slug, $right->term_id]);
+
+        return $menus;
+    }
+
+    /**
+     * @return WP_Term[]
+     */
+    private function wpmlTranslatedMenuTerms(): array
+    {
+        $rows = $GLOBALS['pushpull_test_wpml_translations'] ?? null;
+
+        if (! is_array($rows)) {
+            global $wpdb;
+
+            if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+                return [];
+            }
+
+            $table = $wpdb->prefix . 'icl_translations';
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a narrow recovery query used only to fill nav-menu gaps left by filtered term queries.
+            $rows = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT element_id FROM {$table} WHERE element_type = %s",
+                    'tax_' . self::MENU_TAXONOMY
+                ),
+                ARRAY_A
+            );
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+            if (! is_array($rows)) {
+                return [];
+            }
+        }
+
+        $menus = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row) || (string) ($row['element_type'] ?? '') !== 'tax_' . self::MENU_TAXONOMY) {
+                continue;
+            }
+
+            $termId = (int) ($row['element_id'] ?? 0);
+
+            if ($termId <= 0) {
+                continue;
+            }
+
+            $menu = get_term($termId, self::MENU_TAXONOMY);
+
+            if ($menu instanceof WP_Term) {
+                $menus[] = $menu;
+            }
+        }
 
         return $menus;
     }

@@ -30,6 +30,7 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
         global $wpdb;
 
         $pushpull_test_options = [];
+        $GLOBALS['pushpull_test_object_cache'] = [];
         $GLOBALS['pushpull_test_verified_post_translations'] = [];
         $GLOBALS['sitepress'] = new \PushPull_Test_SitePress();
         $this->wpdb = new \wpdb();
@@ -50,7 +51,34 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
             'default_language' => 'en',
             'active_languages' => ['en'],
             'language_negotiation_type' => 1,
+            'custom_posts_sync_option' => [
+                'custom_css' => 0,
+                'gp_elements' => 0,
+                'page' => 0,
+            ],
+            'posts_slug_translation' => [
+                'types' => [
+                    'gp_elements' => 1,
+                    'le_event' => 1,
+                ],
+                'on' => 1,
+            ],
             'setup_complete' => 0,
+        ]);
+        update_option('wpml_base_slug_translation', 1);
+
+        $this->wpdb->insert('wp_icl_strings', [
+            'language' => 'fr',
+            'context' => 'WordPress',
+            'name' => 'URL slug: le_event',
+            'value' => 'evenements',
+            'status' => 10,
+        ]);
+        $this->wpdb->insert('wp_icl_string_translations', [
+            'string_id' => 1,
+            'language' => 'en',
+            'value' => 'events',
+            'status' => 10,
         ]);
 
         $item = $this->withPayload($this->adapter->exportSnapshot()->items[0], [
@@ -130,21 +158,25 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
             'name' => 'URL slug: gp_elements',
             'value' => 'elements',
             'status' => 10,
-            'id' => 1,
+            'id' => 2,
         ], $this->wpdb->get_row($this->wpdb->prepare(
             'SELECT * FROM wp_icl_strings WHERE id = %d',
-            1
+            2
         ), ARRAY_A));
         self::assertSame([
-            'string_id' => 1,
+            'string_id' => 2,
             'language' => 'en',
             'value' => 'xyz1234',
             'status' => 10,
-            'id' => 1,
+            'id' => 2,
         ], $this->wpdb->get_row($this->wpdb->prepare(
             'SELECT id, string_id, language, value, status FROM wp_icl_string_translations WHERE string_id = %d AND language = %s',
-            1,
+            2,
             'en'
+        ), ARRAY_A));
+        self::assertNull($this->wpdb->get_row($this->wpdb->prepare(
+            'SELECT * FROM wp_icl_strings WHERE name = %s',
+            'URL slug: le_event'
         ), ARRAY_A));
     }
 

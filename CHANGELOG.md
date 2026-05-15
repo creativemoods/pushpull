@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.30
+
+1. Fixed WordPress menu export on WPML-filtered sites so translated menus such as `footer-menu-en` and `main-menu` no longer disappear from local exports when the current admin language hides part of the `nav_menu` term set.
+2. Hardened WPML translation-management menu export to recover the full translated menu set from WPML translation rows when the normal menu term query is incomplete, keeping menu manifests and translation groups aligned.
+3. Fixed WPML configuration apply so it now mirrors repository state instead of patching existing settings in place, removing stale post type translation modes and stale post type slug translation records that were previously left behind after apply.
+4. Hardened branch push safety so PushPull no longer rewrites local refs backward when a provider reports a successful push but leaves the remote branch head unchanged; that case now surfaces as a push failure instead of silently discarding the local head.
+5. Expanded regression coverage and test-harness fidelity around WPML language-filtered menu queries, multilingual export/apply flows, and WPML configuration cache behavior.
+
 ## 0.0.29
 
 1. Added the new `Sync Status` branch-centric admin screen, including branch action buttons, branch summaries, common-ancestor and divergence visibility, and a graphical commit view that separates shared history from local-only and remote-tracking-only commits.

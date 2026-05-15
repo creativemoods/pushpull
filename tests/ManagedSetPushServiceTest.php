@@ -155,6 +155,50 @@ final class ManagedSetPushServiceTest extends TestCase
         self::assertNotNull($this->repository->getCommit('provider-commit-2'));
     }
 
+    public function testPushDoesNotRewindLocalRefsWhenProviderLeavesRemoteHeadUnchanged(): void
+    {
+        $baseSnapshot = $this->snapshot([
+            $this->runtimeRecord('.gbp-section', 'gbp-section', 0, ['paddingTop' => '7rem']),
+        ]);
+        $localSnapshot = $this->snapshot([
+            $this->runtimeRecord('.gbp-section', 'gbp-section', 0, ['paddingTop' => '8rem']),
+        ]);
+
+        $this->importRemoteBase($baseSnapshot, 'remote-base');
+        $this->provider->refs['refs/heads/main'] = new RemoteRef('refs/heads/main', 'remote-base');
+        $this->provider->updatedCommitHashOverride = 'remote-base';
+
+        $localCommit = $this->committer->commitSnapshot(
+            $localSnapshot,
+            new CommitManagedSetRequest('main', 'Local change', 'Jane Doe', 'jane@example.com')
+        )->commit;
+
+        self::assertNotNull($localCommit);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('did not advance after PushPull uploaded commits');
+
+        try {
+            $this->pushService->push('generateblocks_global_styles', new PushPullSettings(
+                'github',
+                'creativemoods',
+                'pushpulltestrepo',
+                'main',
+                'token',
+                '',
+                false,
+                true,
+                'Jane Doe',
+                'jane@example.com',
+                ['generateblocks_global_styles']
+            ));
+        } finally {
+            self::assertSame($localCommit->hash, $this->repository->getRef('refs/heads/main')?->commitHash);
+            self::assertSame('remote-base', $this->repository->getRef('refs/remotes/origin/main')?->commitHash);
+            self::assertSame($localCommit->hash, $this->repository->getRef('HEAD')?->commitHash);
+        }
+    }
+
     /**
      * @param array<int, array<string, mixed>> $records
      */
