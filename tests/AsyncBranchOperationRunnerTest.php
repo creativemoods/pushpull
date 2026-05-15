@@ -26,6 +26,12 @@ use PushPull\Support\Operations\OperationLockService;
 
 final class AsyncBranchOperationRunnerTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        $GLOBALS['pushpull_test_options'] = [];
+        $GLOBALS['pushpull_test_object_cache'] = [];
+    }
+
     public function testChunkedFetchCompletesAndUpdatesTrackingRef(): void
     {
         $wpdb = new \wpdb();
@@ -391,6 +397,7 @@ final class AsyncBranchOperationRunnerTest extends TestCase
 
         $started = $runner->start('generateblocks_global_styles', 'reset_remote_branch');
         self::assertSame('indeterminate', $started['progress']['mode']);
+        self::assertFalse($started['done']);
         $response = null;
 
         for ($index = 0; $index < 10; $index++) {

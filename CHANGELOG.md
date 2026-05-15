@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.31
+
+1. Fixed multilingual WordPress menu export and translation-management overlay handling so WPML `tax_nav_menu` rows keyed by `term_taxonomy_id` no longer cause translated menus such as `footer-menu-en` and `main-menu` to disappear from local exports or collapse one-sided translation groups.
+2. Hardened WPML menu translation apply/export alignment by resolving translated menu terms through either `term_id` or `term_taxonomy_id` and by persisting menu translation rows with the correct taxonomy-side identifier.
+3. Restored eager first-chunk execution for normal async branch actions so `fetch`, `pull`, `push`, and bulk sync flows start work immediately again, avoiding the earlier “queued but not really picked up” race and keeping the UI responsive.
+4. Changed `Reset remote branch` to stay explicitly deferred to follow-up async polling instead of doing heavy work in the initial request, reducing the chance of Cloudflare or host timeout failures during operation startup.
+5. Improved async error tolerance and regression coverage around gateway/proxy failures, menu translation round-trips, and WPML taxonomy-translation identity handling.
+
 ## 0.0.30
 
 1. Fixed WordPress menu export on WPML-filtered sites so translated menus such as `footer-menu-en` and `main-menu` no longer disappear from local exports when the current admin language hides part of the `nav_menu` term set.

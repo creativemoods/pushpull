@@ -168,6 +168,21 @@
         HTMLFormElement.prototype.submit.call(form);
     };
 
+    const isTransientOperationError = function (error) {
+        const message = String((error && error.message) || '').toLowerCase();
+
+        return message.includes('504')
+            || message.includes('502')
+            || message.includes('503')
+            || message.includes('gateway time-out')
+            || message.includes('gateway timeout')
+            || message.includes('host error')
+            || message.includes('cloudflare')
+            || message.includes('failed to fetch')
+            || message.includes('networkerror')
+            || message.includes('load failed');
+    };
+
     const continueOperation = async function (operationId, label, retryCount) {
         const currentRetryCount = retryCount || 0;
 
@@ -199,7 +214,7 @@
             closeButton.textContent = config.strings.close;
             closeButton.hidden = false;
         } catch (error) {
-            if (currentRetryCount < 5) {
+            if (isTransientOperationError(error) && currentRetryCount < 60) {
                 title.textContent = label;
                 message.textContent = config.strings.checkingStatus || config.strings.working;
 

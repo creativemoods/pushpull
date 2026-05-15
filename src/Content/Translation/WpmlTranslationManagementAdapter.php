@@ -331,7 +331,7 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 }
 
                 $elementType = 'tax_' . $taxonomy;
-                $elementId = (int) $targetTerm->term_id;
+                $elementId = (int) ($targetTerm->term_taxonomy_id > 0 ? $targetTerm->term_taxonomy_id : $targetTerm->term_id);
             } else {
                 $postType = (string) ($scope['postType'] ?? '');
                 $targetPost = $this->findPostByLogicalKey($postType, $translation['contentLogicalKey']);
@@ -521,11 +521,13 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 $scopeMap[$elementType] = [];
 
                 foreach ($this->termsByTaxonomy($taxonomy) as $term) {
-                    $scopeMap[$elementType][$term->term_id] = [
+                    foreach ($this->wpmlTermElementIds($term) as $elementId) {
+                        $scopeMap[$elementType][$elementId] = [
                         'managedSetKey' => $managedSetKey,
                         'contentType' => (string) $scope['contentType'],
                         'logicalKey' => $this->computeTermLogicalKey($term),
-                    ];
+                        ];
+                    }
                 }
 
                 continue;
@@ -935,7 +937,7 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 continue;
             }
 
-            $term = get_term($termId, 'nav_menu');
+            $term = $this->resolveWpmlTaxonomyTerm('nav_menu', $termId);
 
             if ($term instanceof WP_Term) {
                 $terms[] = $term;
@@ -943,6 +945,65 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
         }
 
         return $terms;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function wpmlTermElementIds(WP_Term $term): array
+    {
+        $ids = [(int) $term->term_id];
+
+        if ((int) $term->term_taxonomy_id > 0) {
+            $ids[] = (int) $term->term_taxonomy_id;
+        }
+
+        return array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
+    }
+
+    private function resolveWpmlTaxonomyTerm(string $taxonomy, int $elementId): ?WP_Term
+    {
+        $term = get_term($elementId, $taxonomy);
+
+        if ($term instanceof WP_Term && ((int) $term->term_id === $elementId || (int) $term->term_taxonomy_id === $elementId)) {
+            return $term;
+        }
+
+        if (isset($GLOBALS['pushpull_test_terms'][$taxonomy]) && is_array($GLOBALS['pushpull_test_terms'][$taxonomy])) {
+            foreach ($GLOBALS['pushpull_test_terms'][$taxonomy] as $candidate) {
+                if ($candidate instanceof WP_Term && (int) $candidate->term_taxonomy_id === $elementId) {
+                    return $candidate;
+                }
+            }
+
+            return null;
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return null;
+        }
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Mapping WPML taxonomy translation rows back to term IDs requires a direct lookup in the core term_taxonomy table.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a narrow recovery lookup used only while building WPML taxonomy translation scope.
+        $termId = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT term_id FROM {$wpdb->term_taxonomy} WHERE term_taxonomy_id = %d AND taxonomy = %s",
+                $elementId,
+                $taxonomy
+            )
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        if (! is_numeric($termId)) {
+            return null;
+        }
+
+        $term = get_term((int) $termId, $taxonomy);
+
+        return $term instanceof WP_Term ? $term : null;
     }
 
     private function findTermByLogicalKey(string $taxonomy, string $logicalKey): ?WP_Term

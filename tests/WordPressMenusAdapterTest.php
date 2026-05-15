@@ -102,6 +102,40 @@ final class WordPressMenusAdapterTest extends TestCase
         self::assertSame(['footer-menu-en', 'footer-menu-fr', 'premium-menu'], $snapshot->orderedLogicalKeys);
     }
 
+    public function testExportSnapshotIncludesTranslatedMenusWhenWpmlRowsUseTermTaxonomyIds(): void
+    {
+        $menuEnId = (int) wp_create_nav_menu('Footer menu EN');
+        wp_update_term($menuEnId, 'nav_menu', ['slug' => 'footer-menu-en']);
+        $menuFrId = (int) wp_create_nav_menu('Footer menu FR');
+        wp_update_term($menuFrId, 'nav_menu', ['slug' => 'footer-menu-fr']);
+
+        $GLOBALS['pushpull_test_terms']['nav_menu'][$menuEnId]->term_taxonomy_id = 101;
+        $GLOBALS['pushpull_test_terms']['nav_menu'][$menuFrId]->term_taxonomy_id = 102;
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'tax_nav_menu',
+                'element_id' => 101,
+                'trid' => 500,
+                'language_code' => 'en',
+                'source_language_code' => 'fr',
+            ],
+            [
+                'translation_id' => 2,
+                'element_type' => 'tax_nav_menu',
+                'element_id' => 102,
+                'trid' => 500,
+                'language_code' => 'fr',
+                'source_language_code' => null,
+            ],
+        ];
+        $GLOBALS['pushpull_test_wpml_current_language'] = 'fr';
+
+        $snapshot = (new WordPressMenusAdapter())->exportSnapshot();
+
+        self::assertSame(['footer-menu-en', 'footer-menu-fr'], $snapshot->orderedLogicalKeys);
+    }
+
     public function testExportSnapshotKeepsTranslatedPageReferencesWhenCurrentLanguageDiffers(): void
     {
         update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [

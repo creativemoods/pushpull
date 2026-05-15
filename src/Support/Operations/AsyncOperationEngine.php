@@ -51,30 +51,41 @@ final class AsyncOperationEngine
                 ];
             }
 
-            $response = $this->handler->continueAsyncOperation($record, $state);
-
-            if ($response['done']) {
-                $this->handler->finalizeAsyncOperation($response['finalResult']);
-                $this->operationLogRepository->markSucceeded($record->id, $response['finalResult']);
-                $this->operationLockService->release($lock);
+            if (($state['startImmediately'] ?? true) === false) {
+                $this->operationLogRepository->updateRunning($record->id, $state);
 
                 return [
                     'operationId' => $record->id,
-                    'progressMessage' => (string) $response['finalResult']['summaryMessage'],
-                    'done' => true,
-                    'status' => (string) $response['finalResult']['summaryType'],
-                    'redirectUrl' => (string) ($response['finalResult']['redirectUrl'] ?? ''),
-                    'progress' => $this->progressPayload($response['finalResult']),
+                    'progressMessage' => (string) ($state['progressMessage'] ?? ''),
+                    'done' => false,
+                    'progress' => $this->progressPayload($state),
                 ];
             }
 
-            $this->operationLogRepository->updateRunning($record->id, $response['state']);
+            $response = $this->handler->continueAsyncOperation($record, $state);
+
+            if (! $response['done']) {
+                $this->operationLogRepository->updateRunning($record->id, $response['state']);
+
+                return [
+                    'operationId' => $record->id,
+                    'progressMessage' => (string) ($response['state']['progressMessage'] ?? ''),
+                    'done' => false,
+                    'progress' => $this->progressPayload($response['state']),
+                ];
+            }
+
+            $this->handler->finalizeAsyncOperation($response['finalResult']);
+            $this->operationLogRepository->markSucceeded($record->id, $response['finalResult']);
+            $this->operationLockService->release($lock);
 
             return [
                 'operationId' => $record->id,
-                'progressMessage' => (string) $response['state']['progressMessage'],
-                'done' => false,
-                'progress' => $this->progressPayload($response['state']),
+                'progressMessage' => (string) $response['finalResult']['summaryMessage'],
+                'done' => true,
+                'status' => (string) $response['finalResult']['summaryType'],
+                'redirectUrl' => (string) ($response['finalResult']['redirectUrl'] ?? ''),
+                'progress' => $this->progressPayload($response['finalResult']),
             ];
         } catch (\Throwable $exception) {
             $this->operationLogRepository->markFailed($record->id, $this->normalizeFailure($exception));

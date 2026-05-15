@@ -21,6 +21,7 @@ final class ResetRemoteBranchAsyncOperationHandler implements BranchAsyncOperati
     {
         return $baseState + [
             'phase' => 'reset_remote_branch',
+            'startImmediately' => false,
             'progressMode' => 'indeterminate',
             'progressCurrent' => 0,
             'progressTotal' => 0,

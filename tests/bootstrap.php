@@ -748,7 +748,7 @@ if (! function_exists('get_terms')) {
 
                         if (
                             (string) ($row['element_type'] ?? '') === 'tax_nav_menu'
-                            && (int) ($row['element_id'] ?? 0) === (int) $term->term_id
+                            && in_array((int) ($row['element_id'] ?? 0), [(int) $term->term_id, (int) $term->term_taxonomy_id], true)
                         ) {
                             return (string) ($row['language_code'] ?? '') === $currentLanguage;
                         }
@@ -1731,7 +1731,7 @@ if (! function_exists('wp_get_nav_menus')) {
                 foreach ($GLOBALS['pushpull_test_wpml_translations'] ?? [] as $row) {
                     if (
                         (string) ($row['element_type'] ?? '') === 'tax_nav_menu'
-                        && (int) ($row['element_id'] ?? 0) === (int) $menu->term_id
+                        && in_array((int) ($row['element_id'] ?? 0), [(int) $menu->term_id, (int) $menu->term_taxonomy_id], true)
                     ) {
                         return (string) ($row['language_code'] ?? '') === $currentLanguage;
                     }
