@@ -542,7 +542,7 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
             // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a narrow recovery query used only to fill nav-menu gaps left by filtered term queries.
             $rows = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT element_id FROM {$table} WHERE element_type = %s",
+                    "SELECT element_id, element_type FROM {$table} WHERE element_type = %s",
                     'tax_' . self::MENU_TAXONOMY
                 ),
                 ARRAY_A
@@ -558,7 +558,13 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
         $menus = [];
 
         foreach ($rows as $row) {
-            if (! is_array($row) || (string) ($row['element_type'] ?? '') !== 'tax_' . self::MENU_TAXONOMY) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $elementType = (string) ($row['element_type'] ?? '');
+
+            if ($elementType !== '' && $elementType !== 'tax_' . self::MENU_TAXONOMY) {
                 continue;
             }
 

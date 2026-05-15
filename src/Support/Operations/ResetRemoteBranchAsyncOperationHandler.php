@@ -25,7 +25,7 @@ final class ResetRemoteBranchAsyncOperationHandler implements BranchAsyncOperati
             'progressMode' => 'indeterminate',
             'progressCurrent' => 0,
             'progressTotal' => 0,
-            'progressMessage' => sprintf('Queued reset of remote branch %s.', $branch),
+            'progressMessage' => sprintf('Starting reset of remote branch %s.', $branch),
         ];
     }
 

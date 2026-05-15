@@ -57,7 +57,7 @@ final class PullApplyAllBranchAsyncOperationHandler implements BranchAsyncOperat
             'progressMode' => 'indeterminate',
             'progressCurrent' => 0,
             'progressTotal' => 0,
-            'progressMessage' => sprintf('Queued pull of remote commit %s for branch %s.', $remoteRef->commitHash, $branch),
+            'progressMessage' => sprintf('Starting pull of remote commit %s for branch %s.', $remoteRef->commitHash, $branch),
         ] + $fetchState;
     }
 

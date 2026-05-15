@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.32
+
+1. Fixed the remaining WPML menu export fallback bug where real database recovery rows only returned `element_id`, causing translated menus such as `footer-menu-en` and `main-menu` to still be skipped from local exports after a full reset and `Commit + Push All`.
+2. Hardened WordPress menu export so WPML fallback rows now work whether they include both `element_id` and `element_type` or only `element_id`, matching the actual production query shape.
+3. Improved async startup status wording so deferred and eager branch actions now report `Starting ...` instead of `Queued ...`, which better reflects that the operation has been created and work is underway.
+4. Updated reset-remote, fetch, and pull-apply-all progress copy to align with the current async execution model and avoid suggesting that long-running operations were never picked up.
+5. Added focused regression coverage for WPML menu fallback rows and the production-shaped menu recovery path.
+
 ## 0.0.31
 
 1. Fixed multilingual WordPress menu export and translation-management overlay handling so WPML `tax_nav_menu` rows keyed by `term_taxonomy_id` no longer cause translated menus such as `footer-menu-en` and `main-menu` to disappear from local exports or collapse one-sided translation groups.

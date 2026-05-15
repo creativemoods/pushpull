@@ -136,6 +136,30 @@ final class WordPressMenusAdapterTest extends TestCase
         self::assertSame(['footer-menu-en', 'footer-menu-fr'], $snapshot->orderedLogicalKeys);
     }
 
+    public function testExportSnapshotIncludesTranslatedMenusWhenFallbackRowsOnlyContainElementIds(): void
+    {
+        $menuEnId = (int) wp_create_nav_menu('Footer menu EN');
+        wp_update_term($menuEnId, 'nav_menu', ['slug' => 'footer-menu-en']);
+        $menuFrId = (int) wp_create_nav_menu('Footer menu FR');
+        wp_update_term($menuFrId, 'nav_menu', ['slug' => 'footer-menu-fr']);
+
+        $GLOBALS['pushpull_test_terms']['nav_menu'][$menuEnId]->term_taxonomy_id = 101;
+        $GLOBALS['pushpull_test_terms']['nav_menu'][$menuFrId]->term_taxonomy_id = 102;
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'element_id' => 101,
+            ],
+            [
+                'element_id' => 102,
+            ],
+        ];
+        $GLOBALS['pushpull_test_wpml_current_language'] = 'fr';
+
+        $snapshot = (new WordPressMenusAdapter())->exportSnapshot();
+
+        self::assertSame(['footer-menu-en', 'footer-menu-fr'], $snapshot->orderedLogicalKeys);
+    }
+
     public function testExportSnapshotKeepsTranslatedPageReferencesWhenCurrentLanguageDiffers(): void
     {
         update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
