@@ -44,6 +44,16 @@ final class WordPressBlockPatternsAdapterTest extends TestCase
         self::assertStringContainsString('https://external.example.test/login/', $json);
     }
 
+    public function testIgnoresUnmanagedPatternTaxonomies(): void
+    {
+        $adapter = new WordPressBlockPatternsAdapter();
+        $json = $adapter->serialize($adapter->buildItemFromRuntimeRecord($this->runtimeRecordWithUnmanagedTaxonomy()));
+
+        self::assertStringContainsString('"taxonomy": "gblocks_pattern_collections"', $json);
+        self::assertStringContainsString('"taxonomy": "language"', $json);
+        self::assertStringNotContainsString('"taxonomy": "translation_priority"', $json);
+    }
+
     public function testManifestAndItemPathsAreDeterministic(): void
     {
         $adapter = new WordPressBlockPatternsAdapter();
@@ -161,5 +171,22 @@ JSON
             ],
             'terms' => [],
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function runtimeRecordWithUnmanagedTaxonomy(): array
+    {
+        $record = $this->runtimeRecord();
+        $record['terms'][] = [
+            'taxonomy' => 'translation_priority',
+            'term_slug' => 'optional',
+            'term_name' => 'Optional',
+            'taxonomy_description' => '',
+            'term_meta' => [],
+        ];
+
+        return $record;
     }
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.29
+
+1. Added the new `Sync Status` branch-centric admin screen, including branch action buttons, branch summaries, common-ancestor and divergence visibility, and a graphical commit view that separates shared history from local-only and remote-tracking-only commits.
+2. Improved commit workflow clarity by moving commit-stack visibility out of `Managed Content` into `Sync Status`, keeping `Managed Content` focused on domain actions while `Sync Status` surfaces ahead/behind state and pending branch commits.
+3. Fixed async branch-action flow around the new screen, including keeping users on the originating page after actions complete and refining the in-plugin commit-message prompt used by branch and domain commit actions.
+4. Fixed multilingual WordPress page apply so language-suffixed logical keys like `blog--en` and `questions-frequentes--fr` no longer overwrite the wrong live page or collapse back into the wrong language during the same apply pass, with immediate WPML language stamping after insert or update.
+5. Fixed WordPress block pattern round-trip churn by limiting managed pattern taxonomies to the owned pattern collections and language terms, ignoring extra unmanaged terms such as WPML `translation_priority`, and added focused regression and linting follow-up coverage for the new sync and multilingual paths.
+
 ## 0.0.28
 
 1. Added a dedicated `Sync Status` admin screen with branch-level action buttons, commit-stack summary cards, and a graphical branch view that highlights shared history, common ancestry, and local-versus-remote divergence.

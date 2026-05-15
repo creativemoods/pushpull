@@ -21,6 +21,11 @@ final class WordPressBlockPatternsAdapter extends AbstractWordPressPostTypeAdapt
         'generateblocks_patterns_tree',
         'wp_pattern_sync_status',
     ];
+    /** @var array<string, true> */
+    private const OWNED_TAXONOMIES = [
+        'gblocks_pattern_collections' => true,
+        'language' => true,
+    ];
 
     protected function managedSetKey(): string
     {
@@ -60,6 +65,11 @@ final class WordPressBlockPatternsAdapter extends AbstractWordPressPostTypeAdapt
     protected function shouldExportPostMetaKey(string $metaKey): bool
     {
         return in_array($metaKey, self::OWNED_POST_META_KEYS, true);
+    }
+
+    protected function shouldExportTermTaxonomy(string $taxonomy): bool
+    {
+        return isset(self::OWNED_TAXONOMIES[$taxonomy]);
     }
 
     /**

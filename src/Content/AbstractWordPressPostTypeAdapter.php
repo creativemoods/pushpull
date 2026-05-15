@@ -89,6 +89,16 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         return $this->shouldExportPostMetaKey($metaKey);
     }
 
+    protected function shouldExportTermTaxonomy(string $taxonomy): bool
+    {
+        return true;
+    }
+
+    protected function shouldManageTermTaxonomy(string $taxonomy): bool
+    {
+        return $this->shouldExportTermTaxonomy($taxonomy);
+    }
+
     /**
      * @return string[]
      */
@@ -450,19 +460,8 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
             }
         }
 
-        $baseLogicalKey = $this->baseLogicalKey($logicalKey);
-
-        if ($baseLogicalKey !== null) {
-            foreach ($this->allPosts() as $post) {
-                $candidateLogicalKey = $this->computeLogicalKey([
-                    'post_title' => (string) $post->post_title,
-                    'post_name' => (string) $post->post_name,
-                ]);
-
-                if ($candidateLogicalKey === $baseLogicalKey) {
-                    return (int) $post->ID;
-                }
-            }
+        if ($this->baseLogicalKey($logicalKey) !== null) {
+            return null;
         }
 
         return null;
@@ -477,6 +476,17 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         }
 
         return false;
+    }
+
+    public function currentLogicalKeyForWpObjectId(int $postId): ?string
+    {
+        $post = get_post($postId);
+
+        if (! $post instanceof WP_Post || $post->post_type !== $this->postType()) {
+            return null;
+        }
+
+        return $this->computeLogicalKey($this->buildRuntimeRecord($post));
     }
 
     public function upsertItem(ManagedContentItem $item, int $menuOrder, ?int $existingId): int
@@ -495,10 +505,16 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         if ($existingId !== null) {
             $postData['ID'] = $existingId;
 
-            return (int) wp_update_post($postData);
+            $postId = (int) wp_update_post($postData);
+            $this->syncTranslationLanguageFromLogicalKey($postId, $item->logicalKey);
+
+            return $postId;
         }
 
-        return (int) wp_insert_post($postData);
+        $postId = (int) wp_insert_post($postData);
+        $this->syncTranslationLanguageFromLogicalKey($postId, $item->logicalKey);
+
+        return $postId;
     }
 
     public function persistItemMeta(int $postId, ManagedContentItem $item, array $snapshotFiles = []): void
@@ -617,6 +633,10 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
 
         foreach ($terms as $term) {
             if (! $term instanceof WP_Term || $term->slug === '' || $term->taxonomy === '') {
+                continue;
+            }
+
+            if (! $this->shouldExportTermTaxonomy((string) $term->taxonomy)) {
                 continue;
             }
 
@@ -746,7 +766,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
             $slug = sanitize_title((string) ($term['slug'] ?? $term['term_slug'] ?? ''));
             $name = trim((string) ($term['name'] ?? $term['term_name'] ?? ''));
 
-            if ($taxonomy === '' || $slug === '' || $name === '') {
+            if ($taxonomy === '' || $slug === '' || $name === '' || ! $this->shouldManageTermTaxonomy($taxonomy)) {
                 continue;
             }
 
@@ -1003,6 +1023,181 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         wp_cache_set($cacheKey, $languageCode, $cacheGroup);
 
         return $languageCode;
+    }
+
+    private function syncTranslationLanguageFromLogicalKey(int $postId, string $logicalKey): void
+    {
+        if (! $this->translationManagementEnabled()) {
+            return;
+        }
+
+        $languageCode = $this->logicalKeyLanguageCode($logicalKey);
+
+        if ($languageCode === null) {
+            return;
+        }
+
+        $this->persistTranslationLanguageCode($postId, $languageCode);
+    }
+
+    private function logicalKeyLanguageCode(string $logicalKey): ?string
+    {
+        if (! preg_match('/--([a-z0-9_]+)$/', $logicalKey, $matches)) {
+            return null;
+        }
+
+        $languageCode = sanitize_key((string) ($matches[1] ?? ''));
+
+        return $languageCode !== '' ? $languageCode : null;
+    }
+
+    private function persistTranslationLanguageCode(int $postId, string $languageCode): void
+    {
+        $elementType = 'post_' . $this->postType();
+        $row = $this->findTranslationRow($elementType, $postId);
+        $persistedRow = [
+            'translation_id' => (int) ($row['translation_id'] ?? $this->nextTranslationId()),
+            'element_type' => $elementType,
+            'element_id' => $postId,
+            'trid' => (int) ($row['trid'] ?? $this->nextTranslationGroupId()),
+            'language_code' => $languageCode,
+            'source_language_code' => $row['source_language_code'] ?? null,
+        ];
+
+        if (isset($GLOBALS['pushpull_test_wpml_translations']) && is_array($GLOBALS['pushpull_test_wpml_translations'])) {
+            $replaced = false;
+
+            foreach ($GLOBALS['pushpull_test_wpml_translations'] as $index => $existingRow) {
+                if ((string) ($existingRow['element_type'] ?? '') !== $elementType || (int) ($existingRow['element_id'] ?? 0) !== $postId) {
+                    continue;
+                }
+
+                $GLOBALS['pushpull_test_wpml_translations'][$index] = $persistedRow;
+                $replaced = true;
+                break;
+            }
+
+            if (! $replaced) {
+                $GLOBALS['pushpull_test_wpml_translations'][] = $persistedRow;
+            }
+
+            return;
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return;
+        }
+
+        $table = $wpdb->prefix . 'icl_translations';
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery -- Persisting WPML-managed translation rows is intentional during managed apply.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- Related caches are invalidated immediately after the write.
+        $wpdb->replace($table, $persistedRow, ['%d', '%s', '%d', '%d', '%s', '%s']);
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+
+        wp_cache_delete('translation_rows', 'pushpull_wpml');
+        wp_cache_delete('translation_language_code:' . $elementType . ':' . $postId, 'pushpull');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function findTranslationRow(string $elementType, int $postId): ?array
+    {
+        if (isset($GLOBALS['pushpull_test_wpml_translations']) && is_array($GLOBALS['pushpull_test_wpml_translations'])) {
+            foreach ($GLOBALS['pushpull_test_wpml_translations'] as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                if ((string) ($row['element_type'] ?? '') === $elementType && (int) ($row['element_id'] ?? 0) === $postId) {
+                    return $row;
+                }
+            }
+
+            return null;
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return null;
+        }
+
+        $table = $wpdb->prefix . 'icl_translations';
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a targeted lookup for a single row and broader translation-row caches are invalidated on writes.
+        $row = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT translation_id, element_type, element_id, trid, language_code, source_language_code FROM {$table} WHERE element_type = %s AND element_id = %d LIMIT 1",
+                $elementType,
+                $postId
+            ),
+            ARRAY_A
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        return is_array($row) ? $row : null;
+    }
+
+    private function nextTranslationId(): int
+    {
+        $max = 0;
+
+        foreach ($this->translationRows() as $row) {
+            $max = max($max, (int) ($row['translation_id'] ?? 0));
+        }
+
+        return $max + 1;
+    }
+
+    private function nextTranslationGroupId(): int
+    {
+        $max = 0;
+
+        foreach ($this->translationRows() as $row) {
+            $max = max($max, (int) ($row['trid'] ?? 0));
+        }
+
+        return $max + 1;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function translationRows(): array
+    {
+        if (isset($GLOBALS['pushpull_test_wpml_translations']) && is_array($GLOBALS['pushpull_test_wpml_translations'])) {
+            return array_values($GLOBALS['pushpull_test_wpml_translations']);
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return [];
+        }
+
+        $cachedRows = wp_cache_get('translation_rows', 'pushpull_wpml');
+
+        if (is_array($cachedRows)) {
+            return $cachedRows;
+        }
+
+        $table = $wpdb->prefix . 'icl_translations';
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- Cached via wp_cache_get()/wp_cache_set() in this helper.
+        $rows = $wpdb->get_results("SELECT translation_id, element_type, element_id, trid, language_code, source_language_code FROM {$table}", ARRAY_A);
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+
+        $rows = is_array($rows) ? $rows : [];
+        wp_cache_set('translation_rows', $rows, 'pushpull_wpml');
+
+        return $rows;
     }
 
     private function baseLogicalKey(string $logicalKey): ?string

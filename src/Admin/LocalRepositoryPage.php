@@ -519,18 +519,20 @@ final class LocalRepositoryPage
         $remoteHead = is_string($remoteHeadHash) && $remoteHeadHash !== ''
             ? $this->localRepository->getCommit($remoteHeadHash)
             : null;
+        $localAncestors = $this->ancestorHashSet($localHead?->hash);
+        $remoteAncestors = $this->ancestorHashSet($remoteHead?->hash);
 
         return [
             'localHead' => $localHead,
             'remoteHead' => $remoteHead,
             'outgoing' => $this->firstParentCommitWindow(
                 $localHead?->hash,
-                $this->firstParentHashSet($remoteHead?->hash),
+                $remoteAncestors,
                 self::BRANCH_COMMIT_STACK_LIMIT
             ),
             'incoming' => $this->firstParentCommitWindow(
                 $remoteHead?->hash,
-                $this->firstParentHashSet($localHead?->hash),
+                $localAncestors,
                 self::BRANCH_COMMIT_STACK_LIMIT
             ),
         ];
@@ -553,14 +555,23 @@ final class LocalRepositoryPage
      */
     private function branchGraphState(array $commitState): array
     {
-        $commonAncestorHash = $this->nearestCommonAncestorHash(
-            $commitState['localHead']?->hash,
-            $commitState['remoteHead']?->hash
-        );
+        $localHeadHash = $commitState['localHead']?->hash;
+        $remoteHeadHash = $commitState['remoteHead']?->hash;
+        $localAncestors = $this->ancestorHashSet($localHeadHash);
+        $remoteAncestors = $this->ancestorHashSet($remoteHeadHash);
+        $commonAncestorHash = null;
+
+        if ($localHeadHash !== null && isset($remoteAncestors[$localHeadHash])) {
+            $commonAncestorHash = $localHeadHash;
+        } elseif ($remoteHeadHash !== null && isset($localAncestors[$remoteHeadHash])) {
+            $commonAncestorHash = $remoteHeadHash;
+        } else {
+            $commonAncestorHash = $this->nearestCommonAncestorHash($localHeadHash, $remoteHeadHash);
+        }
 
         return [
-            'localOnly' => $this->graphCommitSlice($commitState['localHead']?->hash, $commonAncestorHash, 6),
-            'remoteOnly' => $this->graphCommitSlice($commitState['remoteHead']?->hash, $commonAncestorHash, 6),
+            'localOnly' => $this->graphCommitSliceUntilAncestorSet($localHeadHash, $remoteAncestors, 6),
+            'remoteOnly' => $this->graphCommitSliceUntilAncestorSet($remoteHeadHash, $localAncestors, 6),
             'shared' => $commonAncestorHash !== null
                 ? $this->graphCommitSliceFrom($commonAncestorHash, 6)
                 : ['commits' => [], 'total' => 0, 'hidden' => 0],
@@ -575,7 +586,7 @@ final class LocalRepositoryPage
             return null;
         }
 
-        $localHashes = $this->firstParentHashSet($localHeadHash);
+        $localHashes = $this->ancestorHashSet($localHeadHash);
         $currentHash = $remoteHeadHash;
         $seen = [];
 
@@ -600,7 +611,7 @@ final class LocalRepositoryPage
     /**
      * @return array{commits: array<int, \PushPull\Domain\Repository\Commit>, total: int, hidden: int}
      */
-    private function graphCommitSlice(?string $headHash, ?string $stopHashExclusive, int $limit): array
+    private function graphCommitSliceUntilAncestorSet(?string $headHash, array $stopHashes, int $limit): array
     {
         $commits = [];
         $total = 0;
@@ -610,7 +621,7 @@ final class LocalRepositoryPage
         while (
             is_string($currentHash)
             && $currentHash !== ''
-            && $currentHash !== $stopHashExclusive
+            && ! isset($stopHashes[$currentHash])
             && ! isset($seen[$currentHash])
         ) {
             $seen[$currentHash] = true;
@@ -721,6 +732,43 @@ final class LocalRepositoryPage
             }
 
             $currentHash = $commit->parentHash;
+        }
+
+        return $hashes;
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function ancestorHashSet(?string $headHash): array
+    {
+        $hashes = [];
+
+        if (! is_string($headHash) || $headHash === '') {
+            return $hashes;
+        }
+
+        $queue = [$headHash];
+
+        while ($queue !== []) {
+            $currentHash = array_shift($queue);
+
+            if (! is_string($currentHash) || $currentHash === '' || isset($hashes[$currentHash])) {
+                continue;
+            }
+
+            $hashes[$currentHash] = true;
+            $commit = $this->localRepository->getCommit($currentHash);
+
+            if (! $commit instanceof \PushPull\Domain\Repository\Commit) {
+                continue;
+            }
+
+            foreach ([$commit->parentHash, $commit->secondParentHash] as $parentHash) {
+                if (is_string($parentHash) && $parentHash !== '') {
+                    $queue[] = $parentHash;
+                }
+            }
         }
 
         return $hashes;

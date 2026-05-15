@@ -149,13 +149,38 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
 
     private function resolveExistingWpObjectId(ManagedContentItem $item): ?int
     {
+        $resolvedByLogicalKey = $this->adapter->findExistingWpObjectIdByLogicalKey($item->logicalKey);
+
+        if ($resolvedByLogicalKey !== null) {
+            return $resolvedByLogicalKey;
+        }
+
         $mapped = $this->contentMapRepository->findByLogicalKey($item->managedSetKey, $item->contentType, $item->logicalKey);
 
-        if ($mapped?->wpObjectId !== null && $this->adapter->postExists($mapped->wpObjectId)) {
+        if (
+            $mapped?->wpObjectId !== null
+            && $this->adapter->postExists($mapped->wpObjectId)
+            && $this->mappedObjectStillMatchesLogicalKey($mapped->wpObjectId, $item->logicalKey)
+        ) {
             return $mapped->wpObjectId;
         }
 
-        return $this->adapter->findExistingWpObjectIdByLogicalKey($item->logicalKey);
+        return null;
+    }
+
+    private function mappedObjectStillMatchesLogicalKey(int $wpObjectId, string $logicalKey): bool
+    {
+        if (! method_exists($this->adapter, 'currentLogicalKeyForWpObjectId')) {
+            return true;
+        }
+
+        $currentLogicalKey = $this->adapter->currentLogicalKeyForWpObjectId($wpObjectId);
+
+        if (! is_string($currentLogicalKey) || $currentLogicalKey === '') {
+            return false;
+        }
+
+        return $currentLogicalKey === $logicalKey;
     }
 
     /**
