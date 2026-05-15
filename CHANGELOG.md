@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.33
+
+1. Hardened multilingual WordPress menu export again so translated menus recovered from WPML taxonomy rows no longer depend on language-filterable term lookups during admin and async commit flows.
+2. Fixed the remaining menu and translation-management recovery path by bypassing WPML-filtered `get_term()` behavior and hydrating translated `nav_menu` terms directly from core taxonomy rows when necessary.
+3. Fixed the local runtime regression in the WordPress menus domain where recovered translated menu terms could trigger `get_object_vars(): Argument #1 ($object) must be of type object, int given`.
+4. Improved WPML menu fallback compatibility across different runtime shapes, including rows keyed by `term_id`, `term_taxonomy_id`, and reduced fallback row payloads from direct recovery queries.
+5. Expanded regression coverage around WPML-filtered menu resolution so bulk commit, translation-management export, and local menu export all exercise the same translated-menu recovery edge cases.
+
 ## 0.0.32
 
 1. Fixed the remaining WPML menu export fallback bug where real database recovery rows only returned `element_id`, causing translated menus such as `footer-menu-en` and `main-menu` to still be skipped from local exports after a full reset and `Commit + Push All`.

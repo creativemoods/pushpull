@@ -789,15 +789,42 @@ if (! class_exists('WP_Post')) {
 if (! class_exists('WP_Term')) {
     class WP_Term
     {
+        public int $term_id = 0;
+        public int $term_taxonomy_id = 0;
+        public string $taxonomy = '';
+        public string $slug = '';
+        public string $name = '';
+        public string $description = '';
+        public int $parent = 0;
+
         public function __construct(
-            public int $term_id = 0,
-            public int $term_taxonomy_id = 0,
-            public string $taxonomy = '',
-            public string $slug = '',
-            public string $name = '',
-            public string $description = '',
-            public int $parent = 0
+            mixed $term = 0,
+            int $term_taxonomy_id = 0,
+            string $taxonomy = '',
+            string $slug = '',
+            string $name = '',
+            string $description = '',
+            int $parent = 0
         ) {
+            if (is_object($term)) {
+                $this->term_id = (int) ($term->term_id ?? 0);
+                $this->term_taxonomy_id = (int) ($term->term_taxonomy_id ?? $this->term_id);
+                $this->taxonomy = (string) ($term->taxonomy ?? '');
+                $this->slug = (string) ($term->slug ?? '');
+                $this->name = (string) ($term->name ?? '');
+                $this->description = (string) ($term->description ?? '');
+                $this->parent = (int) ($term->parent ?? 0);
+
+                return;
+            }
+
+            $this->term_id = (int) $term;
+            $this->term_taxonomy_id = $term_taxonomy_id;
+            $this->taxonomy = $taxonomy;
+            $this->slug = $slug;
+            $this->name = $name;
+            $this->description = $description;
+            $this->parent = $parent;
         }
     }
 }
@@ -1522,6 +1549,26 @@ if (! function_exists('get_term')) {
     function get_term(int $termId, string $taxonomy): ?WP_Term
     {
         $term = $GLOBALS['pushpull_test_terms'][$taxonomy][$termId] ?? null;
+
+        if (
+            $term instanceof WP_Term
+            && $taxonomy === 'nav_menu'
+            && ! empty($GLOBALS['pushpull_test_wpml_filter_get_term'])
+        ) {
+            $currentLanguage = (string) ($GLOBALS['pushpull_test_wpml_current_language'] ?? '');
+
+            if ($currentLanguage !== '') {
+                foreach ($GLOBALS['pushpull_test_wpml_translations'] ?? [] as $row) {
+                    if (
+                        is_array($row)
+                        && (string) ($row['element_type'] ?? '') === 'tax_nav_menu'
+                        && in_array((int) ($row['element_id'] ?? 0), [(int) $term->term_id, (int) $term->term_taxonomy_id], true)
+                    ) {
+                        return (string) ($row['language_code'] ?? '') === $currentLanguage ? $term : null;
+                    }
+                }
+            }
+        }
 
         return $term instanceof WP_Term ? $term : null;
     }
