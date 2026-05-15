@@ -66,66 +66,17 @@ final class WordPressPagesAdapterTest extends TestCase
         $adapter->computeLogicalKey(['post_name' => '']);
     }
 
-    public function testTranslationManagementAddsLanguageSuffixToLogicalKey(): void
-    {
-        update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
-            'enabled_managed_sets' => ['wordpress_pages', 'translation_management'],
-        ]);
-        $GLOBALS['pushpull_test_wpml_translations'] = [
-            [
-                'translation_id' => 1,
-                'element_type' => 'post_page',
-                'element_id' => 42,
-                'trid' => 100,
-                'language_code' => 'fr',
-                'source_language_code' => 'en',
-            ],
-        ];
-
-        $adapter = new WordPressPagesAdapter();
-
-        self::assertSame('about-us--fr', $adapter->computeLogicalKey([
-            'wp_object_id' => 42,
-            'post_name' => 'about-us',
-        ]));
-    }
-
     public function testDuplicateLogicalKeyMessageSuggestsTranslationManagementWhenDisabled(): void
     {
         $adapter = new WordPressPagesAdapter();
 
         $this->expectException(ManagedContentExportException::class);
-        $this->expectExceptionMessage('If these are translations, enable the Translation Management domain so language can be added to logical keys.');
+        $this->expectExceptionMessage('Rename the conflicting items so each one has a unique slug or title.');
 
         $adapter->snapshotFromRuntimeRecords([
             $this->runtimeRecord(),
             array_merge($this->runtimeRecord(), ['wp_object_id' => 43]),
         ]);
-    }
-
-    public function testFindExistingWpObjectIdByLogicalKeyDoesNotFallBackAcrossLanguages(): void
-    {
-        update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
-            'enabled_managed_sets' => ['wordpress_pages', 'translation_management'],
-        ]);
-        $GLOBALS['pushpull_test_generateblocks_posts'] = [
-            new \WP_Post(42, 'About Us', 'about-us', 'publish', 0, 'page'),
-        ];
-        $GLOBALS['pushpull_test_wpml_translations'] = [
-            [
-                'translation_id' => 1,
-                'element_type' => 'post_page',
-                'element_id' => 42,
-                'trid' => 100,
-                'language_code' => 'fr',
-                'source_language_code' => 'en',
-            ],
-        ];
-
-        $adapter = new WordPressPagesAdapter();
-
-        self::assertNull($adapter->findExistingWpObjectIdByLogicalKey('about-us--en'));
-        self::assertSame(42, $adapter->findExistingWpObjectIdByLogicalKey('about-us--fr'));
     }
 
     /**

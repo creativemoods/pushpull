@@ -1053,14 +1053,6 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
         $objectId = $adapter->findExistingWpObjectIdByLogicalKey($logicalKey);
 
         if ($objectId === null) {
-            $baseLogicalKey = preg_replace('/--[a-z0-9_]+$/', '', $logicalKey);
-
-            if (is_string($baseLogicalKey) && $baseLogicalKey !== '' && $baseLogicalKey !== $logicalKey) {
-                $objectId = $adapter->findExistingWpObjectIdByLogicalKey($baseLogicalKey);
-            }
-        }
-
-        if ($objectId === null) {
             throw new RuntimeException(sprintf(
                 'WordPress menu item references missing %s "%s".',
                 $postType,

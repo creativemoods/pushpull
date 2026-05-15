@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.34
+
+1. Reverted the translation-suffixed logical-key strategy for post-type managed domains, returning PushPull to language-agnostic logical keys and requiring translated items to have distinct slugs or titles instead of encoding language into repository identity.
+2. Removed the WPML language-stamping-on-apply behavior and the related suffix/base-key matching fallbacks that had made multilingual page and post apply flows brittle.
+3. Simplified duplicate-key handling for post-type exports so conflicting translated content now fails with a direct requirement to rename items for unique slugs or titles.
+4. Removed the menu reference fallback that tried to strip language suffixes from page and post logical keys, aligning menu object references with the reverted identity model.
+5. Kept the hardened WPML menu recovery path while updating page, menu, translation-management, and round-trip regression coverage to validate the reverted non-suffixed identity model.
+
 ## 0.0.33
 
 1. Hardened multilingual WordPress menu export again so translated menus recovered from WPML taxonomy rows no longer depend on language-filterable term lookups during admin and async commit flows.

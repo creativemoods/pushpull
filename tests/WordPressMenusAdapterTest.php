@@ -240,7 +240,7 @@ final class WordPressMenusAdapterTest extends TestCase
 
         $snapshot = (new WordPressMenusAdapter())->exportSnapshot();
 
-        self::assertSame('page:home--en', $snapshot->items[0]->payload['items'][0]['itemKey']);
-        self::assertSame('home--en', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['logicalKey']);
+        self::assertSame('page:home', $snapshot->items[0]->payload['items'][0]['itemKey']);
+        self::assertSame('home', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['logicalKey']);
     }
 }
