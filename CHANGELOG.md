@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.35
+
+1. Added a generic secret-envelope system with initial `sops` support so config domains can carry encrypted secret references in Git and resolve them during apply without exporting plaintext values back into the repository.
+2. Extended WPML configuration apply/export to use the new secret-envelope flow for site-key activation, with encrypted envelope persistence separated from the decrypted runtime value.
+3. Improved multilingual WordPress export/apply behavior across post types, taxonomies, menus, categories, and attachments by hardening WPML language handling, default-language export context, and translation-aware recovery paths.
+4. Added explicit `defaultLogicalKey` support to the WordPress categories manifest so the repository can declare the default category deterministically and apply can switch `default_category` before deleting obsolete terms.
+5. Improved admin and developer tooling with Quick Edit support for PushPull identifiers, split Tilt sync resources for qual versus prod namespaces, new `sops` diagnostics in Settings, and follow-up PHPCS cleanup for the new secret-management and admin code paths.
+
 ## 0.0.34
 
 1. Reverted the translation-suffixed logical-key strategy for post-type managed domains, returning PushPull to language-agnostic logical keys and requiring translated items to have distinct slugs or titles instead of encoding language into repository identity.

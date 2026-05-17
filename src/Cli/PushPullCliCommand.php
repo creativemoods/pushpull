@@ -586,7 +586,7 @@ final class PushPullCliCommand extends WP_CLI_Command
             $adapter = $this->managedSetRegistry->get($managedSetKey);
 
             try {
-                $this->syncService->diff($managedSetKey);
+                $adapter->exportSnapshot();
             } catch (RuntimeException $exception) {
                 $skippedManagedSets[] = [
                     'label' => $adapter->getManagedSetLabel(),

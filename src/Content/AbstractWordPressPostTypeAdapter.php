@@ -7,6 +7,9 @@ namespace PushPull\Content;
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception construction is not HTML output.
 
 use PushPull\Content\Exception\ManagedContentExportException;
+use PushPull\Integration\Wpml\WpmlRuntimeLanguage;
+use PushPull\Integration\Wpml\WpmlTranslations;
+use PushPull\Settings\SettingsRepository;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use WP_Post;
@@ -14,6 +17,8 @@ use WP_Term;
 
 abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedContentAdapterInterface, ManagedSetDependencyAwareInterface
 {
+    public const IDENTIFIER_META_KEY = '_pushpull_identifier';
+
     abstract protected function managedSetKey(): string;
 
     abstract protected function managedSetLabel(): string;
@@ -57,9 +62,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
     protected function buildMetadata(array $record): array
     {
         return [
-            'restoration' => [
-                'postType' => $this->postType(),
-            ],
+            'restoration' => $this->buildRestorationMetadata($record),
             'postMeta' => $this->normalizePostMetaEntries($record['post_meta'] ?? []),
             'terms' => $this->normalizeTermAssignments($record['terms'] ?? []),
         ];
@@ -80,7 +83,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
 
     protected function shouldExportPostMetaKey(string $metaKey): bool
     {
-        return true;
+        return $metaKey !== self::IDENTIFIER_META_KEY;
     }
 
     protected function shouldManagePostMetaKey(string $metaKey): bool
@@ -141,17 +144,19 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
 
     public function exportSnapshot(): ManagedContentSnapshot
     {
-        if (! $this->isAvailable()) {
-            return $this->buildSnapshot([], $this->buildManifest([]));
-        }
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function (): ManagedContentSnapshot {
+            if (! $this->isAvailable()) {
+                return $this->buildSnapshot([], $this->buildManifest([]));
+            }
 
-        $records = [];
+            $records = [];
 
-        foreach ($this->allPosts() as $post) {
-            $records[] = $this->buildRuntimeRecord($post);
-        }
+            foreach ($this->allPosts() as $post) {
+                $records[] = $this->buildRuntimeRecord($post);
+            }
 
-        return $this->snapshotFromRuntimeRecords($records);
+            return $this->snapshotFromRuntimeRecords($records);
+        });
     }
 
     /**
@@ -212,24 +217,30 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
 
     public function exportByLogicalKey(string $logicalKey): ?ManagedContentItem
     {
-        if (! $this->isAvailable()) {
-            return null;
-        }
-
-        foreach ($this->allPosts() as $post) {
-            $item = $this->buildItemFromRuntimeRecord($this->buildRuntimeRecord($post));
-
-            if ($item->logicalKey === $logicalKey) {
-                return $item;
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function () use ($logicalKey): ?ManagedContentItem {
+            if (! $this->isAvailable()) {
+                return null;
             }
-        }
 
-        return null;
+            foreach ($this->allPosts() as $post) {
+                $item = $this->buildItemFromRuntimeRecord($this->buildRuntimeRecord($post));
+
+                if ($item->logicalKey === $logicalKey) {
+                    return $item;
+                }
+            }
+
+            return null;
+        });
     }
 
     public function computeLogicalKey(array $wpRecord): string
     {
-        $identifier = trim((string) ($wpRecord['post_name'] ?? ''));
+        $identifier = $this->runtimePushpullIdentifier($wpRecord);
+
+        if ($identifier === '') {
+            $identifier = trim((string) ($wpRecord['post_name'] ?? ''));
+        }
 
         if ($identifier === '') {
             $identifier = trim((string) ($wpRecord['post_title'] ?? ''));
@@ -242,6 +253,11 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         }
 
         return $logicalKey;
+    }
+
+    public function getWordPressPostType(): string
+    {
+        return $this->postType();
     }
 
     public function getRepositoryPath(ManagedContentItem $item): string
@@ -444,6 +460,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         foreach ($this->allPosts() as $post) {
             $candidateLogicalKey = $this->computeLogicalKey([
                 'wp_object_id' => (int) $post->ID,
+                'pushpull_identifier' => (string) get_post_meta((int) $post->ID, self::IDENTIFIER_META_KEY, true),
                 'post_title' => (string) $post->post_title,
                 'post_name' => (string) $post->post_name,
             ]);
@@ -454,6 +471,31 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         }
 
         return null;
+    }
+
+    public function findExistingWpObjectIdForItem(ManagedContentItem $item): ?int
+    {
+        $wpmlLanguage = trim((string) ($item->metadata['restoration']['wpmlLanguage'] ?? ''));
+
+        if ($wpmlLanguage === '') {
+            return $this->findExistingWpObjectIdByLogicalKey($item->logicalKey);
+        }
+
+        foreach ($this->allPosts() as $post) {
+            $record = $this->buildRuntimeRecord($post);
+
+            if ($this->computeLogicalKey($record) !== $item->logicalKey) {
+                continue;
+            }
+
+            if (trim((string) ($record['wpml_language'] ?? '')) !== $wpmlLanguage) {
+                continue;
+            }
+
+            return (int) $post->ID;
+        }
+
+        return $this->findExistingWpObjectIdByLogicalKey($item->logicalKey);
     }
 
     public function postExists(int $postId): bool
@@ -492,6 +534,8 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         $postData = wp_slash($postData);
 
         if ($existingId !== null) {
+            $this->persistWpmlLanguageBeforeUpdate($existingId, $item);
+
             $postData['ID'] = $existingId;
 
             return (int) wp_update_post($postData);
@@ -510,7 +554,47 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
             add_post_meta($postId, $entry['key'], wp_slash($entry['value']));
         }
 
+        $this->persistRestorationMetadata($postId, $item);
         $this->persistTerms($postId, $item);
+    }
+
+    protected function persistRestorationMetadata(int $postId, ManagedContentItem $item): void
+    {
+        if ($this->identifiersEnabledForManagedSet()) {
+            $pushpullIdentifier = trim((string) (($item->metadata['restoration']['pushpullIdentifier'] ?? '') ?: $item->logicalKey));
+
+            if ($pushpullIdentifier !== '') {
+                update_post_meta($postId, self::IDENTIFIER_META_KEY, $pushpullIdentifier);
+            } else {
+                delete_post_meta($postId, self::IDENTIFIER_META_KEY);
+            }
+        } else {
+            delete_post_meta($postId, self::IDENTIFIER_META_KEY);
+        }
+
+        $wpmlLanguage = trim((string) ($item->metadata['restoration']['wpmlLanguage'] ?? ''));
+
+        if ($wpmlLanguage !== '') {
+            WpmlTranslations::persistPostLanguage($this->postType(), $postId, $wpmlLanguage);
+
+            $currentPost = get_post($postId);
+
+            if ($currentPost instanceof WP_Post && (string) $currentPost->post_name !== $item->slug) {
+                wp_update_post(wp_slash([
+                    'ID' => $postId,
+                    'post_name' => $item->slug,
+                ]));
+            }
+        }
+    }
+
+    protected function persistWpmlLanguageBeforeUpdate(int $postId, ManagedContentItem $item): void
+    {
+        $wpmlLanguage = trim((string) ($item->metadata['restoration']['wpmlLanguage'] ?? ''));
+
+        if ($wpmlLanguage !== '') {
+            WpmlTranslations::persistPostLanguage($this->postType(), $postId, $wpmlLanguage);
+        }
     }
 
     public function deleteMissingItems(array $desiredLogicalKeys): array
@@ -520,6 +604,7 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
         foreach ($this->allPosts() as $post) {
             $logicalKey = $this->computeLogicalKey([
                 'wp_object_id' => (int) $post->ID,
+                'pushpull_identifier' => (string) get_post_meta((int) $post->ID, self::IDENTIFIER_META_KEY, true),
                 'post_title' => (string) $post->post_title,
                 'post_name' => (string) $post->post_name,
             ]);
@@ -550,9 +635,34 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
             'post_date' => (string) ($post->post_date ?? ''),
             'post_modified' => (string) ($post->post_modified ?? ''),
             'post_content' => (string) ($post->post_content ?? ''),
+            'wpml_language' => WpmlTranslations::postLanguage($this->postType(), (int) $post->ID),
+            'pushpull_identifier' => (string) get_post_meta((int) $post->ID, self::IDENTIFIER_META_KEY, true),
             'post_meta' => $this->postMetaEntries((int) $post->ID),
             'terms' => $this->assignedTerms((int) $post->ID),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function buildRestorationMetadata(array $record): array
+    {
+        $restoration = [
+            'postType' => $this->postType(),
+        ];
+        $pushpullIdentifier = $this->runtimePushpullIdentifier($record);
+
+        if ($pushpullIdentifier !== '') {
+            $restoration['pushpullIdentifier'] = $pushpullIdentifier;
+        }
+
+        $wpmlLanguage = trim((string) ($record['wpml_language'] ?? ''));
+
+        if ($wpmlLanguage !== '') {
+            $restoration['wpmlLanguage'] = $wpmlLanguage;
+        }
+
+        return $restoration;
     }
 
     /**
@@ -902,5 +1012,23 @@ abstract class AbstractWordPressPostTypeAdapter implements WordPressManagedConte
                 )
             );
         }
+    }
+
+    protected function runtimePushpullIdentifier(array $record): string
+    {
+        return $this->identifiersEnabledForManagedSet()
+            ? trim((string) ($record['pushpull_identifier'] ?? ''))
+            : '';
+    }
+
+    protected function identifiersEnabledForManagedSet(): bool
+    {
+        $settings = get_option(SettingsRepository::OPTION_KEY, []);
+
+        if (! is_array($settings) || ! isset($settings['identifier_managed_sets']) || ! is_array($settings['identifier_managed_sets'])) {
+            return false;
+        }
+
+        return in_array($this->managedSetKey(), array_map('strval', $settings['identifier_managed_sets']), true);
     }
 }

@@ -273,4 +273,186 @@ final class WpmlTranslationManagementApplyServiceTest extends TestCase
         self::assertSame($destinationMenuEnId, $GLOBALS['pushpull_test_wpml_translations'][0]['element_id']);
         self::assertSame($destinationMenuFrId, $GLOBALS['pushpull_test_wpml_translations'][1]['element_id']);
     }
+
+    public function testApplyIgnoresTranslationGroupsForUnavailableManagedDomains(): void
+    {
+        update_option(SettingsRepository::OPTION_KEY, [
+            'enabled_managed_sets' => ['generatepress_elements', 'translation_management'],
+        ]);
+        update_option('icl_sitepress_settings', [
+            'active_languages' => ['en', 'fr'],
+            'custom_posts_sync_option' => [
+                'gp_elements' => '2',
+            ],
+        ]);
+
+        $this->wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($this->wpdb);
+        $adapter = new WpmlTranslationManagementAdapter(new SettingsRepository());
+        $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
+        $applyService = new OverlayManagedSetApplyService(
+            $adapter,
+            new RepositoryStateReader($repository),
+            new WorkingStateRepository($this->wpdb)
+        );
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(42, 'Hero', 'all-events-camps-and-locations-hero-en', 'publish', 0, 'gp_elements'),
+            new \WP_Post(43, 'Hero FR', 'all-events-camps-and-locations-hero-fr', 'publish', 0, 'gp_elements'),
+        ];
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 42,
+                'trid' => 500,
+                'language_code' => 'en',
+                'source_language_code' => null,
+            ],
+            [
+                'translation_id' => 2,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 43,
+                'trid' => 500,
+                'language_code' => 'fr',
+                'source_language_code' => 'en',
+            ],
+        ];
+
+        $snapshot = $adapter->exportSnapshot();
+        $committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [];
+        $GLOBALS['pushpull_test_wpml_translations'] = [];
+        $GLOBALS['pushpull_test_post_types'] = [
+            'attachment' => new \WP_Post_Type('attachment', 'Media', false, true, true),
+            'custom_css' => new \WP_Post_Type('custom_css', 'Custom CSS', false, true, true),
+            'gblocks_condition' => new \WP_Post_Type('gblocks_condition', 'Conditions', false, true, false),
+            'gblocks_styles' => new \WP_Post_Type('gblocks_styles', 'Global Styles', false, true, false),
+            'nav_menu_item' => new \WP_Post_Type('nav_menu_item', 'Menu Item', false, false, true),
+            'page' => new \WP_Post_Type('page', 'Pages', true, true, true),
+            'post' => new \WP_Post_Type('post', 'Posts', false, true, true),
+            'wp_block' => new \WP_Post_Type('wp_block', 'Patterns', false, true, true),
+        ];
+
+        $result = $applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['generatepress_elements', 'translation_management']
+        ));
+
+        self::assertSame(0, $result->createdCount);
+        self::assertSame([], $GLOBALS['pushpull_test_wpml_translations']);
+    }
+
+    public function testApplyMapsGeneratePressElementTranslationsByLanguageWhenLogicalKeysCollide(): void
+    {
+        update_option(SettingsRepository::OPTION_KEY, [
+            'enabled_managed_sets' => ['generatepress_elements', 'translation_management'],
+        ]);
+        update_option('icl_sitepress_settings', [
+            'active_languages' => ['en', 'fr'],
+            'custom_posts_sync_option' => [
+                'gp_elements' => '2',
+            ],
+        ]);
+
+        $this->wpdb = new \wpdb();
+        $repository = new DatabaseLocalRepository($this->wpdb);
+        $adapter = new WpmlTranslationManagementAdapter(new SettingsRepository());
+        $committer = new ManagedSetRepositoryCommitter($repository, $adapter);
+        $applyService = new OverlayManagedSetApplyService(
+            $adapter,
+            new RepositoryStateReader($repository),
+            new WorkingStateRepository($this->wpdb)
+        );
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(42, 'Footer EN', 'footer', 'publish', 0, 'gp_elements'),
+            new \WP_Post(43, 'Footer FR', 'footer', 'publish', 0, 'gp_elements'),
+        ];
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 42,
+                'trid' => 500,
+                'language_code' => 'en',
+                'source_language_code' => null,
+            ],
+            [
+                'translation_id' => 2,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 43,
+                'trid' => 500,
+                'language_code' => 'fr',
+                'source_language_code' => 'en',
+            ],
+        ];
+
+        $snapshot = $adapter->exportSnapshot();
+        $committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(91, 'Footer FR', 'footer', 'publish', 0, 'gp_elements'),
+            new \WP_Post(92, 'Footer EN', 'footer', 'publish', 0, 'gp_elements'),
+        ];
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 11,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 91,
+                'trid' => 999,
+                'language_code' => 'fr',
+                'source_language_code' => null,
+            ],
+            [
+                'translation_id' => 12,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 92,
+                'trid' => 999,
+                'language_code' => 'en',
+                'source_language_code' => 'fr',
+            ],
+        ];
+
+        $result = $applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['generatepress_elements', 'translation_management']
+        ));
+
+        self::assertSame(0, $result->createdCount);
+        self::assertCount(2, $GLOBALS['pushpull_test_wpml_translations']);
+        $rowsByLanguage = [];
+
+        foreach ($GLOBALS['pushpull_test_wpml_translations'] as $row) {
+            $rowsByLanguage[(string) $row['language_code']] = (int) $row['element_id'];
+        }
+
+        self::assertSame(92, $rowsByLanguage['en']);
+        self::assertSame(91, $rowsByLanguage['fr']);
+    }
 }

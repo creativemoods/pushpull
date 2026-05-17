@@ -564,7 +564,8 @@ if (! class_exists('WP_Post_Type')) {
             public bool $hierarchical = false,
             public bool $show_ui = true,
             public bool $_builtin = false,
-            public array $taxonomies = []
+            public array $taxonomies = [],
+            public array $rewrite = []
         ) {
         }
     }
@@ -647,6 +648,16 @@ if (! function_exists('taxonomy_exists')) {
     }
 }
 
+if (! function_exists('get_post_type_object')) {
+    function get_post_type_object(string $postType): ?WP_Post_Type
+    {
+        $postTypes = get_post_types([], 'objects');
+        $candidate = $postTypes[$postType] ?? null;
+
+        return $candidate instanceof WP_Post_Type ? $candidate : null;
+    }
+}
+
 if (! function_exists('get_taxonomies')) {
     function get_taxonomies(array $args = [], string $output = 'names', string $operator = 'and'): array
     {
@@ -719,11 +730,13 @@ if (! function_exists('get_terms')) {
     function get_terms(array|string $args = [], array $deprecated = []): array
     {
         $taxonomy = '';
+        $lang = null;
 
         if (is_string($args)) {
             $taxonomy = $args;
         } elseif (is_array($args)) {
             $taxonomy = (string) ($args['taxonomy'] ?? '');
+            $lang = isset($args['lang']) ? (string) $args['lang'] : null;
         }
 
         if ($taxonomy === '') {
@@ -736,18 +749,26 @@ if (! function_exists('get_terms')) {
         ));
 
         $currentLanguage = (string) ($GLOBALS['pushpull_test_wpml_current_language'] ?? '');
+        $forceFilteredTaxonomies = $GLOBALS['pushpull_test_wpml_filter_terms_taxonomies'] ?? [];
 
-        if ($taxonomy === 'nav_menu' && $currentLanguage !== '') {
+        if (
+            $currentLanguage !== ''
+            && (
+                $taxonomy === 'nav_menu'
+                || (is_array($forceFilteredTaxonomies) && in_array($taxonomy, $forceFilteredTaxonomies, true))
+            )
+            && ($taxonomy !== 'nav_menu' ? true : $lang !== '')
+        ) {
             $terms = array_values(array_filter(
                 $terms,
-                static function (WP_Term $term) use ($currentLanguage): bool {
+                static function (WP_Term $term) use ($currentLanguage, $taxonomy): bool {
                     foreach ($GLOBALS['pushpull_test_wpml_translations'] ?? [] as $row) {
                         if (! is_array($row)) {
                             continue;
                         }
 
                         if (
-                            (string) ($row['element_type'] ?? '') === 'tax_nav_menu'
+                            (string) ($row['element_type'] ?? '') === 'tax_' . $taxonomy
                             && in_array((int) ($row['element_id'] ?? 0), [(int) $term->term_id, (int) $term->term_taxonomy_id], true)
                         ) {
                             return (string) ($row['language_code'] ?? '') === $currentLanguage;
@@ -845,6 +866,35 @@ if (! class_exists('WP_Admin_Bar')) {
             }
 
             $this->nodes[$node['id']] = $node;
+        }
+    }
+}
+
+if (! class_exists('GeneratePress_Pro_Dashboard')) {
+    class GeneratePress_Pro_Dashboard
+    {
+        /**
+         * @return array<string, array<string, mixed>>
+         */
+        public static function get_modules(): array
+        {
+            return $GLOBALS['pushpull_test_generatepress_modules'] ?? [];
+        }
+
+        /**
+         * @return string[]
+         */
+        public static function get_setting_keys(): array
+        {
+            return $GLOBALS['pushpull_test_generatepress_setting_keys'] ?? [];
+        }
+
+        /**
+         * @return string[]
+         */
+        public static function get_theme_mods(): array
+        {
+            return $GLOBALS['pushpull_test_generatepress_theme_mod_keys'] ?? [];
         }
     }
 }
@@ -1188,19 +1238,93 @@ if (! function_exists('delete_post_meta')) {
     }
 }
 
+if (! function_exists('pushpull_test_post_language')) {
+    function pushpull_test_post_language(int $postId, string $postType): string
+    {
+        foreach ($GLOBALS['pushpull_test_wpml_translations'] ?? [] as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            if (
+                (string) ($row['element_type'] ?? '') === 'post_' . $postType
+                && (int) ($row['element_id'] ?? 0) === $postId
+            ) {
+                return (string) ($row['language_code'] ?? '');
+            }
+        }
+
+        return '';
+    }
+}
+
+if (! function_exists('pushpull_test_unique_post_slug')) {
+    function pushpull_test_unique_post_slug(string $slug, string $postType, int $postId = 0): string
+    {
+        $baseSlug = trim($slug);
+
+        if ($baseSlug === '') {
+            $baseSlug = sanitize_title($slug);
+        }
+
+        if ($baseSlug === '') {
+            $baseSlug = 'post';
+        }
+
+        $candidate = $baseSlug;
+        $suffix = 2;
+
+        while (pushpull_test_post_slug_exists($candidate, $postType, $postId)) {
+            $candidate = $baseSlug . '-' . $suffix;
+            ++$suffix;
+        }
+
+        return $candidate;
+    }
+}
+
+if (! function_exists('pushpull_test_post_slug_exists')) {
+    function pushpull_test_post_slug_exists(string $slug, string $postType, int $postId = 0): bool
+    {
+        $currentLanguage = $postId > 0 ? pushpull_test_post_language($postId, $postType) : '';
+
+        foreach ($GLOBALS['pushpull_test_generateblocks_posts'] ?? [] as $post) {
+            if (! $post instanceof WP_Post) {
+                continue;
+            }
+
+            if ($post->post_type !== $postType || (int) $post->ID === $postId || (string) $post->post_name !== $slug) {
+                continue;
+            }
+
+            $otherLanguage = pushpull_test_post_language((int) $post->ID, $postType);
+
+            if ($currentLanguage !== '' && $otherLanguage !== '' && $currentLanguage !== $otherLanguage) {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+}
+
 if (! function_exists('wp_insert_post')) {
     function wp_insert_post(array $postarr): int
     {
         $postarr = wp_unslash($postarr);
         $id = (int) ($GLOBALS['pushpull_test_next_post_id'] ?? 1);
         $GLOBALS['pushpull_test_next_post_id'] = $id + 1;
+        $postType = (string) ($postarr['post_type'] ?? 'gblocks_styles');
+        $postName = pushpull_test_unique_post_slug((string) ($postarr['post_name'] ?? ''), $postType, 0);
         $GLOBALS['pushpull_test_generateblocks_posts'][] = new WP_Post(
             $id,
             (string) ($postarr['post_title'] ?? ''),
-            (string) ($postarr['post_name'] ?? ''),
+            $postName,
             (string) ($postarr['post_status'] ?? 'publish'),
             (int) ($postarr['menu_order'] ?? 0),
-            (string) ($postarr['post_type'] ?? 'gblocks_styles'),
+            $postType,
             (string) ($postarr['post_content'] ?? ''),
             (string) ($postarr['post_date'] ?? '2026-03-24 09:00:00'),
             (string) ($postarr['post_modified'] ?? '2026-03-24 09:00:00'),
@@ -1222,13 +1346,16 @@ if (! function_exists('wp_update_post')) {
                 continue;
             }
 
+            $postType = (string) ($postarr['post_type'] ?? $post->post_type);
+            $postName = pushpull_test_unique_post_slug((string) ($postarr['post_name'] ?? $post->post_name), $postType, (int) $post->ID);
+
             $GLOBALS['pushpull_test_generateblocks_posts'][$index] = new WP_Post(
                 $post->ID,
                 (string) ($postarr['post_title'] ?? $post->post_title),
-                (string) ($postarr['post_name'] ?? $post->post_name),
+                $postName,
                 (string) ($postarr['post_status'] ?? $post->post_status),
                 (int) ($postarr['menu_order'] ?? $post->menu_order),
-                (string) ($postarr['post_type'] ?? $post->post_type),
+                $postType,
                 (string) ($postarr['post_content'] ?? $post->post_content),
                 (string) ($postarr['post_date'] ?? $post->post_date),
                 (string) ($postarr['post_modified'] ?? $post->post_modified),
@@ -1631,6 +1758,10 @@ if (! function_exists('delete_term_meta')) {
 if (! function_exists('wp_delete_term')) {
     function wp_delete_term(int $termId, string $taxonomy): bool
     {
+        if ($taxonomy === 'category' && (int) get_option('default_category', 0) === $termId) {
+            return false;
+        }
+
         unset($GLOBALS['pushpull_test_terms'][$taxonomy][$termId], $GLOBALS['pushpull_test_term_meta'][$termId]);
 
         foreach (($GLOBALS['pushpull_test_object_terms'] ?? []) as $objectId => $taxonomies) {
@@ -1748,6 +1879,13 @@ if (! function_exists('set_theme_mod')) {
         $GLOBALS['pushpull_test_theme_mods'][$name] = $value;
 
         return $value;
+    }
+}
+
+if (! function_exists('remove_theme_mod')) {
+    function remove_theme_mod(string $name): void
+    {
+        unset($GLOBALS['pushpull_test_theme_mods'][$name]);
     }
 }
 

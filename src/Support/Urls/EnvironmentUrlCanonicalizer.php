@@ -92,11 +92,23 @@ final class EnvironmentUrlCanonicalizer
 
     private static function homeUrl(): string
     {
+        $configured = get_option('home', null);
+
+        if (is_string($configured) && trim($configured) !== '') {
+            return rtrim($configured, '/');
+        }
+
         return rtrim((string) home_url(), '/');
     }
 
     private static function siteUrl(): string
     {
+        $configured = get_option('siteurl', null);
+
+        if (is_string($configured) && trim($configured) !== '') {
+            return rtrim($configured, '/');
+        }
+
         return rtrim((string) site_url(), '/');
     }
 }

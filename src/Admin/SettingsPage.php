@@ -288,6 +288,7 @@ final class SettingsPage
     private function renderPerformanceDiagnostics(PushPullSettings $settings): void
     {
         $hasZipArchive = class_exists(\ZipArchive::class);
+        $sopsDiagnostics = $this->sopsDiagnostics();
 
         echo '<div class="pushpull-panel">';
         echo '<h2>' . esc_html__('Performance Diagnostics', 'pushpull') . '</h2>';
@@ -328,7 +329,101 @@ final class SettingsPage
             );
         }
 
+        if ($sopsDiagnostics['ready']) {
+            printf(
+                '<div class="notice notice-success inline"><p>%s</p></div>',
+                esc_html__(
+                    'SOPS prerequisites look ready. PushPull can resolve secret envelopes through the mounted age key file.',
+                    'pushpull'
+                )
+            );
+        } else {
+            printf(
+                '<div class="notice notice-warning inline"><p>%s</p></div>',
+                esc_html__(
+                    'SOPS prerequisites are incomplete. Secret-backed config apply will not work until the runtime can execute sops and access the mounted age key file.',
+                    'pushpull'
+                )
+            );
+        }
+
+        printf(
+            '<p class="description">%s</p>',
+            esc_html(sprintf(
+                'SOPS binary: %s. Process execution: %s. Age key file: %s.',
+                $sopsDiagnostics['binaryLabel'],
+                $sopsDiagnostics['processLabel'],
+                $sopsDiagnostics['keyFileLabel']
+            ))
+        );
+
+        printf(
+            '<p class="description">%s</p>',
+            esc_html__(
+                'Current secret-envelope support expects sops plus a mounted age private key file via SOPS_AGE_KEY_FILE. This can later expand to KMS or vault-backed resolvers without changing managed content payloads.',
+                'pushpull'
+            )
+        );
+
         echo '</div>';
+    }
+
+    /**
+     * @return array{ready: bool, binaryLabel: string, processLabel: string, keyFileLabel: string}
+     */
+    private function sopsDiagnostics(): array
+    {
+        $binary = trim((string) getenv('PUSHPULL_SOPS_BIN'));
+        $binary = $binary !== '' ? $binary : 'sops';
+        $hasProcessExecution = function_exists('proc_open') && function_exists('proc_close');
+        $binaryAvailable = $hasProcessExecution ? $this->commandAvailable($binary) : false;
+
+        $ageKeyFile = trim((string) getenv('SOPS_AGE_KEY_FILE'));
+        $ageKeyFileAvailable = $ageKeyFile !== '' && file_exists($ageKeyFile) && is_readable($ageKeyFile);
+
+        return [
+            'ready' => $binaryAvailable && $hasProcessExecution && $ageKeyFileAvailable,
+            'binaryLabel' => $binaryAvailable
+                ? sprintf('available (%s)', $binary)
+                : sprintf('missing (%s)', $binary),
+            'processLabel' => $hasProcessExecution ? 'available' : 'unavailable',
+            'keyFileLabel' => $ageKeyFileAvailable
+                ? sprintf('available (%s)', $ageKeyFile)
+                : ($ageKeyFile !== '' ? sprintf('missing or unreadable (%s)', $ageKeyFile) : 'not configured'),
+        ];
+    }
+
+    private function commandAvailable(string $command): bool
+    {
+        if ($command === '') {
+            return false;
+        }
+
+        if (str_contains($command, DIRECTORY_SEPARATOR)) {
+            return is_file($command) && is_executable($command);
+        }
+
+        $path = getenv('PATH');
+
+        if (! is_string($path) || $path === '') {
+            return false;
+        }
+
+        foreach (explode(PATH_SEPARATOR, $path) as $directory) {
+            $directory = trim($directory);
+
+            if ($directory === '') {
+                continue;
+            }
+
+            $candidate = rtrim($directory, '/\\') . DIRECTORY_SEPARATOR . $command;
+
+            if (is_file($candidate) && is_executable($candidate)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function handleTestConnection(): void

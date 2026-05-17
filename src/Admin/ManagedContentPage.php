@@ -2352,12 +2352,12 @@ final class ManagedContentPage
         $skippedManagedSets = [];
 
         foreach ($this->enabledAvailableManagedSetAdapters($settings) as $managedSetKey => $adapter) {
-            $diffState = $this->buildDiffState($managedSetKey);
-
-            if ($diffState['result'] === null) {
+            try {
+                $adapter->exportSnapshot();
+            } catch (Throwable $throwable) {
                 $skippedManagedSets[] = [
                     'label' => $adapter->getManagedSetLabel(),
-                    'message' => $diffState['error'] ?? __('Diff data is currently unavailable for this managed set.', 'pushpull'),
+                    'message' => $throwable->getMessage(),
                 ];
                 continue;
             }

@@ -525,7 +525,7 @@ final class BranchAsyncOperationCoordinator implements AsyncOperationHandlerInte
             $adapter = $this->managedSetRegistry?->get($managedSetKey);
 
             try {
-                $this->syncService->diff($managedSetKey);
+                $adapter?->exportSnapshot();
             } catch (\Throwable $throwable) {
                 $skippedManagedSets[] = [
                     'label' => $adapter?->getManagedSetLabel() ?? $managedSetKey,

@@ -12,6 +12,7 @@ use PushPull\Admin\ManagedContentPage;
 use PushPull\Admin\LocalRepositoryPage;
 use PushPull\Admin\OperationsPage;
 use PushPull\Admin\AttachmentSyncField;
+use PushPull\Admin\PostTypeIdentifierField;
 use PushPull\Admin\AdminBarStatus;
 use PushPull\Admin\DomainsPage;
 use PushPull\Cli\PushPullCliCommand;
@@ -28,6 +29,7 @@ use PushPull\Content\Translation\WpmlTranslationManagementAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
 use PushPull\Content\WordPress\WordPressCustomCssAdapter;
+use PushPull\Content\WordPress\GeneratePressConfigurationAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressCommentsAdapter;
 use PushPull\Content\WordPress\WordPressCategoriesAdapter;
@@ -57,6 +59,9 @@ use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Provider\GitProviderFactory;
 use PushPull\Integration\Wpml\WpmlConfigurationAdapter;
 use PushPull\Integration\Wpml\WpmlConfigurationApplier;
+use PushPull\Secrets\CompositeSecretEnvelopeResolver;
+use PushPull\Secrets\SopsSecretEnvelopeResolver;
+use PushPull\Secrets\SecretEnvelopeStore;
 use PushPull\Settings\SettingsRegistrar;
 use PushPull\Settings\SettingsRepository;
 use PushPull\Integration\Wpml\WpmlSiteKeyActivationService;
@@ -83,9 +88,17 @@ final class Plugin
         $providerFactory = new GitProviderFactory();
         $wordPressDomainDiscovery = new WordPressDomainDiscovery();
         $localRepository = new DatabaseLocalRepository($wpdb);
+        $secretEnvelopeStore = new SecretEnvelopeStore();
+        $secretEnvelopeResolver = new CompositeSecretEnvelopeResolver([
+            new SopsSecretEnvelopeResolver(),
+        ]);
         $fetchAvailabilityService = new FetchAvailabilityService($settingsRepository, $providerFactory, $localRepository);
         $wpmlSiteKeyActivationService = new WpmlSiteKeyActivationService();
-        $wpmlConfigurationApplier = new WpmlConfigurationApplier();
+        $wpmlConfigurationApplier = new WpmlConfigurationApplier(
+            $wpmlSiteKeyActivationService,
+            $secretEnvelopeResolver,
+            $secretEnvelopeStore
+        );
         $fetchAvailabilityScheduler = new FetchAvailabilityScheduler($settingsRepository);
         $localRepositoryResetService = new LocalRepositoryResetService($wpdb);
         $remoteRepositoryInitializer = new RemoteRepositoryInitializer($providerFactory, $localRepository);
@@ -100,6 +113,7 @@ final class Plugin
         $wordPressCommentsAdapter = new WordPressCommentsAdapter();
         $wordPressCoreConfigurationAdapter = new WordPressCoreConfigurationAdapter();
         $wordPressCustomCssAdapter = new WordPressCustomCssAdapter();
+        $generatePressConfigurationAdapter = new GeneratePressConfigurationAdapter();
         $generatePressElementsAdapter = new GeneratePressElementsAdapter();
         $wordPressMenusAdapter = new WordPressMenusAdapter();
         $wordPressPagesAdapter = new WordPressPagesAdapter();
@@ -120,6 +134,7 @@ final class Plugin
             $wordPressCommentsAdapter,
             $wordPressCoreConfigurationAdapter,
             $wordPressCustomCssAdapter,
+            $generatePressConfigurationAdapter,
             $generatePressElementsAdapter,
             $wordPressMenusAdapter,
             $wordPressPagesAdapter,
@@ -266,9 +281,11 @@ final class Plugin
         );
         $localRepositoryPage = new LocalRepositoryPage($settingsRepository, $localRepository, $managedContentPage);
         $attachmentSyncField = new AttachmentSyncField();
+        $postTypeIdentifierField = new PostTypeIdentifierField($managedSetRegistry, $settingsRepository);
 
         add_action('admin_init', [$settingsRegistrar, 'register']);
         add_action('admin_init', [$attachmentSyncField, 'register']);
+        add_action('admin_init', [$postTypeIdentifierField, 'register']);
         add_action('admin_menu', [$settingsPage, 'register']);
         add_action('admin_menu', [$domainsPage, 'register']);
         add_action('admin_menu', [$managedContentPage, 'register']);

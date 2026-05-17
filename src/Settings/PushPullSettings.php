@@ -12,6 +12,7 @@ final class PushPullSettings
 
     /**
      * @param string[] $enabledManagedSets
+     * @param string[] $identifierManagedSets
      */
     public function __construct(
         public readonly string $providerKey,
@@ -25,6 +26,7 @@ final class PushPullSettings
         public readonly string $authorName,
         public readonly string $authorEmail,
         public readonly array $enabledManagedSets = [],
+        public readonly array $identifierManagedSets = [],
         public readonly int $fetchAvailabilityCheckIntervalMinutes = 5,
         public readonly string $siteMode = self::SITE_MODE_BOTH,
         public readonly string $defaultCommitMessage = 'PushPull export'
@@ -37,6 +39,7 @@ final class PushPullSettings
     public static function fromArray(array $values): self
     {
         $enabledManagedSets = [];
+        $identifierManagedSets = [];
 
         if (isset($values['enabled_managed_sets']) && is_array($values['enabled_managed_sets'])) {
             $enabledManagedSets = array_values(array_filter(array_map(
@@ -57,6 +60,13 @@ final class PushPullSettings
             }
         }
 
+        if (isset($values['identifier_managed_sets']) && is_array($values['identifier_managed_sets'])) {
+            $identifierManagedSets = array_values(array_filter(array_map(
+                static fn (mixed $value): string => self::normalizeManagedSetKey((string) $value),
+                $values['identifier_managed_sets']
+            )));
+        }
+
         return new self(
             (string) ($values['provider_key'] ?? 'github'),
             (string) ($values['owner_or_workspace'] ?? ''),
@@ -69,6 +79,7 @@ final class PushPullSettings
             (string) ($values['author_name'] ?? ''),
             (string) ($values['author_email'] ?? ''),
             array_values(array_unique($enabledManagedSets)),
+            array_values(array_unique($identifierManagedSets)),
             (int) ($values['fetch_availability_check_interval_minutes'] ?? 5),
             self::normalizeSiteMode((string) ($values['site_mode'] ?? self::SITE_MODE_BOTH)),
             self::normalizeDefaultCommitMessage((string) ($values['default_commit_message'] ?? 'PushPull export'))
@@ -94,6 +105,7 @@ final class PushPullSettings
             'site_mode' => $this->siteMode,
             'author_name' => $this->authorName,
             'author_email' => $this->authorEmail,
+            'identifier_managed_sets' => array_values($this->identifierManagedSets),
             'default_commit_message' => $this->defaultCommitMessage,
         ];
     }
@@ -101,6 +113,11 @@ final class PushPullSettings
     public function isManagedSetEnabled(string $managedSetKey): bool
     {
         return in_array($managedSetKey, $this->enabledManagedSets, true);
+    }
+
+    public function usesManagedSetIdentifier(string $managedSetKey): bool
+    {
+        return in_array($managedSetKey, $this->identifierManagedSets, true);
     }
 
     private static function normalizeManagedSetKey(string $managedSetKey): string

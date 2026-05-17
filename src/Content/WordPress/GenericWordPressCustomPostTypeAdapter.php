@@ -63,9 +63,7 @@ final class GenericWordPressCustomPostTypeAdapter extends AbstractWordPressPostT
     protected function buildMetadata(array $record): array
     {
         $metadata = [
-            'restoration' => [
-                'postType' => $this->postType(),
-            ],
+            'restoration' => $this->buildRestorationMetadata($record),
         ];
 
         $postMeta = $this->normalizePostMetaEntries($record['post_meta'] ?? []);
@@ -80,6 +78,11 @@ final class GenericWordPressCustomPostTypeAdapter extends AbstractWordPressPostT
         }
 
         return $metadata;
+    }
+
+    protected function shouldExportPostMetaKey(string $metaKey): bool
+    {
+        return $metaKey !== '_wpml_word_count' && parent::shouldExportPostMetaKey($metaKey);
     }
 
     /**

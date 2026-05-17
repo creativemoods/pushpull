@@ -35,6 +35,7 @@ final class SettingsRepository
             'base_url' => '',
             'fetch_availability_check_interval_minutes' => 5,
             'enabled_managed_sets' => [],
+            'identifier_managed_sets' => [],
             'auto_apply_enabled' => false,
             'diagnostics_enabled' => true,
             'site_mode' => PushPullSettings::SITE_MODE_BOTH,
@@ -80,6 +81,12 @@ final class SettingsRepository
                 ? array_values(array_filter(array_map(
                     static fn (mixed $value): string => sanitize_key((string) $value),
                     $input['enabled_managed_sets']
+                )))
+                : [],
+            'identifier_managed_sets' => isset($input['identifier_managed_sets']) && is_array($input['identifier_managed_sets'])
+                ? array_values(array_filter(array_map(
+                    static fn (mixed $value): string => sanitize_key((string) $value),
+                    $input['identifier_managed_sets']
                 )))
                 : [],
             'auto_apply_enabled' => ! empty($input['auto_apply_enabled']),

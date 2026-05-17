@@ -8,6 +8,7 @@ use PushPull\Content\AbstractWordPressPostTypeAdapter;
 use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\ManagedContentItem;
+use PushPull\Integration\Wpml\WpmlTranslations;
 use RuntimeException;
 use WP_Post;
 
@@ -108,7 +109,7 @@ final class GeneratePressElementsAdapter extends AbstractWordPressPostTypeAdapte
      */
     protected function managedSetDependencies(): array
     {
-        return ['wordpress_pages', 'wordpress_posts'];
+        return ['wordpress_pages', 'wordpress_posts', 'generatepress_configuration'];
     }
 
     protected function shouldExportPostMetaKey(string $metaKey): bool
@@ -172,6 +173,7 @@ final class GeneratePressElementsAdapter extends AbstractWordPressPostTypeAdapte
             add_post_meta($postId, $entry['key'], wp_slash($entry['value']));
         }
 
+        $this->persistRestorationMetadata($postId, $item);
         $this->persistTerms($postId, $item);
     }
 

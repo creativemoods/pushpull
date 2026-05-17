@@ -13,6 +13,7 @@ use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedContentItem;
 use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\ManagedSetDependencyAwareInterface;
+use PushPull\Integration\Wpml\WpmlRuntimeLanguage;
 use PushPull\Support\Json\CanonicalJson;
 use RuntimeException;
 use WP_Post;
@@ -70,24 +71,26 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
 
     public function exportSnapshot(): ManagedContentSnapshot
     {
-        $items = [
-            $this->buildPermalinkSettingsItem(),
-            $this->buildReadingSettingsItem(),
-        ];
-        usort($items, static fn (ManagedContentItem $left, ManagedContentItem $right): int => $left->logicalKey <=> $right->logicalKey);
-        $files = [];
-        $orderedLogicalKeys = [];
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function (): ManagedContentSnapshot {
+            $items = [
+                $this->buildPermalinkSettingsItem(),
+                $this->buildReadingSettingsItem(),
+            ];
+            usort($items, static fn (ManagedContentItem $left, ManagedContentItem $right): int => $left->logicalKey <=> $right->logicalKey);
+            $files = [];
+            $orderedLogicalKeys = [];
 
-        foreach ($items as $item) {
-            $orderedLogicalKeys[] = $item->logicalKey;
-            $files[$this->getRepositoryPath($item)] = $this->serialize($item);
-        }
+            foreach ($items as $item) {
+                $orderedLogicalKeys[] = $item->logicalKey;
+                $files[$this->getRepositoryPath($item)] = $this->serialize($item);
+            }
 
-        $manifest = new ManagedCollectionManifest(self::MANAGED_SET_KEY, self::MANIFEST_TYPE, $orderedLogicalKeys);
-        $files[$this->getManifestPath()] = $this->serializeManifest($manifest);
-        ksort($files);
+            $manifest = new ManagedCollectionManifest(self::MANAGED_SET_KEY, self::MANIFEST_TYPE, $orderedLogicalKeys);
+            $files[$this->getManifestPath()] = $this->serializeManifest($manifest);
+            ksort($files);
 
-        return new WordPressCoreConfigurationSnapshot($items, $manifest, $files, $orderedLogicalKeys);
+            return new WordPressCoreConfigurationSnapshot($items, $manifest, $files, $orderedLogicalKeys);
+        });
     }
 
     /**
@@ -121,11 +124,11 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
 
     public function exportByLogicalKey(string $logicalKey): ?ManagedContentItem
     {
-        return match ($logicalKey) {
+        return WpmlRuntimeLanguage::runInDefaultLanguage(fn (): ?ManagedContentItem => match ($logicalKey) {
             self::LOGICAL_KEY_READING => $this->buildReadingSettingsItem(),
             self::LOGICAL_KEY_PERMALINK => $this->buildPermalinkSettingsItem(),
             default => null,
-        };
+        });
     }
 
     /**
@@ -408,6 +411,7 @@ final class WordPressCoreConfigurationAdapter implements ConfigManagedContentAda
             'post_type' => 'page',
             'numberposts' => -1,
             'post_status' => 'any',
+            'lang' => '',
         ]);
     }
 

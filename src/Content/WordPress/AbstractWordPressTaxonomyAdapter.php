@@ -12,6 +12,7 @@ use PushPull\Content\ManagedContentItem;
 use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\ManagedSetDependencyAwareInterface;
 use PushPull\Content\WordPressManagedContentAdapterInterface;
+use PushPull\Integration\Wpml\WpmlRuntimeLanguage;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use WP_Term;
@@ -79,17 +80,19 @@ abstract class AbstractWordPressTaxonomyAdapter implements WordPressManagedConte
 
     public function exportSnapshot(): ManagedContentSnapshot
     {
-        if (! $this->isAvailable()) {
-            return new ManagedContentSnapshot([], $this->buildManifest([]), [], []);
-        }
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function (): ManagedContentSnapshot {
+            if (! $this->isAvailable()) {
+                return new ManagedContentSnapshot([], $this->buildManifest([]), [], []);
+            }
 
-        $records = [];
+            $records = [];
 
-        foreach ($this->allTerms() as $term) {
-            $records[] = $this->buildRuntimeRecord($term);
-        }
+            foreach ($this->allTerms() as $term) {
+                $records[] = $this->buildRuntimeRecord($term);
+            }
 
-        return $this->snapshotFromRuntimeRecords($records);
+            return $this->snapshotFromRuntimeRecords($records);
+        });
     }
 
     /**
@@ -178,15 +181,17 @@ abstract class AbstractWordPressTaxonomyAdapter implements WordPressManagedConte
 
     public function exportByLogicalKey(string $logicalKey): ?ManagedContentItem
     {
-        foreach ($this->allTerms() as $term) {
-            $item = $this->buildItemFromRuntimeRecord($this->buildRuntimeRecord($term));
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function () use ($logicalKey): ?ManagedContentItem {
+            foreach ($this->allTerms() as $term) {
+                $item = $this->buildItemFromRuntimeRecord($this->buildRuntimeRecord($term));
 
-            if ($item->logicalKey === $logicalKey) {
-                return $item;
+                if ($item->logicalKey === $logicalKey) {
+                    return $item;
+                }
             }
-        }
 
-        return null;
+            return null;
+        });
     }
 
     /**
@@ -257,7 +262,8 @@ abstract class AbstractWordPressTaxonomyAdapter implements WordPressManagedConte
             $this->managedSetKey(),
             (string) ($decoded['type'] ?? $this->manifestType()),
             $decoded['orderedLogicalKeys'],
-            (int) ($decoded['schemaVersion'] ?? 1)
+            (int) ($decoded['schemaVersion'] ?? 1),
+            array_diff_key($decoded, array_flip(['schemaVersion', 'type', 'orderedLogicalKeys']))
         );
     }
 
@@ -470,16 +476,170 @@ abstract class AbstractWordPressTaxonomyAdapter implements WordPressManagedConte
         $terms = get_terms([
             'taxonomy' => $this->taxonomy(),
             'hide_empty' => false,
+            'lang' => '',
         ]);
 
-        if (! is_array($terms)) {
-            return [];
+        $termsById = [];
+
+        if (is_array($terms)) {
+            foreach ($terms as $term) {
+                if ($term instanceof WP_Term) {
+                    $termsById[(int) $term->term_id] = $term;
+                }
+            }
         }
 
-        $terms = array_values(array_filter($terms, static fn (mixed $term): bool => $term instanceof WP_Term));
+        foreach ($this->wpmlTranslatedTerms() as $term) {
+            $termsById[(int) $term->term_id] = $term;
+        }
+
+        $terms = array_values($termsById);
         usort($terms, static fn (WP_Term $left, WP_Term $right): int => [$left->slug, $left->term_id] <=> [$right->slug, $right->term_id]);
 
         return $terms;
+    }
+
+    /**
+     * @return WP_Term[]
+     */
+    protected function wpmlTranslatedTerms(): array
+    {
+        $rows = $this->wpmlTaxonomyTranslationRows();
+        $terms = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $elementType = (string) ($row['element_type'] ?? '');
+
+            if ($elementType !== '' && $elementType !== 'tax_' . $this->taxonomy()) {
+                continue;
+            }
+
+            $termId = (int) ($row['element_id'] ?? 0);
+
+            if ($termId <= 0) {
+                continue;
+            }
+
+            $term = $this->resolveWpmlTaxonomyTerm($termId);
+
+            if ($term instanceof WP_Term) {
+                $terms[] = $term;
+            }
+        }
+
+        return $terms;
+    }
+
+    private function resolveWpmlTaxonomyTerm(int $elementId): ?WP_Term
+    {
+        $taxonomy = $this->taxonomy();
+
+        if (isset($GLOBALS['pushpull_test_terms'][$taxonomy]) && is_array($GLOBALS['pushpull_test_terms'][$taxonomy])) {
+            foreach ($GLOBALS['pushpull_test_terms'][$taxonomy] as $candidate) {
+                if (
+                    $candidate instanceof WP_Term
+                    && ((int) $candidate->term_id === $elementId || (int) $candidate->term_taxonomy_id === $elementId)
+                ) {
+                    return $candidate;
+                }
+            }
+
+            $term = get_term($elementId, $taxonomy);
+
+            if ($term instanceof WP_Term && ((int) $term->term_id === $elementId || (int) $term->term_taxonomy_id === $elementId)) {
+                return $term;
+            }
+
+            return null;
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return null;
+        }
+
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Resolving translated taxonomy terms must bypass WPML-filtered term APIs and read the raw core taxonomy rows directly.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a narrow recovery lookup used only for translated taxonomy terms missing from filtered term queries.
+        $row = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT t.term_id, tt.term_taxonomy_id, tt.taxonomy, t.slug, t.name, tt.description, tt.parent
+                FROM {$wpdb->terms} t
+                INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_id = t.term_id
+                WHERE tt.taxonomy = %s AND (tt.term_taxonomy_id = %d OR t.term_id = %d)
+                LIMIT 1",
+                $taxonomy,
+                $elementId,
+                $elementId
+            ),
+            ARRAY_A
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        if (! is_array($row)) {
+            return null;
+        }
+
+        return $this->hydrateTerm($row);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function wpmlTaxonomyTranslationRows(): array
+    {
+        $rows = $GLOBALS['pushpull_test_wpml_translations'] ?? null;
+
+        if (is_array($rows)) {
+            return array_values(array_filter($rows, 'is_array'));
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return [];
+        }
+
+        $table = $wpdb->prefix . 'icl_translations';
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a narrow recovery query used only to fill taxonomy export gaps caused by WPML-filtered term queries.
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT element_id, element_type, trid, language_code, source_language_code
+                 FROM {$table}
+                 WHERE element_type = %s",
+                'tax_' . $this->taxonomy()
+            ),
+            ARRAY_A
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function hydrateTerm(array $row): WP_Term
+    {
+        $reflection = new \ReflectionClass(WP_Term::class);
+        /** @var WP_Term $term */
+        $term = $reflection->newInstanceWithoutConstructor();
+        $term->term_id = (int) ($row['term_id'] ?? 0);
+        $term->term_taxonomy_id = (int) ($row['term_taxonomy_id'] ?? $term->term_id);
+        $term->taxonomy = (string) ($row['taxonomy'] ?? $this->taxonomy());
+        $term->slug = (string) ($row['slug'] ?? '');
+        $term->name = (string) ($row['name'] ?? '');
+        $term->description = (string) ($row['description'] ?? '');
+        $term->parent = (int) ($row['parent'] ?? 0);
+
+        return $term;
     }
 
     /**
@@ -621,7 +781,7 @@ abstract class AbstractWordPressTaxonomyAdapter implements WordPressManagedConte
     /**
      * @param string[] $logicalKeys
      */
-    private function assertUniqueLogicalKeys(array $logicalKeys): void
+    protected function assertUniqueLogicalKeys(array $logicalKeys): void
     {
         if (count($logicalKeys) === count(array_unique($logicalKeys))) {
             return;
@@ -634,7 +794,7 @@ abstract class AbstractWordPressTaxonomyAdapter implements WordPressManagedConte
      * @param array<int, array<string, mixed>> $records
      * @return string[]
      */
-    private function sortLogicalKeysForApply(array $records): array
+    protected function sortLogicalKeysForApply(array $records): array
     {
         $recordsByKey = [];
         $orderedLogicalKeys = [];

@@ -11,6 +11,7 @@ use PushPull\Content\ManagedCollectionManifest;
 use PushPull\Content\ManagedSetDependencyAwareInterface;
 use PushPull\Content\ManagedContentItem;
 use PushPull\Content\WordPressManagedContentAdapterInterface;
+use PushPull\Integration\Wpml\WpmlRuntimeLanguage;
 use PushPull\Support\Json\CanonicalJson;
 use WP_Post;
 
@@ -59,31 +60,33 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
 
     public function exportSnapshot(): WordPressAttachmentsSnapshot
     {
-        $items = [];
-        $files = [];
-        $orderedLogicalKeys = [];
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function (): WordPressAttachmentsSnapshot {
+            $items = [];
+            $files = [];
+            $orderedLogicalKeys = [];
 
-        if ($this->isAvailable()) {
-            foreach ($this->managedAttachments() as $post) {
-                $record = $this->buildRuntimeRecord($post);
-                $item = $this->buildItemFromRuntimeRecord($record);
-                $items[] = $item;
-                $orderedLogicalKeys[] = $item->logicalKey;
-                $files[$this->getRepositoryPath($item)] = $this->serialize($item);
-                $files[$this->binaryRepositoryPath($item)] = (string) ($record['binary_content'] ?? '');
+            if ($this->isAvailable()) {
+                foreach ($this->managedAttachments() as $post) {
+                    $record = $this->buildRuntimeRecord($post);
+                    $item = $this->buildItemFromRuntimeRecord($record);
+                    $items[] = $item;
+                    $orderedLogicalKeys[] = $item->logicalKey;
+                    $files[$this->getRepositoryPath($item)] = $this->serialize($item);
+                    $files[$this->binaryRepositoryPath($item)] = (string) ($record['binary_content'] ?? '');
+                }
             }
-        }
 
-        sort($orderedLogicalKeys);
-        usort($items, static fn (ManagedContentItem $a, ManagedContentItem $b): int => $a->logicalKey <=> $b->logicalKey);
-        ksort($files);
+            sort($orderedLogicalKeys);
+            usort($items, static fn (ManagedContentItem $a, ManagedContentItem $b): int => $a->logicalKey <=> $b->logicalKey);
+            ksort($files);
 
-        return new WordPressAttachmentsSnapshot(
-            $items,
-            new ManagedCollectionManifest(self::MANAGED_SET_KEY, self::MANIFEST_TYPE, $orderedLogicalKeys),
-            $files,
-            $orderedLogicalKeys
-        );
+            return new WordPressAttachmentsSnapshot(
+                $items,
+                new ManagedCollectionManifest(self::MANAGED_SET_KEY, self::MANIFEST_TYPE, $orderedLogicalKeys),
+                $files,
+                $orderedLogicalKeys
+            );
+        });
     }
 
     /**
@@ -233,7 +236,7 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
 
     public function findExistingWpObjectIdByLogicalKey(string $logicalKey): ?int
     {
-        foreach ($this->allAttachments() as $post) {
+        foreach ($this->allAttachments(true) as $post) {
             $record = $this->buildRuntimeRecord($post);
 
             if ($this->computeLogicalKey($record) === $logicalKey) {
@@ -244,9 +247,24 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
         return null;
     }
 
+    public function findExistingWpObjectIdForItem(ManagedContentItem $item): ?int
+    {
+        $uploadsPath = trim((string) ($item->payload['uploadsPath'] ?? ''));
+
+        if ($uploadsPath !== '') {
+            foreach ($this->allAttachments(true) as $post) {
+                if ((string) get_post_meta((int) $post->ID, '_wp_attached_file', true) === $uploadsPath) {
+                    return (int) $post->ID;
+                }
+            }
+        }
+
+        return $this->findExistingWpObjectIdByLogicalKey($item->logicalKey);
+    }
+
     public function postExists(int $postId): bool
     {
-        foreach ($this->allAttachments() as $post) {
+        foreach ($this->allAttachments(true) as $post) {
             if ($post->ID === $postId) {
                 return true;
             }
@@ -257,6 +275,10 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
 
     public function upsertItem(ManagedContentItem $item, int $menuOrder, ?int $existingId): int
     {
+        if ($existingId === null) {
+            $existingId = $this->findExistingWpObjectIdForItem($item);
+        }
+
         $postData = wp_slash([
             'post_type' => self::POST_TYPE,
             'post_title' => (string) ($item->payload['title'] ?? $item->displayName),
@@ -397,15 +419,21 @@ final class WordPressAttachmentsAdapter implements WordPressManagedContentAdapte
     /**
      * @return array<int, WP_Post>
      */
-    private function allAttachments(): array
+    private function allAttachments(bool $neutralizeLanguage = false): array
     {
-        $posts = get_posts([
+        $args = [
             'post_type' => self::POST_TYPE,
             'post_status' => ['inherit', 'publish', 'private'],
             'posts_per_page' => -1,
             'orderby' => 'ID',
             'order' => 'ASC',
-        ]);
+        ];
+
+        if ($neutralizeLanguage) {
+            $args['lang'] = '';
+        }
+
+        $posts = get_posts($args);
 
         return array_values(array_filter($posts, static fn (mixed $post): bool => $post instanceof WP_Post));
     }

@@ -63,9 +63,7 @@ final class WordPressCustomCssAdapter extends AbstractWordPressPostTypeAdapter
     protected function buildMetadata(array $record): array
     {
         return [
-            'restoration' => [
-                'postType' => $this->postType(),
-            ],
+            'restoration' => $this->buildRestorationMetadata($record),
         ];
     }
 

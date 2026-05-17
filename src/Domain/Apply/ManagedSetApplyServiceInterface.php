@@ -20,6 +20,8 @@ interface ManagedSetApplyServiceInterface
      */
     public function applyLogicalKey(PushPullSettings $settings, string $logicalKey, int $menuOrder): array;
 
+    public function applyManifestState(PushPullSettings $settings): void;
+
     /**
      * @param array<string, true> $desiredLogicalKeys
      * @return string[]

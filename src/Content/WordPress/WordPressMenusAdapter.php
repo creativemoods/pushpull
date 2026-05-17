@@ -12,6 +12,7 @@ use PushPull\Content\ManagedContentItem;
 use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\ManagedSetDependencyAwareInterface;
 use PushPull\Content\WordPressManagedContentAdapterInterface;
+use PushPull\Integration\Wpml\WpmlRuntimeLanguage;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use RuntimeException;
@@ -69,25 +70,27 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
 
     public function exportSnapshot(): ManagedContentSnapshot
     {
-        $records = [];
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function (): ManagedContentSnapshot {
+            $records = [];
 
-        if ($this->isAvailable()) {
-            foreach ($this->allMenus() as $menu) {
-                $records[] = $this->buildRuntimeRecord($menu);
+            if ($this->isAvailable()) {
+                foreach ($this->allMenus() as $menu) {
+                    $records[] = $this->buildRuntimeRecord($menu);
+                }
             }
-        }
 
-        $items = [];
+            $items = [];
 
-        foreach ($records as $record) {
-            $items[] = $this->buildItemFromRuntimeRecord($record);
-        }
+            foreach ($records as $record) {
+                $items[] = $this->buildItemFromRuntimeRecord($record);
+            }
 
-        usort($items, static fn (ManagedContentItem $left, ManagedContentItem $right): int => $left->logicalKey <=> $right->logicalKey);
-        $manifest = $this->buildManifest($records);
-        $this->validateManifest($manifest, $items);
+            usort($items, static fn (ManagedContentItem $left, ManagedContentItem $right): int => $left->logicalKey <=> $right->logicalKey);
+            $manifest = $this->buildManifest($records);
+            $this->validateManifest($manifest, $items);
 
-        return new WordPressMenusSnapshot($items, $manifest, [], $manifest->orderedLogicalKeys);
+            return new WordPressMenusSnapshot($items, $manifest, [], $manifest->orderedLogicalKeys);
+        });
     }
 
     /**
@@ -158,15 +161,17 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
 
     public function exportByLogicalKey(string $logicalKey): ?ManagedContentItem
     {
-        foreach ($this->allMenus() as $menu) {
-            $item = $this->buildItemFromRuntimeRecord($this->buildRuntimeRecord($menu));
+        return WpmlRuntimeLanguage::runInDefaultLanguage(function () use ($logicalKey): ?ManagedContentItem {
+            foreach ($this->allMenus() as $menu) {
+                $item = $this->buildItemFromRuntimeRecord($this->buildRuntimeRecord($menu));
 
-            if ($item->logicalKey === $logicalKey) {
-                return $item;
+                if ($item->logicalKey === $logicalKey) {
+                    return $item;
+                }
             }
-        }
 
-        return null;
+            return null;
+        });
     }
 
     /**
@@ -528,32 +533,7 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
      */
     private function wpmlTranslatedMenuTerms(): array
     {
-        $rows = $GLOBALS['pushpull_test_wpml_translations'] ?? null;
-
-        if (! is_array($rows)) {
-            global $wpdb;
-
-            if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
-                return [];
-            }
-
-            $table = $wpdb->prefix . 'icl_translations';
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
-            // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a narrow recovery query used only to fill nav-menu gaps left by filtered term queries.
-            $rows = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT element_id, element_type FROM {$table} WHERE element_type = %s",
-                    'tax_' . self::MENU_TAXONOMY
-                ),
-                ARRAY_A
-            );
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
-            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-
-            if (! is_array($rows)) {
-                return [];
-            }
-        }
+        $rows = $this->wpmlMenuTranslationRows();
 
         $menus = [];
 
@@ -677,13 +657,18 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
     {
         $locations = get_theme_mod('nav_menu_locations', []);
         $assigned = [];
+        $translationGroupMenuIds = $this->wpmlMenuTranslationGroupElementIds($menuId);
 
         if (! is_array($locations)) {
             return [];
         }
 
         foreach ($locations as $location => $assignedMenuId) {
-            if ((int) $assignedMenuId === $menuId && is_string($location) && $location !== '') {
+            if (
+                is_string($location)
+                && $location !== ''
+                && in_array((int) $assignedMenuId, $translationGroupMenuIds, true)
+            ) {
                 $assigned[] = $location;
             }
         }
@@ -691,6 +676,89 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
         sort($assigned);
 
         return $assigned;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function wpmlMenuTranslationGroupElementIds(int $menuId): array
+    {
+        $rows = $this->wpmlMenuTranslationRows();
+        $targetTrid = 0;
+
+        foreach ($rows as $row) {
+            $term = $this->resolveWpmlMenuTerm((int) ($row['element_id'] ?? 0));
+
+            if (! $term instanceof WP_Term) {
+                continue;
+            }
+
+            if ((int) $term->term_id === $menuId || (int) $term->term_taxonomy_id === $menuId) {
+                $targetTrid = (int) ($row['trid'] ?? 0);
+                break;
+            }
+        }
+
+        if ($targetTrid <= 0) {
+            return [$menuId];
+        }
+
+        $elementIds = [];
+
+        foreach ($rows as $row) {
+            if ((int) ($row['trid'] ?? 0) !== $targetTrid) {
+                continue;
+            }
+
+            $term = $this->resolveWpmlMenuTerm((int) ($row['element_id'] ?? 0));
+
+            if (! $term instanceof WP_Term) {
+                continue;
+            }
+
+            $elementIds[] = (int) $term->term_id;
+        }
+
+        $elementIds[] = $menuId;
+        $elementIds = array_values(array_unique(array_filter($elementIds, static fn (int $id): bool => $id > 0)));
+        sort($elementIds);
+
+        return $elementIds;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function wpmlMenuTranslationRows(): array
+    {
+        $rows = $GLOBALS['pushpull_test_wpml_translations'] ?? null;
+
+        if (is_array($rows)) {
+            return array_values(array_filter($rows, 'is_array'));
+        }
+
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
+            return [];
+        }
+
+        $table = $wpdb->prefix . 'icl_translations';
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Internal WPML table name derived from the trusted wpdb prefix.
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- This is a narrow recovery query used only to fill nav-menu gaps and share menu locations across translations.
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT element_id, element_type, trid, language_code, source_language_code
+                 FROM {$table}
+                 WHERE element_type = %s",
+                'tax_' . self::MENU_TAXONOMY
+            ),
+            ARRAY_A
+        );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
     }
 
     /**
@@ -733,7 +801,7 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
                 'type' => (string) ($menuItem->type ?? 'custom'),
                 'objectType' => (string) ($menuItem->object ?? ''),
                 'label' => (string) ($menuItem->title ?? ''),
-                'url' => (string) ($menuItem->url ?? ''),
+                'url' => $this->managedMenuItemUrl($menuItem),
                 'target' => (string) ($menuItem->target ?? ''),
                 'attrTitle' => (string) ($menuItem->attr_title ?? ''),
                 'description' => (string) ($menuItem->description ?? ''),
@@ -754,6 +822,17 @@ final class WordPressMenusAdapter implements WordPressManagedContentAdapterInter
         unset($entry);
 
         return $normalized;
+    }
+
+    private function managedMenuItemUrl(object $menuItem): string
+    {
+        $type = (string) ($menuItem->type ?? 'custom');
+
+        if ($type !== 'custom') {
+            return '';
+        }
+
+        return (string) ($menuItem->url ?? '');
     }
 
     private function baseMenuItemKey(object $menuItem): string

@@ -9,6 +9,7 @@ use PushPull\Content\Discovery\WordPressDomainDiscovery;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\ManifestManagedContentAdapterInterface;
 use PushPull\Content\OverlayManagedSetInterface;
+use PushPull\Content\AbstractWordPressPostTypeAdapter;
 use PushPull\Content\WordPress\GenericWordPressCustomPostTypeAdapter;
 use PushPull\Content\WordPress\GenericWordPressCustomTaxonomyAdapter;
 use PushPull\Settings\PushPullSettings;
@@ -150,6 +151,16 @@ final class DomainsPage
                 $rawEnabledManagedSets
             ))
             : [];
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified just above.
+        $rawIdentifierManagedSets = isset($_POST['identifier_managed_sets']) && is_array($_POST['identifier_managed_sets'])
+            ? wp_unslash($_POST['identifier_managed_sets']) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw array is immediately unslashed and sanitized below.
+            : [];
+        $identifierManagedSets = is_array($rawIdentifierManagedSets)
+            ? array_values(array_map(
+                static fn (mixed $value): string => sanitize_key(wp_unslash((string) $value)),
+                $rawIdentifierManagedSets
+            ))
+            : [];
 
         $this->settingsRepository->save($this->settingsRepository->sanitize([
             'provider_key' => $settings->providerKey,
@@ -160,6 +171,7 @@ final class DomainsPage
             'base_url' => $settings->baseUrl,
             'fetch_availability_check_interval_minutes' => $settings->fetchAvailabilityCheckIntervalMinutes,
             'enabled_managed_sets' => $enabledManagedSets,
+            'identifier_managed_sets' => $identifierManagedSets,
             'auto_apply_enabled' => $settings->autoApplyEnabled,
             'diagnostics_enabled' => $settings->diagnosticsEnabled,
             'author_name' => $settings->authorName,
@@ -227,6 +239,8 @@ final class DomainsPage
                 'key' => $managedSetKey,
                 'label' => $adapter->getManagedSetLabel(),
                 'enabled' => $settings->isManagedSetEnabled($managedSetKey),
+                'identifierEnabled' => $settings->usesManagedSetIdentifier($managedSetKey),
+                'supportsIdentifier' => $adapter instanceof AbstractWordPressPostTypeAdapter,
                 'available' => $adapter->isAvailable(),
             ];
             $role = $this->roleForAdapter($adapter);
@@ -394,6 +408,27 @@ final class DomainsPage
 
             echo '</span>';
             echo '</label>';
+
+            if (! empty($entry['supportsIdentifier'])) {
+                printf(
+                    '<label class="pushpull-domain-row pushpull-domain-row--secondary%s">',
+                    ! empty($entry['available']) ? '' : ' is-disabled'
+                );
+                printf(
+                    '<input type="checkbox" name="identifier_managed_sets[]" value="%s" %s %s />',
+                    esc_attr((string) $entry['key']),
+                    checked(! empty($entry['identifierEnabled']), true, false),
+                    disabled($disabled || empty($entry['available']), true, false)
+                );
+                echo '<span class="pushpull-domain-row__body">';
+                printf('<span class="pushpull-domain-row__label">%s</span>', esc_html__('Use PushPull identifier', 'pushpull'));
+                printf(
+                    '<span class="pushpull-domain-row__meta">%s</span>',
+                    esc_html__('Adds an optional stable identity field for this post type so translated items can share titles and slugs safely.', 'pushpull')
+                );
+                echo '</span>';
+                echo '</label>';
+            }
         }
 
         echo '</div>';
@@ -437,11 +472,11 @@ final class DomainsPage
                 'label' => 'GenerateBlocks',
                 'description' => __('GenerateBlocks-managed design and condition domains.', 'pushpull'),
             ],
-            'generatepress_elements' => [
+            'generatepress_configuration', 'generatepress_elements' => [
                 'type' => 'plugin',
                 'key' => 'generatepress',
                 'label' => 'GeneratePress',
-                'description' => __('GeneratePress-managed layout and element domains.', 'pushpull'),
+                'description' => __('GeneratePress-managed module, settings, layout, and element domains.', 'pushpull'),
             ],
             'translation_management', 'wpml_configuration' => [
                 'type' => 'plugin',
@@ -480,6 +515,8 @@ final class DomainsPage
                             'key' => GenericWordPressCustomPostTypeAdapter::managedSetKeyForPostType($postType['slug']),
                             'label' => $postType['label'],
                             'enabled' => $this->settingsRepository->get()->isManagedSetEnabled(GenericWordPressCustomPostTypeAdapter::managedSetKeyForPostType($postType['slug'])),
+                            'identifierEnabled' => $this->settingsRepository->get()->usesManagedSetIdentifier(GenericWordPressCustomPostTypeAdapter::managedSetKeyForPostType($postType['slug'])),
+                            'supportsIdentifier' => true,
                             'available' => $this->managedSetRegistry->has(GenericWordPressCustomPostTypeAdapter::managedSetKeyForPostType($postType['slug'])),
                             'meta' => sprintf(
                                 /* translators: 1: post type slug, 2: yes/no hierarchy hint. */
@@ -504,6 +541,8 @@ final class DomainsPage
                             'key' => GenericWordPressCustomTaxonomyAdapter::managedSetKeyForTaxonomy($taxonomy['slug']),
                             'label' => $taxonomy['label'],
                             'enabled' => $this->settingsRepository->get()->isManagedSetEnabled(GenericWordPressCustomTaxonomyAdapter::managedSetKeyForTaxonomy($taxonomy['slug'])),
+                            'identifierEnabled' => false,
+                            'supportsIdentifier' => false,
                             'available' => $this->managedSetRegistry->has(GenericWordPressCustomTaxonomyAdapter::managedSetKeyForTaxonomy($taxonomy['slug'])),
                             'meta' => sprintf(
                                 /* translators: 1: taxonomy slug, 2: attached object types, 3: yes/no hierarchy hint. */

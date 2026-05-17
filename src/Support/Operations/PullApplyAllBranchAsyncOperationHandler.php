@@ -209,6 +209,7 @@ final class PullApplyAllBranchAsyncOperationHandler implements BranchAsyncOperat
                 continue;
             }
 
+            $applyService->applyManifestState($settings);
             $deletedLogicalKeys = $applyService->deleteMissingLogicalKeys($state['currentDesiredLogicalKeys']);
             $state['deletedCount'] += count($deletedLogicalKeys);
             $state['appliedDomainCount']++;

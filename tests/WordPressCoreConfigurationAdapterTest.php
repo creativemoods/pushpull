@@ -46,4 +46,34 @@ final class WordPressCoreConfigurationAdapterTest extends TestCase
         self::assertSame('home', $item->payload['frontPageRef']['logicalKey']);
         self::assertSame('blog', $item->payload['postsPageRef']['logicalKey']);
     }
+
+    public function testExportSnapshotUsesDefaultSiteLanguageWhenWpmlCurrentLanguageDiffers(): void
+    {
+        update_option('icl_sitepress_settings', [
+            'default_language' => 'fr',
+            'active_languages' => ['fr', 'en'],
+        ]);
+        update_option('show_on_front', 'page');
+        update_option('page_on_front', 10);
+        update_option('page_for_posts', 11);
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(10, 'Page principale', 'page-principale', 'publish', 0, 'page'),
+            new \WP_Post(11, 'Le Blog', 'leblog', 'publish', 0, 'page'),
+            new \WP_Post(20, 'Home', 'home', 'publish', 0, 'page'),
+            new \WP_Post(21, 'Blog', 'blog', 'publish', 0, 'page'),
+        ];
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            ['element_type' => 'post_page', 'element_id' => 10, 'trid' => 1, 'language_code' => 'fr', 'source_language_code' => null],
+            ['element_type' => 'post_page', 'element_id' => 20, 'trid' => 1, 'language_code' => 'en', 'source_language_code' => 'fr'],
+            ['element_type' => 'post_page', 'element_id' => 11, 'trid' => 2, 'language_code' => 'fr', 'source_language_code' => null],
+            ['element_type' => 'post_page', 'element_id' => 21, 'trid' => 2, 'language_code' => 'en', 'source_language_code' => 'fr'],
+        ];
+        $GLOBALS['pushpull_test_wpml_current_language'] = 'en';
+
+        $snapshot = (new WordPressCoreConfigurationAdapter())->exportSnapshot();
+        $item = $snapshot->items[1];
+
+        self::assertSame('page-principale', $item->payload['frontPageRef']['logicalKey']);
+        self::assertSame('leblog', $item->payload['postsPageRef']['logicalKey']);
+    }
 }

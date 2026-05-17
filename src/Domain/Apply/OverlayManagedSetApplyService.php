@@ -85,6 +85,10 @@ final class OverlayManagedSetApplyService implements ManagedSetApplyServiceInter
         ];
     }
 
+    public function applyManifestState(PushPullSettings $settings): void
+    {
+    }
+
     public function deleteMissingLogicalKeys(array $desiredLogicalKeys): array
     {
         return $this->adapter->deleteMissingOverlayItems($desiredLogicalKeys);

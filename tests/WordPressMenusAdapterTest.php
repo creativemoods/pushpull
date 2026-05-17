@@ -65,6 +65,7 @@ final class WordPressMenusAdapterTest extends TestCase
         self::assertSame('page:home', $snapshot->items[0]->payload['items'][0]['itemKey']);
         self::assertSame('page', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['postType']);
         self::assertSame('home', $snapshot->items[0]->payload['items'][0]['reference']['objectRef']['logicalKey']);
+        self::assertSame('', $snapshot->items[0]->payload['items'][0]['url']);
         self::assertSame('{{pushpull.home_url}}/about', $snapshot->items[0]->payload['items'][1]['url']);
     }
 
@@ -194,6 +195,36 @@ final class WordPressMenusAdapterTest extends TestCase
         $snapshot = (new WordPressMenusAdapter())->exportSnapshot();
 
         self::assertSame(['footer-menu-en', 'footer-menu-fr'], $snapshot->orderedLogicalKeys);
+    }
+
+    public function testExportSnapshotSharesLocationsAcrossTranslatedMenus(): void
+    {
+        update_option('icl_sitepress_settings', [
+            'default_language' => 'fr',
+            'active_languages' => ['fr', 'en'],
+        ]);
+        $menuEnId = (int) wp_create_nav_menu('Main menu');
+        wp_update_term($menuEnId, 'nav_menu', ['slug' => 'main-menu']);
+        $menuFrId = (int) wp_create_nav_menu('Menu principal');
+        wp_update_term($menuFrId, 'nav_menu', ['slug' => 'menu-principal']);
+        set_theme_mod('nav_menu_locations', [
+            'primary' => $menuFrId,
+        ]);
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            ['element_type' => 'tax_nav_menu', 'element_id' => $menuEnId, 'trid' => 500, 'language_code' => 'en', 'source_language_code' => 'fr'],
+            ['element_type' => 'tax_nav_menu', 'element_id' => $menuFrId, 'trid' => 500, 'language_code' => 'fr', 'source_language_code' => null],
+        ];
+        $GLOBALS['pushpull_test_wpml_current_language'] = 'en';
+
+        $snapshot = (new WordPressMenusAdapter())->exportSnapshot();
+        $locationsByKey = [];
+
+        foreach ($snapshot->items as $item) {
+            $locationsByKey[$item->logicalKey] = $item->payload['locations'];
+        }
+
+        self::assertSame(['primary'], $locationsByKey['main-menu']);
+        self::assertSame(['primary'], $locationsByKey['menu-principal']);
     }
 
     public function testExportSnapshotKeepsTranslatedPageReferencesWhenCurrentLanguageDiffers(): void

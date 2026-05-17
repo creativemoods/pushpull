@@ -77,6 +77,7 @@ final class ApplyBranchAsyncOperationHandler implements BranchAsyncOperationHand
                 continue;
             }
 
+            $applyService->applyManifestState($settings);
             $state['deletedLogicalKeys'] = $applyService->deleteMissingLogicalKeys($state['desiredLogicalKeys']);
             $state['progressCurrent'] = (int) $state['progressTotal'];
             $state['progressMessage'] = sprintf(

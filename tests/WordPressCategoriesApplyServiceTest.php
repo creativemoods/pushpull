@@ -40,6 +40,7 @@ final class WordPressCategoriesApplyServiceTest extends TestCase
         $GLOBALS['pushpull_test_term_meta'] = [];
         $GLOBALS['pushpull_test_object_terms'] = [];
         $GLOBALS['pushpull_test_next_term_id'] = 1;
+        $GLOBALS['pushpull_test_options'] = [];
     }
 
     public function testApplyCreatesAndUpdatesHierarchicalCategories(): void
@@ -110,6 +111,97 @@ final class WordPressCategoriesApplyServiceTest extends TestCase
         self::assertSame('Fresh updates', $GLOBALS['pushpull_test_terms']['category'][$news]->description);
         self::assertSame(['green'], $GLOBALS['pushpull_test_term_meta'][$news]['color']);
         self::assertArrayNotHasKey('legacy', $GLOBALS['pushpull_test_term_meta'][$news]);
+    }
+
+    public function testApplyReassignsDefaultCategoryBeforeDeletingObsoleteCategory(): void
+    {
+        $oldDefaultId = (int) wp_insert_term('Old default', 'category', ['slug' => 'old-default'])['term_id'];
+        $keepId = (int) wp_insert_term('Keep me', 'category', ['slug' => 'keep-me'])['term_id'];
+        update_option('default_category', $oldDefaultId);
+
+        $snapshot = $this->adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => $keepId,
+                'slug' => 'keep-me',
+                'name' => 'Keep me',
+                'description' => '',
+                'parentSlug' => '',
+                'termMeta' => [],
+            ],
+        ]);
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Category update', 'Jane Doe', 'jane@example.com')
+        );
+
+        $result = $this->applyService->apply($this->settings());
+
+        self::assertSame(['old-default'], $result->deletedLogicalKeys);
+        self::assertSame($keepId, (int) get_option('default_category'));
+        self::assertArrayNotHasKey($oldDefaultId, $GLOBALS['pushpull_test_terms']['category']);
+    }
+
+    public function testApplySetsDefaultCategoryFromRepositoryManifest(): void
+    {
+        $oldDefaultId = (int) wp_insert_term('Old default', 'category', ['slug' => 'old-default'])['term_id'];
+        $keepId = (int) wp_insert_term('Keep me', 'category', ['slug' => 'keep-me'])['term_id'];
+        update_option('default_category', $oldDefaultId);
+
+        $snapshot = $this->adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => $keepId,
+                'slug' => 'keep-me',
+                'name' => 'Keep me',
+                'description' => '',
+                'parentSlug' => '',
+                'termMeta' => [],
+            ],
+        ]);
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Category update', 'Jane Doe', 'jane@example.com')
+        );
+
+        $this->applyService->apply($this->settings());
+
+        self::assertSame($keepId, (int) get_option('default_category'));
+    }
+
+    public function testAsyncApplyFlowSetsDefaultCategoryFromRepositoryManifestBeforeDeletion(): void
+    {
+        $oldDefaultId = (int) wp_insert_term('Old default', 'category', ['slug' => 'old-default'])['term_id'];
+        $keepId = (int) wp_insert_term('Keep me', 'category', ['slug' => 'keep-me'])['term_id'];
+        update_option('default_category', $oldDefaultId);
+
+        $snapshot = $this->adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => $keepId,
+                'slug' => 'keep-me',
+                'name' => 'Keep me',
+                'description' => '',
+                'parentSlug' => '',
+                'termMeta' => [],
+            ],
+        ]);
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Category update', 'Jane Doe', 'jane@example.com')
+        );
+
+        $prepared = $this->applyService->prepareApply($this->settings());
+
+        foreach ($prepared['orderedLogicalKeys'] as $menuOrder => $logicalKey) {
+            $this->applyService->applyLogicalKey($this->settings(), $logicalKey, $menuOrder);
+        }
+
+        $this->applyService->applyManifestState($this->settings());
+        $deleted = $this->applyService->deleteMissingLogicalKeys(['keep-me' => true]);
+
+        self::assertSame(['old-default'], $deleted);
+        self::assertSame($keepId, (int) get_option('default_category'));
     }
 
     private function settings(): PushPullSettings

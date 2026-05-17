@@ -15,6 +15,7 @@ use PushPull\Content\OverlayManagedContentAdapterInterface;
 use PushPull\Content\OverlayManagedSetInterface;
 use PushPull\Content\WordPress\WordPressMenusAdapter;
 use PushPull\Integration\Wpml\WpmlConfigurationApplier;
+use PushPull\Integration\Wpml\WpmlTranslations;
 use PushPull\Support\Json\CanonicalJson;
 use PushPull\Support\Urls\EnvironmentUrlCanonicalizer;
 use PushPull\Settings\SettingsRepository;
@@ -301,8 +302,15 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
 
         $existingGroup = $existingGroups[$item->logicalKey] ?? null;
         $trid = $existingGroup !== null ? (int) $existingGroup['trid'] : $this->nextTrid();
-        $translations = $this->normalizeTranslations($item->payload['translations'] ?? []);
+        $translations = array_values(array_filter(
+            $this->normalizeTranslations($item->payload['translations'] ?? []),
+            fn (array $translation): bool => $this->translationDomainIsAvailable((string) ($translation['contentDomain'] ?? ''))
+        ));
         $activeLanguages = $this->activeLanguages();
+
+        if ($translations === []) {
+            return false;
+        }
 
         foreach ($translations as $translation) {
             if ($activeLanguages !== [] && ! isset($activeLanguages[$translation['language']])) {
@@ -334,7 +342,11 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 $elementId = (int) ($targetTerm->term_taxonomy_id > 0 ? $targetTerm->term_taxonomy_id : $targetTerm->term_id);
             } else {
                 $postType = (string) ($scope['postType'] ?? '');
-                $targetPost = $this->findPostByLogicalKey($postType, $translation['contentLogicalKey']);
+                $targetPost = $this->findPostByLogicalKeyAndLanguage(
+                    $postType,
+                    $translation['contentLogicalKey'],
+                    (string) ($translation['language'] ?? '')
+                );
 
                 if (! $targetPost instanceof WP_Post) {
                     throw new RuntimeException(sprintf(
@@ -510,6 +522,10 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
                 continue;
             }
 
+            if (! $this->supportedDomainIsAvailable($scope)) {
+                continue;
+            }
+
             if (($scope['entityType'] ?? '') === 'taxonomy') {
                 $taxonomy = (string) ($scope['taxonomy'] ?? '');
 
@@ -552,6 +568,33 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
         }
 
         return $scopeMap;
+    }
+
+    private function translationDomainIsAvailable(string $managedSetKey): bool
+    {
+        $scope = self::SUPPORTED_DOMAINS[$managedSetKey] ?? null;
+
+        if (! is_array($scope)) {
+            return false;
+        }
+
+        return $this->supportedDomainIsAvailable($scope);
+    }
+
+    /**
+     * @param array{entityType: string, postType?: string, taxonomy?: string, contentType: string} $scope
+     */
+    private function supportedDomainIsAvailable(array $scope): bool
+    {
+        if (($scope['entityType'] ?? '') === 'taxonomy') {
+            $taxonomy = (string) ($scope['taxonomy'] ?? '');
+
+            return $taxonomy !== '' && function_exists('taxonomy_exists') && taxonomy_exists($taxonomy);
+        }
+
+        $postType = (string) ($scope['postType'] ?? '');
+
+        return $postType !== '' && function_exists('post_type_exists') && post_type_exists($postType);
     }
 
     /**
@@ -875,6 +918,29 @@ final class WpmlTranslationManagementAdapter implements OverlayManagedContentAda
         }
 
         return null;
+    }
+
+    private function findPostByLogicalKeyAndLanguage(string $postType, string $logicalKey, string $language): ?WP_Post
+    {
+        $language = trim($language);
+
+        if ($language === '') {
+            return $this->findPostByLogicalKey($postType, $logicalKey);
+        }
+
+        foreach ($this->postsByType($postType) as $post) {
+            if ($this->computePostLogicalKey($post) !== $logicalKey) {
+                continue;
+            }
+
+            if (WpmlTranslations::postLanguage($postType, (int) $post->ID) !== $language) {
+                continue;
+            }
+
+            return $post;
+        }
+
+        return $this->findPostByLogicalKey($postType, $logicalKey);
     }
 
     /**

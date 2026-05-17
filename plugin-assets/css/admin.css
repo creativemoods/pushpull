@@ -1059,6 +1059,12 @@
     color: #646970;
 }
 
+.pushpull-domain-row--secondary {
+    margin-left: 28px;
+    background: #f8fafc;
+    border-style: dashed;
+}
+
 .pushpull-domain-row__body {
     display: grid;
     gap: 2px;

@@ -27,7 +27,7 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
 
     public function apply(PushPullSettings $settings): ApplyManagedSetResult
     {
-        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys, 'items' => $items, 'snapshotFiles' => $snapshotFiles] = $this->loadSnapshot($settings);
+        ['commitHash' => $commitHash, 'orderedLogicalKeys' => $orderedLogicalKeys, 'items' => $items, 'snapshotFiles' => $snapshotFiles, 'manifest' => $manifest] = $this->loadSnapshot($settings);
 
         $createdCount = 0;
         $updatedCount = 0;
@@ -61,6 +61,8 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
             );
             $appliedIds[] = $postId;
         }
+
+        $this->applyManifestFromSnapshot($manifest, $items, $snapshotFiles);
 
         $deletedLogicalKeys = $this->deleteMissingPosts($desiredLogicalKeys);
 
@@ -117,6 +119,13 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
         ];
     }
 
+    public function applyManifestState(PushPullSettings $settings): void
+    {
+        ['manifest' => $manifest, 'items' => $items, 'snapshotFiles' => $snapshotFiles] = $this->loadSnapshot($settings);
+
+        $this->applyManifestFromSnapshot($manifest, $items, $snapshotFiles);
+    }
+
     /**
      * @param array<string, true> $desiredLogicalKeys
      * @return string[]
@@ -149,6 +158,14 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
 
     private function resolveExistingWpObjectId(ManagedContentItem $item): ?int
     {
+        if (method_exists($this->adapter, 'findExistingWpObjectIdForItem')) {
+            $resolvedByItem = $this->adapter->findExistingWpObjectIdForItem($item);
+
+            if (is_int($resolvedByItem)) {
+                return $resolvedByItem;
+            }
+        }
+
         $resolvedByLogicalKey = $this->adapter->findExistingWpObjectIdByLogicalKey($item->logicalKey);
 
         if ($resolvedByLogicalKey !== null) {
@@ -199,7 +216,18 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
     }
 
     /**
-     * @return array{commitHash: string, orderedLogicalKeys: array<int, string>, items: array<string, ManagedContentItem>, snapshotFiles: array<string, string>}
+     * @param array<string, ManagedContentItem> $items
+     * @param array<string, string> $snapshotFiles
+     */
+    private function applyManifestFromSnapshot(\PushPull\Content\ManagedCollectionManifest $manifest, array $items, array $snapshotFiles): void
+    {
+        if (method_exists($this->adapter, 'applyManifest')) {
+            $this->adapter->applyManifest($manifest, $items, $snapshotFiles);
+        }
+    }
+
+    /**
+     * @return array{commitHash: string, orderedLogicalKeys: array<int, string>, items: array<string, ManagedContentItem>, snapshotFiles: array<string, string>, manifest: \PushPull\Content\ManagedCollectionManifest}
      */
     private function loadSnapshot(PushPullSettings $settings): array
     {
@@ -227,6 +255,11 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
                 'orderedLogicalKeys' => [],
                 'items' => [],
                 'snapshotFiles' => [],
+                'manifest' => new \PushPull\Content\ManagedCollectionManifest(
+                    $this->adapter->getManagedSetKey(),
+                    method_exists($this->adapter, 'manifestType') ? '' : '',
+                    []
+                ),
             ];
         }
 
@@ -241,6 +274,7 @@ final class ManagedSetApplyService implements ManagedSetApplyServiceInterface
             'orderedLogicalKeys' => $snapshot->orderedLogicalKeys,
             'items' => $items,
             'snapshotFiles' => $snapshot->files,
+            'manifest' => $snapshot->manifest,
         ];
     }
 }

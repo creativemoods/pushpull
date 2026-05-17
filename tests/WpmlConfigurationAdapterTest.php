@@ -18,6 +18,13 @@ final class WpmlConfigurationAdapterTest extends TestCase
         $pushpull_test_options = [];
         $GLOBALS['sitepress'] = new \PushPull_Test_SitePress();
         $wpdb = new \wpdb();
+        $GLOBALS['pushpull_test_post_types'] = [
+            'attachment' => new \WP_Post_Type('attachment', 'Media', false, true, true, [], ['slug' => 'attachment']),
+            'custom_css' => new \WP_Post_Type('custom_css', 'Custom CSS', false, true, true, [], ['slug' => 'custom_css']),
+            'gp_elements' => new \WP_Post_Type('gp_elements', 'Elements', false, true, false, [], ['slug' => 'gp_elements']),
+            'page' => new \WP_Post_Type('page', 'Pages', true, true, true, [], ['slug' => 'page']),
+            'post' => new \WP_Post_Type('post', 'Posts', false, true, true, [], ['slug' => 'post']),
+        ];
     }
 
     public function testExportSnapshotNormalizesWpmlConfiguration(): void
@@ -73,9 +80,10 @@ final class WpmlConfigurationAdapterTest extends TestCase
         self::assertSame([
             'gp_elements' => [
                 'enabled' => true,
+                'originalLanguage' => 'fr',
                 'values' => [
-                    'fr' => 'elements',
                     'en' => 'xyz1234',
+                    'fr' => 'gp_elements',
                 ],
             ],
         ], $snapshot->items[0]->payload['postTypeSlugTranslations']);
@@ -110,9 +118,10 @@ final class WpmlConfigurationAdapterTest extends TestCase
         self::assertSame([
             'gp_elements' => [
                 'enabled' => true,
+                'originalLanguage' => 'fr',
                 'values' => [
-                    'fr' => 'elements',
                     'en' => 'xyz1234',
+                    'fr' => 'gp_elements',
                 ],
             ],
         ], $snapshot->items[0]->payload['postTypeSlugTranslations']);
@@ -139,9 +148,10 @@ final class WpmlConfigurationAdapterTest extends TestCase
         self::assertSame([
             'gp_elements' => [
                 'enabled' => true,
+                'originalLanguage' => 'fr',
                 'values' => [
-                    'fr' => 'elements',
                     'en' => 'xyz1234',
+                    'fr' => 'gp_elements',
                 ],
             ],
         ], $snapshot->items[0]->payload['postTypeSlugTranslations']);
@@ -172,11 +182,60 @@ final class WpmlConfigurationAdapterTest extends TestCase
         self::assertSame([
             'gp_elements' => [
                 'enabled' => true,
+                'originalLanguage' => 'fr',
                 'values' => [
-                    'fr' => 'elements',
                     'en' => 'xyz1234',
+                    'fr' => 'gp_elements',
                 ],
             ],
         ], $snapshot->items[0]->payload['postTypeSlugTranslations']);
+    }
+
+    public function testExportSnapshotPreservesTranslatedSlugWhenOriginalLanguageDiffersFromSiteDefault(): void
+    {
+        global $wpdb;
+
+        $GLOBALS['pushpull_test_post_types']['le_camp'] = new \WP_Post_Type('le_camp', 'Camps', true, true, true, [], ['slug' => 'camps']);
+
+        update_option('icl_sitepress_settings', [
+            'default_language' => 'fr',
+            'active_languages' => ['fr', 'en'],
+            'posts_slug_translation' => [
+                'types' => [
+                    'le_camp' => 1,
+                ],
+                'on' => 1,
+            ],
+            'setup_complete' => 1,
+        ]);
+        update_option('wpml_base_slug_translation', 1);
+
+        $wpdb->insert('wp_icl_strings', [
+            'id' => 40,
+            'language' => 'en',
+            'context' => 'WordPress',
+            'name' => 'URL slug: le_camp',
+            'value' => 'camps',
+        ]);
+        $wpdb->insert('wp_icl_string_translations', [
+            'id' => 41,
+            'string_id' => 40,
+            'language' => 'fr',
+            'value' => 'colos',
+            'status' => 10,
+        ]);
+
+        $adapter = new WpmlConfigurationAdapter(new WpmlConfigurationApplier());
+        $snapshot = $adapter->exportSnapshot();
+
+        self::assertArrayHasKey('le_camp', $snapshot->items[0]->payload['postTypeSlugTranslations']);
+        self::assertSame([
+            'enabled' => true,
+            'originalLanguage' => 'en',
+            'values' => [
+                'en' => 'camps',
+                'fr' => 'colos',
+            ],
+        ], $snapshot->items[0]->payload['postTypeSlugTranslations']['le_camp']);
     }
 }

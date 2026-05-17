@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace PushPull\Tests;
 
 use PHPUnit\Framework\TestCase;
+use PushPull\Content\ManagedCollectionManifest;
+use PushPull\Content\ManagedContentSnapshot;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Domain\Apply\ManagedSetApplyService;
 use PushPull\Domain\Diff\RepositoryStateReader;
@@ -14,6 +16,7 @@ use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
 use PushPull\Persistence\ContentMap\ContentMapRepository;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
 use PushPull\Settings\PushPullSettings;
+use PushPull\Settings\SettingsRepository;
 
 final class GeneratePressElementsApplyServiceTest extends TestCase
 {
@@ -43,6 +46,7 @@ final class GeneratePressElementsApplyServiceTest extends TestCase
         $GLOBALS['pushpull_test_object_terms'] = [];
         $GLOBALS['pushpull_test_next_post_id'] = 1;
         $GLOBALS['pushpull_test_next_term_id'] = 1;
+        $GLOBALS['pushpull_test_wpml_translations'] = [];
     }
 
     public function testApplyCreatesGeneratePressElementWithOwnedMeta(): void
@@ -252,5 +256,127 @@ final class GeneratePressElementsApplyServiceTest extends TestCase
         self::assertSame('post:page', $conditions[1]['rule']);
         self::assertSame('91', $conditions[2]['object']);
         self::assertSame('post:page', $conditions[2]['rule']);
+    }
+
+    public function testApplyPersistsWpmlLanguageAndIdentifierForGeneratePressElementsOverride(): void
+    {
+        update_option(SettingsRepository::OPTION_KEY, [
+            'identifier_managed_sets' => ['generatepress_elements'],
+        ]);
+
+        $snapshot = $this->adapter->snapshotFromRuntimeRecords([
+            [
+                'wp_object_id' => 42,
+                'pushpull_identifier' => 'course-template-en',
+                'post_title' => 'Course template EN',
+                'post_name' => 'course-template-en',
+                'post_status' => 'publish',
+                'post_content' => '<!-- wp:paragraph --><p>Template</p><!-- /wp:paragraph -->',
+                'wpml_language' => 'en',
+                'post_meta' => [
+                    ['meta_key' => '_generate_element_type', 'meta_value' => 'block'],
+                ],
+                'terms' => [],
+            ],
+        ]);
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $result = $this->applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['generatepress_elements']
+        ));
+
+        self::assertSame(1, $result->createdCount);
+        $post = array_values(array_filter(
+            $GLOBALS['pushpull_test_generateblocks_posts'],
+            static fn (\WP_Post $candidate): bool => $candidate->post_type === 'gp_elements'
+        ))[0];
+        self::assertSame('course-template-en', $post->post_name);
+        self::assertSame('course-template-en', $GLOBALS['pushpull_test_generateblocks_meta'][$post->ID][GeneratePressElementsAdapter::IDENTIFIER_META_KEY]);
+        self::assertSame('en', $GLOBALS['pushpull_test_wpml_translations'][0]['language_code']);
+        self::assertSame('post_gp_elements', $GLOBALS['pushpull_test_wpml_translations'][0]['element_type']);
+    }
+
+    public function testApplyMatchesExistingGeneratePressElementByLanguageWhenLogicalKeyCollides(): void
+    {
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(40, 'Course template FR', 'course-template-en', 'publish', 0, 'gp_elements', '<p>Old FR</p>'),
+            new \WP_Post(41, 'Course template EN', 'course-template-en', 'publish', 0, 'gp_elements', '<p>Old EN</p>'),
+        ];
+        $GLOBALS['pushpull_test_generateblocks_meta'] = [
+            40 => ['_generate_element_type' => ['block']],
+            41 => ['_generate_element_type' => ['block']],
+        ];
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            [
+                'translation_id' => 1,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 40,
+                'trid' => 10,
+                'language_code' => 'fr',
+                'source_language_code' => null,
+            ],
+            [
+                'translation_id' => 2,
+                'element_type' => 'post_gp_elements',
+                'element_id' => 41,
+                'trid' => 10,
+                'language_code' => 'en',
+                'source_language_code' => 'fr',
+            ],
+        ];
+
+        $item = $this->adapter->buildItemFromRuntimeRecord([
+            'wp_object_id' => 99,
+            'post_title' => 'Course template EN',
+            'post_name' => 'course-template-en',
+            'post_status' => 'publish',
+            'post_content' => '<p>New EN</p>',
+            'wpml_language' => 'en',
+            'post_meta' => [
+                ['meta_key' => '_generate_element_type', 'meta_value' => 'block'],
+            ],
+            'terms' => [],
+        ]);
+        $snapshot = new ManagedContentSnapshot(
+            [$item],
+            new ManagedCollectionManifest('generatepress_elements', 'generatepress_elements_manifest', ['course-template-en'])
+        );
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $result = $this->applyService->apply(new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['generatepress_elements']
+        ));
+
+        self::assertSame(1, $result->updatedCount);
+        self::assertSame('<p>Old FR</p>', $GLOBALS['pushpull_test_generateblocks_posts'][0]->post_content);
+        self::assertSame('<p>New EN</p>', $GLOBALS['pushpull_test_generateblocks_posts'][1]->post_content);
     }
 }

@@ -17,6 +17,21 @@ final class WordPressPostsAdapterTest extends TestCase
         self::assertSame('hello-world', $adapter->computeLogicalKey(['post_name' => 'hello-world']));
     }
 
+    public function testPushpullIdentifierTakesPrecedenceOverSlug(): void
+    {
+        update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
+            'identifier_managed_sets' => ['wordpress_posts'],
+        ]);
+
+        $adapter = new WordPressPostsAdapter();
+
+        self::assertSame('hello-world-en', $adapter->computeLogicalKey([
+            'pushpull_identifier' => 'hello-world-en',
+            'post_name' => 'bonjour-le-monde',
+            'post_title' => 'Hello World',
+        ]));
+    }
+
     public function testSerializationCapturesPostContentAndOwnedLayoutMetaWithoutRawMetaNoise(): void
     {
         $adapter = new WordPressPostsAdapter();

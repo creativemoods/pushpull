@@ -59,6 +59,37 @@ final class WordPressAttachmentsAdapterTest extends TestCase
         self::assertArrayNotHasKey('wordpress/attachments/manifest.json', $snapshot->files);
     }
 
+    public function testExportSnapshotUsesDefaultSiteLanguageWhenWpmlCurrentLanguageDiffers(): void
+    {
+        update_option('icl_sitepress_settings', [
+            'default_language' => 'fr',
+            'active_languages' => ['fr', 'en'],
+        ]);
+        $GLOBALS['pushpull_test_generateblocks_posts'] = [
+            new \WP_Post(7, 'Bali FR', 'bali-fr', 'inherit', 0, 'attachment', '', '2026-03-27 09:00:00', '2026-03-27 09:00:00', '', 'image/jpeg', 0),
+            new \WP_Post(8, 'Bali EN', 'bali-en', 'inherit', 0, 'attachment', '', '2026-03-27 09:00:00', '2026-03-27 09:00:00', '', 'image/jpeg', 0),
+        ];
+        $GLOBALS['pushpull_test_generateblocks_meta'] = [
+            7 => [
+                '_wp_attached_file' => ['2026/03/bali.jpg'],
+                'pushpull_sync_attachment' => ['1'],
+            ],
+            8 => [
+                '_wp_attached_file' => ['2026/03/generated.jpg'],
+                'pushpull_sync_attachment' => ['1'],
+            ],
+        ];
+        $GLOBALS['pushpull_test_wpml_translations'] = [
+            ['element_type' => 'post_attachment', 'element_id' => 7, 'trid' => 1, 'language_code' => 'fr', 'source_language_code' => null],
+            ['element_type' => 'post_attachment', 'element_id' => 8, 'trid' => 1, 'language_code' => 'en', 'source_language_code' => 'fr'],
+        ];
+        $GLOBALS['pushpull_test_wpml_current_language'] = 'en';
+
+        $snapshot = (new WordPressAttachmentsAdapter())->exportSnapshot();
+
+        self::assertSame(['2026/03/bali-jpg'], $snapshot->orderedLogicalKeys);
+    }
+
     public function testReadSnapshotFromRepositoryFilesRoundTripsAttachment(): void
     {
         $adapter = new WordPressAttachmentsAdapter();

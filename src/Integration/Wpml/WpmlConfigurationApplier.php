@@ -4,18 +4,32 @@ declare(strict_types=1);
 
 namespace PushPull\Integration\Wpml;
 
+use PushPull\Integration\Contracts\SiteKeyActivationServiceInterface;
+use PushPull\Secrets\SecretEnvelopeResolverInterface;
+use PushPull\Secrets\SecretEnvelopeStore;
 use RuntimeException;
 
 final class WpmlConfigurationApplier
 {
     public const SETTINGS_OPTION = 'icl_sitepress_settings';
     private const CACHE_GROUP = 'pushpull_wpml_configuration';
+    private const MANAGED_SET_KEY = 'wpml_configuration';
+    private const LOGICAL_KEY = 'wpml-settings';
+    private const SITE_KEY_SECRET_BINDING = 'wpmlSiteKey';
     public const POST_TYPE_MODE_TRANSLATABLE_ONLY = 'translatable_only';
     public const POST_TYPE_MODE_TRANSLATABLE_FALLBACK = 'translatable_fallback';
     public const POST_TYPE_MODE_NOT_TRANSLATABLE = 'not_translatable';
     public const URL_FORMAT_DIRECTORY = 'directory';
     public const URL_FORMAT_DOMAIN = 'domain';
     public const URL_FORMAT_PARAMETER = 'parameter';
+
+    public function __construct(
+        private readonly ?SiteKeyActivationServiceInterface $siteKeyActivationService = null,
+        private readonly ?SecretEnvelopeResolverInterface $secretEnvelopeResolver = null,
+        private readonly ?SecretEnvelopeStore $secretEnvelopeStore = null
+    ) {
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -25,14 +39,22 @@ final class WpmlConfigurationApplier
         $defaultLanguage = (string) ($settings['default_language'] ?? '');
         $activeLanguages = $this->normalizeActiveLanguages($settings['active_languages'] ?? [], $defaultLanguage);
 
-        return [
+        $payload = [
             'defaultLanguage' => $defaultLanguage,
             'activeLanguages' => $activeLanguages,
             'urlFormat' => $this->urlFormatAsString((int) ($settings['language_negotiation_type'] ?? 1)),
             'postTypeTranslationModes' => $this->exportPostTypeTranslationModes($settings['custom_posts_sync_option'] ?? []),
-            'postTypeSlugTranslations' => $this->exportPostTypeSlugTranslations($settings['posts_slug_translation'] ?? []),
+            'postTypeSlugTranslations' => $this->exportPostTypeSlugTranslations($settings['posts_slug_translation'] ?? [], $defaultLanguage),
             'setupFinished' => (bool) ($settings['setup_complete'] ?? false),
         ];
+
+        $siteKeySecret = $this->secretEnvelopeStore?->get(self::MANAGED_SET_KEY, self::LOGICAL_KEY, self::SITE_KEY_SECRET_BINDING);
+
+        if (is_array($siteKeySecret)) {
+            $payload['siteKeySecret'] = $siteKeySecret;
+        }
+
+        return $payload;
     }
 
     public function isAvailable(): bool
@@ -58,6 +80,7 @@ final class WpmlConfigurationApplier
         $urlFormat = $this->normalizeUrlFormat((string) ($payload['urlFormat'] ?? self::URL_FORMAT_DIRECTORY));
         $postTypeTranslationModes = $this->normalizePostTypeTranslationModes($payload['postTypeTranslationModes'] ?? []);
         $postTypeSlugTranslations = $this->normalizePostTypeSlugTranslations($payload['postTypeSlugTranslations'] ?? []);
+        $postTypeSlugTranslations = $this->canonicalizePostTypeSlugTranslations($postTypeSlugTranslations, $defaultLanguage);
         $setupFinished = (bool) ($payload['setupFinished'] ?? false);
         $currentlySetupFinished = (bool) ($currentSettings['setup_complete'] ?? false);
 
@@ -93,6 +116,34 @@ final class WpmlConfigurationApplier
             $installation->finish_step3();
             $installation->finish_installation();
         }
+
+        $this->applySiteKeySecret($payload);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function applySiteKeySecret(array $payload): void
+    {
+        $siteKeySecret = $payload['siteKeySecret'] ?? null;
+
+        if (! is_array($siteKeySecret)) {
+            $this->secretEnvelopeStore?->forget(self::MANAGED_SET_KEY, self::LOGICAL_KEY, self::SITE_KEY_SECRET_BINDING);
+
+            return;
+        }
+
+        if ($this->siteKeyActivationService === null) {
+            throw new RuntimeException('WPML site key activation service is not configured.');
+        }
+
+        if ($this->secretEnvelopeResolver === null) {
+            throw new RuntimeException('Secret envelope resolver is not configured.');
+        }
+
+        $siteKey = $this->secretEnvelopeResolver->resolve($siteKeySecret);
+        $this->siteKeyActivationService->activateSiteKey($siteKey);
+        $this->secretEnvelopeStore?->put(self::MANAGED_SET_KEY, self::LOGICAL_KEY, self::SITE_KEY_SECRET_BINDING, $siteKeySecret);
     }
 
     /**
@@ -124,9 +175,9 @@ final class WpmlConfigurationApplier
 
     /**
      * @param mixed $rawSlugSettings
-     * @return array<string, array{enabled: bool, values: array<string, string>}>
+     * @return array<string, array{enabled: bool, originalLanguage: string, values: array<string, string>}>
      */
-    private function exportPostTypeSlugTranslations(mixed $rawSlugSettings): array
+    private function exportPostTypeSlugTranslations(mixed $rawSlugSettings, string $defaultLanguage): array
     {
         $slugSettings = is_array($rawSlugSettings) ? $rawSlugSettings : [];
         $configuredTypes = is_array($slugSettings['types'] ?? null) ? $slugSettings['types'] : [];
@@ -149,13 +200,26 @@ final class WpmlConfigurationApplier
         foreach (array_keys($postTypes) as $postType) {
             $enabled = $this->isPostTypeSlugTranslationEnabled($postType, $slugSettings);
             $values = $this->exportPostTypeSlugValues($postType);
+            $originalLanguage = $this->exportPostTypeSlugOriginalLanguage($postType);
 
             if (! $enabled && $values === []) {
                 continue;
             }
 
+            if ($enabled) {
+                $runtimeRewriteSlug = $this->registeredPostTypeRewriteSlug($postType);
+                $canonicalLanguage = $originalLanguage !== '' ? $originalLanguage : $defaultLanguage;
+
+                if ($runtimeRewriteSlug !== null && $canonicalLanguage !== '') {
+                    $values[$canonicalLanguage] = $runtimeRewriteSlug;
+                }
+            }
+
+            ksort($values);
+
             $translations[$postType] = [
                 'enabled' => $enabled,
+                'originalLanguage' => $originalLanguage,
                 'values' => $values,
             ];
         }
@@ -177,7 +241,7 @@ final class WpmlConfigurationApplier
 
     /**
      * @param mixed $rawTranslations
-     * @return array<string, array{enabled: bool, values: array<string, string>}>
+     * @return array<string, array{enabled: bool, originalLanguage: string, values: array<string, string>}>
      */
     private function normalizePostTypeSlugTranslations(mixed $rawTranslations): array
     {
@@ -211,6 +275,7 @@ final class WpmlConfigurationApplier
 
             $normalized[$postType] = [
                 'enabled' => (bool) ($definition['enabled'] ?? false),
+                'originalLanguage' => trim((string) ($definition['originalLanguage'] ?? '')),
                 'values' => $values,
             ];
         }
@@ -218,6 +283,32 @@ final class WpmlConfigurationApplier
         ksort($normalized);
 
         return $normalized;
+    }
+
+    /**
+     * @param array<string, array{enabled: bool, originalLanguage: string, values: array<string, string>}> $translations
+     * @return array<string, array{enabled: bool, originalLanguage: string, values: array<string, string>}>
+     */
+    private function canonicalizePostTypeSlugTranslations(array $translations, string $defaultLanguage): array
+    {
+        foreach ($translations as $postType => $definition) {
+            if (! $definition['enabled']) {
+                continue;
+            }
+
+            $runtimeRewriteSlug = $this->registeredPostTypeRewriteSlug($postType);
+            $originalLanguage = $definition['originalLanguage'] !== '' ? $definition['originalLanguage'] : $defaultLanguage;
+
+            if ($runtimeRewriteSlug === null || $originalLanguage === '') {
+                continue;
+            }
+
+            $translations[$postType]['originalLanguage'] = $originalLanguage;
+            $translations[$postType]['values'][$originalLanguage] = $runtimeRewriteSlug;
+            ksort($translations[$postType]['values']);
+        }
+
+        return $translations;
     }
 
     private function hasRegisteredSlugTranslationRecord(string $postType): bool
@@ -420,6 +511,40 @@ final class WpmlConfigurationApplier
         return $values;
     }
 
+    private function exportPostTypeSlugOriginalLanguage(string $postType): string
+    {
+        $record = $this->readSlugTranslationRecord($postType);
+
+        if ($record === null) {
+            return '';
+        }
+
+        return (string) ($record['language'] ?? '');
+    }
+
+    private function registeredPostTypeRewriteSlug(string $postType): ?string
+    {
+        if (! function_exists('get_post_type_object')) {
+            return null;
+        }
+
+        $postTypeObject = get_post_type_object($postType);
+
+        if (! is_object($postTypeObject)) {
+            return null;
+        }
+
+        $rewrite = $postTypeObject->rewrite ?? null;
+
+        if (! is_array($rewrite)) {
+            return null;
+        }
+
+        $slug = trim((string) ($rewrite['slug'] ?? ''), '/');
+
+        return $slug !== '' ? $slug : null;
+    }
+
     /**
      * @param mixed $sitepress
      */
@@ -584,11 +709,7 @@ final class WpmlConfigurationApplier
                 self::POST_TYPE_MODE_NOT_TRANSLATABLE => 0,
             };
 
-            if ($wpmlMode === 0) {
-                unset($syncOptions[$postType]);
-            } else {
-                $syncOptions[$postType] = $wpmlMode;
-            }
+            $syncOptions[$postType] = $wpmlMode;
 
             if (method_exists($sitepress, 'verify_post_translations')) {
                 $sitepress->verify_post_translations($postType);
@@ -602,7 +723,7 @@ final class WpmlConfigurationApplier
      * @param mixed $sitepress
      */
     /**
-     * @param array<string, array{enabled: bool, values: array<string, string>}> $postTypeSlugTranslations
+     * @param array<string, array{enabled: bool, originalLanguage: string, values: array<string, string>}> $postTypeSlugTranslations
      * @param mixed $sitepress
      */
     private function applyPostTypeSlugTranslations(array $postTypeSlugTranslations, string $defaultLanguage, object $sitepress): void
@@ -634,7 +755,12 @@ final class WpmlConfigurationApplier
                 $this->deletePostTypeSlugTranslations($postType);
             }
 
-            $this->applyPostTypeSlugValues($postType, $definition['enabled'], $definition['values'], $defaultLanguage);
+            $this->applyPostTypeSlugValues(
+                $postType,
+                $definition['enabled'],
+                $definition['values'],
+                $definition['originalLanguage'] !== '' ? $definition['originalLanguage'] : $defaultLanguage
+            );
         }
 
         if (($slugSettings['types'] ?? []) !== []) {
@@ -716,6 +842,11 @@ final class WpmlConfigurationApplier
                 continue;
             }
 
+            if ($this->setStringTranslationViaWpmlApi($stringId, $language, $value, $completeStatus)) {
+                $this->flushSlugTranslationCaches($postType, $stringId, $language);
+                continue;
+            }
+
             $existing = $this->readSlugTranslationRowByLanguage($stringId, $language);
 
             if (is_array($existing) && isset($existing['id'])) {
@@ -750,6 +881,18 @@ final class WpmlConfigurationApplier
      */
     private function insertSlugTranslationRecord(string $postType, string $language, string $value): ?array
     {
+        $registeredStringId = $this->registerSlugStringViaWpmlApi($postType, $value, $language);
+
+        if ($registeredStringId !== null) {
+            $record = $this->readSlugTranslationRecord($postType);
+
+            if ($record !== null) {
+                $this->syncOriginalSlugRecordLanguage($postType, (int) $record['id'], $language, $value);
+
+                return $this->readSlugTranslationRecord($postType);
+            }
+        }
+
         global $wpdb;
 
         if (! isset($wpdb) || ! $wpdb instanceof \wpdb) {
@@ -767,6 +910,59 @@ final class WpmlConfigurationApplier
         $this->flushSlugTranslationCaches($postType);
 
         return $this->readSlugTranslationRecord($postType);
+    }
+
+    private function registerSlugStringViaWpmlApi(string $postType, string $value, string $language): ?int
+    {
+        if (! function_exists('icl_register_string')) {
+            return null;
+        }
+
+        $stringId = icl_register_string('WordPress', sprintf('URL slug: %s', $postType), $value, false, $language);
+
+        return is_int($stringId) && $stringId > 0 ? $stringId : null;
+    }
+
+    private function syncOriginalSlugRecordLanguage(string $postType, int $stringId, string $language, string $value): void
+    {
+        global $wpdb;
+
+        if (! isset($wpdb) || ! $wpdb instanceof \wpdb || $stringId <= 0) {
+            return;
+        }
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Aligning the original WPML slug string with repository state requires updating the authoritative string row directly and invalidating caches immediately after.
+        $wpdb->update(
+            $wpdb->prefix . 'icl_strings',
+            [
+                'language' => $language,
+                'value' => $value,
+                'context' => 'WordPress',
+                'name' => sprintf('URL slug: %s', $postType),
+                'status' => defined('ICL_TM_COMPLETE') ? constant('ICL_TM_COMPLETE') : 10,
+            ],
+            ['id' => $stringId]
+        );
+        $this->flushSlugTranslationCaches($postType, $stringId);
+    }
+
+    private function setStringTranslationViaWpmlApi(int $stringId, string $language, string $value, int $status): bool
+    {
+        global $wpdb;
+
+        if (! class_exists('WPML_ST_String') || ! isset($wpdb) || ! $wpdb instanceof \wpdb || $stringId <= 0) {
+            return false;
+        }
+
+        $string = new \WPML_ST_String($stringId, $wpdb);
+
+        if (! method_exists($string, 'set_translation')) {
+            return false;
+        }
+
+        $result = $string->set_translation($language, $value, $status);
+
+        return $result !== false;
     }
 
     /**

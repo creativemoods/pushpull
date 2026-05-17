@@ -91,9 +91,7 @@ final class WordPressPostsAdapter extends AbstractWordPressPostTypeAdapter
     protected function buildMetadata(array $record): array
     {
         $metadata = [
-            'restoration' => [
-                'postType' => $this->postType(),
-            ],
+            'restoration' => $this->buildRestorationMetadata($record),
         ];
 
         $postMeta = $this->normalizePostMetaEntries($record['post_meta'] ?? []);

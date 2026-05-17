@@ -13,7 +13,8 @@ final class ManagedCollectionManifest
         public readonly string $managedSetKey,
         public readonly string $manifestType,
         public readonly array $orderedLogicalKeys,
-        public readonly int $schemaVersion = 1
+        public readonly int $schemaVersion = 1,
+        public readonly array $extra = []
     ) {
     }
 
@@ -22,10 +23,24 @@ final class ManagedCollectionManifest
      */
     public function toArray(): array
     {
-        return [
+        $payload = [
             'schemaVersion' => $this->schemaVersion,
             'type' => $this->manifestType,
             'orderedLogicalKeys' => array_values($this->orderedLogicalKeys),
         ];
+
+        foreach ($this->extra as $key => $value) {
+            if (
+                $key === 'schemaVersion'
+                || $key === 'type'
+                || $key === 'orderedLogicalKeys'
+            ) {
+                continue;
+            }
+
+            $payload[(string) $key] = $value;
+        }
+
+        return $payload;
     }
 }

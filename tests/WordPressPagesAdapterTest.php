@@ -23,6 +23,32 @@ final class WordPressPagesAdapterTest extends TestCase
         self::assertSame('about-us', $adapter->computeLogicalKey(['post_name' => 'about-us']));
     }
 
+    public function testPushpullIdentifierProducesLogicalKey(): void
+    {
+        update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
+            'identifier_managed_sets' => ['wordpress_pages'],
+        ]);
+
+        $adapter = new WordPressPagesAdapter();
+
+        self::assertSame('partner-creative-moods-en', $adapter->computeLogicalKey([
+            'pushpull_identifier' => 'partner-creative-moods-en',
+            'post_name' => 'partners',
+            'post_title' => 'Partners',
+        ]));
+    }
+
+    public function testPushpullIdentifierIsIgnoredWhenDomainOptionIsDisabled(): void
+    {
+        $adapter = new WordPressPagesAdapter();
+        $item = $adapter->buildItemFromRuntimeRecord(array_merge($this->runtimeRecord(), [
+            'pushpull_identifier' => 'partner-creative-moods-en',
+        ]));
+
+        self::assertSame('about-us', $item->logicalKey);
+        self::assertSame(['postType' => 'page'], $item->metadata['restoration']);
+    }
+
     public function testSerializationCapturesPageContentAndOwnedLayoutMetaWithoutRawMetaNoise(): void
     {
         $adapter = new WordPressPagesAdapter();
@@ -56,6 +82,25 @@ final class WordPressPagesAdapterTest extends TestCase
         $deserialized = $adapter->deserialize($adapter->getRepositoryPath($item), $adapter->serialize($item));
 
         self::assertSame($adapter->serialize($item), $adapter->serialize($deserialized));
+    }
+
+    public function testPersistItemMetaStoresPushpullIdentifier(): void
+    {
+        update_option(\PushPull\Settings\SettingsRepository::OPTION_KEY, [
+            'identifier_managed_sets' => ['wordpress_pages'],
+        ]);
+
+        $adapter = new WordPressPagesAdapter();
+        $item = $adapter->buildItemFromRuntimeRecord(array_merge($this->runtimeRecord(), [
+            'pushpull_identifier' => 'partner-creative-moods-en',
+        ]));
+
+        $adapter->persistItemMeta(42, $item);
+
+        self::assertSame(
+            'partner-creative-moods-en',
+            get_post_meta(42, \PushPull\Content\AbstractWordPressPostTypeAdapter::IDENTIFIER_META_KEY, true)
+        );
     }
 
     public function testEmptyLogicalKeyIsRejected(): void

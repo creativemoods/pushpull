@@ -7,6 +7,7 @@ namespace PushPull\Tests;
 use PHPUnit\Framework\TestCase;
 use PushPull\Content\ManagedSetRegistry;
 use PushPull\Content\Media\RmlMediaOrganizationAdapter;
+use PushPull\Content\WordPress\GeneratePressConfigurationAdapter;
 use PushPull\Content\WordPress\GeneratePressElementsAdapter;
 use PushPull\Content\WordPress\WordPressAttachmentsAdapter;
 use PushPull\Content\WordPress\WordPressCoreConfigurationAdapter;
@@ -21,13 +22,14 @@ final class ManagedSetRegistryTest extends TestCase
     public function testDependencyOrderingPlacesGeneratePressElementsAfterPagesAndPosts(): void
     {
         $registry = new ManagedSetRegistry([
+            new GeneratePressConfigurationAdapter(),
             new GeneratePressElementsAdapter(),
             new WordPressPostsAdapter(),
             new WordPressPagesAdapter(),
         ]);
 
         self::assertSame(
-            ['wordpress_posts', 'wordpress_pages', 'generatepress_elements'],
+            ['generatepress_configuration', 'wordpress_posts', 'wordpress_pages', 'generatepress_elements'],
             array_keys($registry->allInDependencyOrder())
         );
     }
@@ -35,14 +37,15 @@ final class ManagedSetRegistryTest extends TestCase
     public function testDependencyOrderingCanSortSubsetOfManagedSetKeys(): void
     {
         $registry = new ManagedSetRegistry([
+            new GeneratePressConfigurationAdapter(),
             new GeneratePressElementsAdapter(),
             new WordPressPostsAdapter(),
             new WordPressPagesAdapter(),
         ]);
 
         self::assertSame(
-            ['wordpress_pages', 'generatepress_elements'],
-            $registry->sortManagedSetKeysInDependencyOrder(['generatepress_elements', 'wordpress_pages'])
+            ['generatepress_configuration', 'wordpress_pages', 'generatepress_elements'],
+            $registry->sortManagedSetKeysInDependencyOrder(['generatepress_elements', 'wordpress_pages', 'generatepress_configuration'])
         );
     }
 
@@ -53,6 +56,7 @@ final class ManagedSetRegistryTest extends TestCase
             new WordPressCategoriesAdapter(),
             new RmlMediaOrganizationAdapter(new \PushPull\Settings\SettingsRepository()),
             new WordPressCoreConfigurationAdapter(),
+            new GeneratePressConfigurationAdapter(),
             new GeneratePressElementsAdapter(),
             new WordPressMenusAdapter(),
             new WordPressPostsAdapter(),
@@ -61,7 +65,7 @@ final class ManagedSetRegistryTest extends TestCase
         ]);
 
         self::assertSame(
-            ['wordpress_attachments', 'wordpress_categories', 'media_organization', 'wordpress_posts', 'wordpress_pages', 'wordpress_core_configuration', 'generatepress_elements', 'wordpress_tags', 'wordpress_menus'],
+            ['wordpress_attachments', 'wordpress_categories', 'media_organization', 'generatepress_configuration', 'wordpress_posts', 'wordpress_pages', 'wordpress_core_configuration', 'generatepress_elements', 'wordpress_tags', 'wordpress_menus'],
             array_keys($registry->allInDependencyOrder())
         );
     }

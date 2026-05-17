@@ -77,6 +77,10 @@ final class ConfigManagedSetApplyService implements ManagedSetApplyServiceInterf
         ];
     }
 
+    public function applyManifestState(PushPullSettings $settings): void
+    {
+    }
+
     public function deleteMissingLogicalKeys(array $desiredLogicalKeys): array
     {
         return [];

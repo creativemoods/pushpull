@@ -179,7 +179,7 @@ final class ManagedContentPageBranchActionStateTest extends TestCase
         self::assertSame('Partners logical keys must be unique.', $state['error']);
     }
 
-    public function testBuildCommitPushAllPlanSkipsErroringManagedSets(): void
+    public function testBuildCommitPushAllPlanDoesNotSkipManagedSetsForDiffOnlyErrors(): void
     {
         $settingsRepository = new SettingsRepository();
         $settingsRepository->save($settingsRepository->sanitize([
@@ -194,10 +194,8 @@ final class ManagedContentPageBranchActionStateTest extends TestCase
 
         $plan = $this->buildCommitPushAllPlan($page, $settingsRepository->get());
 
-        self::assertSame([], $plan['adapters']);
-        self::assertCount(1, $plan['skipped']);
-        self::assertSame('WordPress pages', $plan['skipped'][0]['label']);
-        self::assertSame('Partners logical keys must be unique.', $plan['skipped'][0]['message']);
+        self::assertArrayHasKey('wordpress_pages', $plan['adapters']);
+        self::assertSame([], $plan['skipped']);
     }
 
     public function testAttachmentsAreNotMarkedAbsentWhenLocalBranchContainsOwnedFiles(): void

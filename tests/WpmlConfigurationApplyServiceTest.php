@@ -10,9 +10,13 @@ use PushPull\Domain\Diff\RepositoryStateReader;
 use PushPull\Domain\Repository\DatabaseLocalRepository;
 use PushPull\Domain\Sync\CommitManagedSetRequest;
 use PushPull\Domain\Sync\ManagedSetRepositoryCommitter;
+use PushPull\Integration\Contracts\SiteKeyActivationResult;
+use PushPull\Integration\Contracts\SiteKeyActivationServiceInterface;
 use PushPull\Integration\Wpml\WpmlConfigurationAdapter;
 use PushPull\Integration\Wpml\WpmlConfigurationApplier;
 use PushPull\Persistence\WorkingState\WorkingStateRepository;
+use PushPull\Secrets\SecretEnvelopeResolverInterface;
+use PushPull\Secrets\SecretEnvelopeStore;
 use PushPull\Settings\PushPullSettings;
 use RuntimeException;
 
@@ -23,6 +27,7 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
     private WpmlConfigurationAdapter $adapter;
     private ManagedSetRepositoryCommitter $committer;
     private ConfigManagedSetApplyService $applyService;
+    private SecretEnvelopeStore $secretEnvelopeStore;
 
     protected function setUp(): void
     {
@@ -32,11 +37,48 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
         $pushpull_test_options = [];
         $GLOBALS['pushpull_test_object_cache'] = [];
         $GLOBALS['pushpull_test_verified_post_translations'] = [];
+        $GLOBALS['pushpull_test_resolved_secret_envelopes'] = [];
         $GLOBALS['sitepress'] = new \PushPull_Test_SitePress();
+        $GLOBALS['pushpull_test_post_types'] = [
+            'gp_elements' => new \WP_Post_Type('gp_elements', 'Elements', false, true, false, [], ['slug' => 'gp_elements']),
+            'page' => new \WP_Post_Type('page', 'Pages', true, true, true, [], ['slug' => 'page']),
+            'post' => new \WP_Post_Type('post', 'Posts', false, true, true, [], ['slug' => 'post']),
+        ];
         $this->wpdb = new \wpdb();
         $wpdb = $this->wpdb;
         $this->repository = new DatabaseLocalRepository($this->wpdb);
-        $this->adapter = new WpmlConfigurationAdapter(new WpmlConfigurationApplier());
+        $this->secretEnvelopeStore = new SecretEnvelopeStore();
+        $secretResolver = new class() implements SecretEnvelopeResolverInterface {
+            public function supports(array $envelope): bool
+            {
+                return (string) ($envelope['provider'] ?? '') === 'test';
+            }
+
+            public function resolve(array $envelope): string
+            {
+                $GLOBALS['pushpull_test_resolved_secret_envelopes'][] = $envelope;
+
+                return (string) ($envelope['value'] ?? '');
+            }
+        };
+        $siteKeyActivationService = new class() implements SiteKeyActivationServiceInterface {
+            public function isAvailable(): bool
+            {
+                return true;
+            }
+
+            public function activateSiteKey(string $siteKey): SiteKeyActivationResult
+            {
+                $normalized = preg_replace('/[^A-Za-z0-9]/', '', $siteKey) ?? '';
+
+                return new SiteKeyActivationResult('wpml', $normalized, $normalized, []);
+            }
+        };
+        $this->adapter = new WpmlConfigurationAdapter(new WpmlConfigurationApplier(
+            $siteKeyActivationService,
+            $secretResolver,
+            $this->secretEnvelopeStore
+        ));
         $this->committer = new ManagedSetRepositoryCommitter($this->repository, $this->adapter);
         $this->applyService = new ConfigManagedSetApplyService(
             $this->adapter,
@@ -93,6 +135,7 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
             'postTypeSlugTranslations' => [
                 'gp_elements' => [
                     'enabled' => true,
+                    'originalLanguage' => 'fr',
                     'values' => [
                         'fr' => 'elements',
                         'en' => 'xyz1234',
@@ -141,6 +184,7 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
         self::assertSame([
             'gp_elements' => 2,
             'page' => 1,
+            'post' => 0,
         ], $settings['custom_posts_sync_option']);
         self::assertSame([
             'types' => [
@@ -156,7 +200,7 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
             'language' => 'fr',
             'context' => 'WordPress',
             'name' => 'URL slug: gp_elements',
-            'value' => 'elements',
+            'value' => 'gp_elements',
             'status' => 10,
             'id' => 2,
         ], $this->wpdb->get_row($this->wpdb->prepare(
@@ -178,6 +222,23 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
             'SELECT * FROM wp_icl_strings WHERE name = %s',
             'URL slug: le_event'
         ), ARRAY_A));
+
+        $roundTrippedPayload = $this->adapter->exportSnapshot()->items[0]->payload;
+        self::assertSame([
+            'gp_elements' => 'translatable_fallback',
+            'page' => 'translatable_only',
+            'post' => 'not_translatable',
+        ], $roundTrippedPayload['postTypeTranslationModes']);
+        self::assertSame([
+            'gp_elements' => [
+                'enabled' => true,
+                'originalLanguage' => 'fr',
+                'values' => [
+                    'en' => 'xyz1234',
+                    'fr' => 'gp_elements',
+                ],
+            ],
+        ], $roundTrippedPayload['postTypeSlugTranslations']);
     }
 
     public function testApplyRejectsTurningOffCompletedSetup(): void
@@ -226,6 +287,68 @@ final class WpmlConfigurationApplyServiceTest extends TestCase
             'jane@example.com',
             ['wpml_configuration']
         ));
+    }
+
+    public function testApplyActivatesWpmlSiteKeyFromSecretEnvelopeAndReExportsEnvelope(): void
+    {
+        update_option('icl_sitepress_settings', [
+            'default_language' => 'fr',
+            'active_languages' => ['fr', 'en'],
+            'language_negotiation_type' => 1,
+            'setup_complete' => 1,
+        ]);
+
+        $item = $this->withPayload($this->adapter->exportSnapshot()->items[0], [
+            'siteKeySecret' => [
+                'provider' => 'test',
+                'value' => 'AbC-123',
+            ],
+        ]);
+
+        $snapshot = new \PushPull\Content\ManagedContentSnapshot(
+            [$item],
+            new \PushPull\Content\ManagedCollectionManifest('wpml_configuration', 'wpml_configuration_manifest', ['wpml-settings']),
+            [
+                'wpml/configuration/wpml-settings.json' => $this->adapter->serialize($item),
+                'wpml/configuration/manifest.json' => $this->adapter->serializeManifest(
+                    new \PushPull\Content\ManagedCollectionManifest('wpml_configuration', 'wpml_configuration_manifest', ['wpml-settings'])
+                ),
+            ],
+            ['wpml-settings']
+        );
+
+        $this->committer->commitSnapshot(
+            $snapshot,
+            new CommitManagedSetRequest('main', 'Initial export', 'Jane Doe', 'jane@example.com')
+        );
+
+        $this->applyService->apply($this->settings());
+
+        self::assertSame([
+            'provider' => 'test',
+            'value' => 'AbC-123',
+        ], $GLOBALS['pushpull_test_resolved_secret_envelopes'][0]);
+        self::assertSame([
+            'provider' => 'test',
+            'value' => 'AbC-123',
+        ], $this->adapter->exportSnapshot()->items[0]->payload['siteKeySecret']);
+    }
+
+    private function settings(): PushPullSettings
+    {
+        return new PushPullSettings(
+            'github',
+            'creativemoods',
+            'pushpulltestrepo',
+            'main',
+            'token',
+            '',
+            false,
+            true,
+            'Jane Doe',
+            'jane@example.com',
+            ['wpml_configuration']
+        );
     }
 
     /**
